@@ -5,7 +5,6 @@
 #include <memory>
 #include <unordered_map>
 #include <vector>
-#include "TensorMeta.h"
 #include "ITensor.h"
 
 namespace RSG_SIM {
@@ -29,27 +28,28 @@ public:
     TensorRegistry& operator=(TensorRegistry&&) noexcept;
 
     // 创建张量的非模板接口
-    ITensor* createTensor(const TensorMeta& meta);
+    ITensor* createTensor(const std::string &uri, const TensorMeta& meta);
     
     // 创建张量的模板接口
     template<typename T>
-    GTensor<T>* createTensor(const std::string& name, const std::vector<int64_t>& shape) {
-        auto meta = TensorMeta::create<T>(name, shape);
-        auto* tensor = static_cast<GTensor<T>*>(createTensor(meta));
+    GTensor<T>* createTensor(const std::string &uri, const std::vector<int64_t>& shape) {
+        auto meta = TensorMeta::create<T>(shape);
+        auto* tensor = static_cast<GTensor<T>*>(createTensor(uri, meta));
         return tensor;
     }
     
     // 获取张量
-    ITensor* getTensor(const std::string& name);
+    ITensor* getTensor(const std::string& uri);
+    
     template<typename T>
-    GTensor<T>* getTensor(const std::string& name) {
-        auto* tensor = getTensor(name);
+    GTensor<T>* getTensor(const std::string& uri) {
+        auto* tensor = getTensor(uri);
         return (tensor && tensor->isTypeMatch(typeid(T))) ?
             static_cast<GTensor<T>*>(tensor) : nullptr;
     }
     
     // 移除张量
-    void removeTensor(const std::string& name);
+    void removeTensor(const std::string& uri);
     
     // 批量操作
     std::vector<ITensor*> getTensorsByPrefix(const std::string& prefix);
@@ -57,15 +57,14 @@ public:
     
     // 信息查询
     size_t size() const;
-    bool exists(const std::string& name) const;
-    std::vector<std::string> getAllNames() const;
+    bool exists(const std::string& uri) const;
+    std::vector<std::string> getAllTensorUri() const;
     
     // 环境信息
     int getEnvCount() const { return env_count_; }
 
 private:
-    class Impl;
-    std::unique_ptr<Impl> impl_;
+    std::unordered_map<std::string, std::unique_ptr<ITensor>> tensors;
     int env_count_;
 };
 

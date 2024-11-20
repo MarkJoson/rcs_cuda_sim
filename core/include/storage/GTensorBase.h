@@ -21,7 +21,6 @@ public:
     }
     
     // 基础信息实现
-    const std::string& name() const override { return meta_.name; }
     const std::vector<int64_t>& shape() const override { return meta_.shape; }
     size_t elemCount() const override;
     size_t elemSize() const override { return meta_.type_size; }

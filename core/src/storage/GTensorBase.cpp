@@ -148,7 +148,6 @@ std::unique_ptr<ITensor> GTensorBase::slice(
     auto sliced = impl_->tensor.slice(dim, start, end, step);
     auto result = std::make_unique<GTensorBase>(
         TensorMeta{
-            meta_.name + "_slice",
             std::vector<int64_t>(sliced.sizes().begin(), sliced.sizes().end()),
             meta_.dtype,
             meta_.type_size,
@@ -238,7 +237,6 @@ std::unique_ptr<ITensor> GTensorBase::sum(int dim, bool keepdim) const {
     
     auto result = std::make_unique<GTensorBase>(
         TensorMeta{
-            meta_.name + "_sum",
             std::vector<int64_t>(result_tensor.sizes().begin(), result_tensor.sizes().end()),
             meta_.dtype,
             meta_.type_size,
@@ -256,7 +254,6 @@ std::unique_ptr<ITensor> GTensorBase::mean(int dim, bool keepdim) const {
     
     auto result = std::make_unique<GTensorBase>(
         TensorMeta{
-            meta_.name + "_mean",
             std::vector<int64_t>(result_tensor.sizes().begin(), result_tensor.sizes().end()),
             meta_.dtype,
             meta_.type_size,
@@ -274,7 +271,6 @@ std::unique_ptr<ITensor> GTensorBase::std(int dim, bool keepdim) const {
     
     auto result = std::make_unique<GTensorBase>(
         TensorMeta{
-            meta_.name + "_std",
             std::vector<int64_t>(result_tensor.sizes().begin(), result_tensor.sizes().end()),
             meta_.dtype,
             meta_.type_size,
@@ -292,7 +288,6 @@ std::unique_ptr<ITensor> GTensorBase::var(int dim, bool keepdim) const {
     
     auto result = std::make_unique<GTensorBase>(
         TensorMeta{
-            meta_.name + "_var",
             std::vector<int64_t>(result_tensor.sizes().begin(), result_tensor.sizes().end()),
             meta_.dtype,
             meta_.type_size,
@@ -317,7 +312,6 @@ std::unique_ptr<ITensor> GTensorBase::max(int dim, bool keepdim) const {
     
     auto result = std::make_unique<GTensorBase>(
         TensorMeta{
-            meta_.name + "_min",
             std::vector<int64_t>(result_tensor.sizes().begin(), result_tensor.sizes().end()),
             meta_.dtype,
             meta_.type_size,
@@ -342,7 +336,6 @@ std::unique_ptr<ITensor> GTensorBase::min(int dim, bool keepdim) const {
     
     auto result = std::make_unique<GTensorBase>(
         TensorMeta{
-            meta_.name + "_min",
             std::vector<int64_t>(result_tensor.sizes().begin(), result_tensor.sizes().end()),
             meta_.dtype,
             meta_.type_size,
@@ -360,7 +353,6 @@ std::unique_ptr<ITensor> GTensorBase::argmax(int dim, bool keepdim) const {
     
     auto result = std::make_unique<GTensorBase>(
         TensorMeta{
-            meta_.name + "_argmax",
             std::vector<int64_t>(result_tensor.sizes().begin(), result_tensor.sizes().end()),
             TensorDataType::kInt64,
             sizeof(int64_t),
@@ -378,7 +370,6 @@ std::unique_ptr<ITensor> GTensorBase::argmin(int dim, bool keepdim) const {
     
     auto result = std::make_unique<GTensorBase>(
         TensorMeta{
-            meta_.name + "_argmin",
             std::vector<int64_t>(result_tensor.sizes().begin(), result_tensor.sizes().end()),
             TensorDataType::kInt64,
             sizeof(int64_t),
@@ -444,7 +435,6 @@ GTensorBase* GTensorBase::createTensorFromImpl(
     internal::TorchTensorImpl* impl) const {
     auto tensor = std::make_unique<GTensorBase>(
         TensorMeta{
-            name,
             std::vector<int64_t>(impl->tensor.sizes().begin(), impl->tensor.sizes().end()),
             meta_.dtype,
             meta_.type_size,

@@ -2,6 +2,7 @@
 #define __GTENSOR_H__
 
 #include "GTensorBase.h"
+#include <cassert>
 
 namespace RSG_SIM {
 
@@ -47,9 +48,7 @@ public:
         return std::unique_ptr<GTensor<T>>(
             static_cast<GTensor<T>*>(base_mean.release()));
     }
-    
-    // ... 其他统计操作的类型安全版本
-};
+    };
 
 } // namespace RSG_SIM
 

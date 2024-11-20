@@ -19,7 +19,6 @@ TEST_F(GTensorTest, Creation) {
     ASSERT_NE(tensor, nullptr);
     
     const auto& meta = tensor->meta();
-    EXPECT_EQ(meta.name, "test");
     EXPECT_EQ(meta.shape, std::vector<int64_t>({2, 2, 3})); // 包含env_count
     EXPECT_EQ(meta.dtype, RSG_SIM::TensorDataType::kFloat32);
     EXPECT_EQ(meta.type_size, sizeof(float));

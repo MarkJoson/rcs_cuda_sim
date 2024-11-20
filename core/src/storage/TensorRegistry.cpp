@@ -1,17 +1,10 @@
 #include "storage/TensorRegistry.h"
 #include "storage/GTensor.h"
-#include <torch/torch.h>
 
 namespace RSG_SIM {
 
-class TensorRegistry::Impl {
-public:
-    std::unordered_map<std::string, std::unique_ptr<ITensor>> tensors;
-};
-
 TensorRegistry::TensorRegistry(int env_count)
-    : impl_(std::make_unique<Impl>())
-    , env_count_(env_count) {
+    : env_count_(env_count) {
 }
 
 TensorRegistry::~TensorRegistry() = default;
@@ -19,7 +12,7 @@ TensorRegistry::~TensorRegistry() = default;
 TensorRegistry::TensorRegistry(TensorRegistry&&) noexcept = default;
 TensorRegistry& TensorRegistry::operator=(TensorRegistry&&) noexcept = default;
 
-ITensor* TensorRegistry::createTensor(const TensorMeta& meta) {
+ITensor* TensorRegistry::createTensor(const std::string &uri, const TensorMeta& meta) {
     auto full_shape = meta.shape;
     full_shape.insert(full_shape.begin(), env_count_);
     
@@ -29,23 +22,23 @@ ITensor* TensorRegistry::createTensor(const TensorMeta& meta) {
     auto tensor = std::make_unique<GTensorBase>(tensor_meta);
     auto* ptr = tensor.get();
     
-    impl_->tensors[meta.name] = std::move(tensor);
+    tensors[uri] = std::move(tensor);
     return ptr;
 }
 
-ITensor* TensorRegistry::getTensor(const std::string& name) {
-    auto it = impl_->tensors.find(name);
-    return it != impl_->tensors.end() ? it->second.get() : nullptr;
+ITensor* TensorRegistry::getTensor(const std::string& uri) {
+    auto it = tensors.find(uri);
+    return it != tensors.end() ? it->second.get() : nullptr;
 }
 
-void TensorRegistry::removeTensor(const std::string& name) {
-    impl_->tensors.erase(name);
+void TensorRegistry::removeTensor(const std::string& uri) {
+    tensors.erase(uri);
 }
 
 std::vector<ITensor*> TensorRegistry::getTensorsByPrefix(const std::string& prefix) {
     std::vector<ITensor*> result;
-    for (const auto& [name, tensor] : impl_->tensors) {
-        if (name.substr(0, prefix.length()) == prefix) {
+    for (const auto& [uri, tensor] : tensors) {
+        if (uri.substr(0, prefix.length()) == prefix) {
             result.push_back(tensor.get());
         }
     }
@@ -53,9 +46,9 @@ std::vector<ITensor*> TensorRegistry::getTensorsByPrefix(const std::string& pref
 }
 
 void TensorRegistry::removeTensorsByPrefix(const std::string& prefix) {
-    for (auto it = impl_->tensors.begin(); it != impl_->tensors.end();) {
+    for (auto it = tensors.begin(); it != tensors.end();) {
         if (it->first.substr(0, prefix.length()) == prefix) {
-            it = impl_->tensors.erase(it);
+            it = tensors.erase(it);
         } else {
             ++it;
         }
@@ -63,20 +56,20 @@ void TensorRegistry::removeTensorsByPrefix(const std::string& prefix) {
 }
 
 size_t TensorRegistry::size() const {
-    return impl_->tensors.size();
+    return tensors.size();
 }
 
-bool TensorRegistry::exists(const std::string& name) const {
-    return impl_->tensors.find(name) != impl_->tensors.end();
+bool TensorRegistry::exists(const std::string& uri) const {
+    return tensors.find(uri) != tensors.end();
 }
 
-std::vector<std::string> TensorRegistry::getAllNames() const {
-    std::vector<std::string> names;
-    names.reserve(impl_->tensors.size());
-    for (const auto& [name, _] : impl_->tensors) {
-        names.push_back(name);
+std::vector<std::string> TensorRegistry::getAllTensorUri() const {
+    std::vector<std::string> uris;
+    uris.reserve(tensors.size());
+    for (const auto& [uri, _] : tensors) {
+        uris.push_back(uri);
     }
-    return names;
+    return uris;
 }
 
 } // namespace RSG_SIM

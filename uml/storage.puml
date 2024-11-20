@@ -1,0 +1,101 @@
+@startuml
+
+' Interfaces
+interface ITensor {
+    +{abstract} ~ITensor()
+    +{abstract} const TensorMeta& meta() const
+    +{abstract} bool isTypeMatch(const std::type_index&) const
+    +{abstract} const string& name() const
+    +{abstract} const vector<int64_t>& shape() const
+    +{abstract} size_t elemCount() const
+    +{abstract} size_t elemSize() const
+    +{abstract} size_t dim() const
+    +{abstract} void* ptr()
+    +{abstract} const void* ptr() const
+    +{abstract} bool isOnCPU() const
+    +{abstract} bool isOnGPU() const
+    +{abstract} void toCPU()
+    +{abstract} void toGPU()
+    +{abstract} void zero()
+    +{abstract} void fill(const void*)
+    +{abstract} void reshape(const vector<int64_t>&)
+    ... other methods ...
+}
+
+' Classes
+class TensorMeta {
+    +string name
+    +vector<int64_t> shape
+    +TensorDataType dtype
+    +size_t type_size
+    +type_index type_info
+    +{static} TensorMeta create<T>()
+    -static TensorDataType getDataType<T>()
+}
+
+class TensorRegistryManager {
+    -static bool initialized_
+    +{static} TensorRegistry createRegistry(int env_count)
+    +{static} void setDefaultDevice(bool use_gpu)
+    +{static} bool isGPUAvailable()
+    +{static} void initialize()
+    +{static} void shutdown()
+    +{static} void clearCache()
+    +{static} size_t getCurrentAllocatedMemory()
+    +{static} void setSeed(uint64_t seed)
+}
+
+class TensorRegistry {
+    -unique_ptr<Impl> impl_
+    -int env_count_
+    +TensorRegistry(int env_count)
+    +ITensor* createTensor(const TensorMeta&)
+    +GTensor<T>* createTensor<T>(string&, vector<int64_t>&)
+    +ITensor* getTensor(const string&)
+    +GTensor<T>* getTensor<T>(const string&)
+    +void removeTensor(const string&)
+    +vector<ITensor*> getTensorsByPrefix(const string&)
+    +void removeTensorsByPrefix(const string&)
+    +size_t size() const
+    +bool exists(const string&) const
+    +vector<string> getAllNames() const
+    +int getEnvCount() const
+}
+
+class GTensorBase {
+    #TensorMeta meta_
+    #unique_ptr<internal::TorchTensorImpl> impl_
+    +GTensorBase(const TensorMeta&)
+    ... implementation of ITensor methods ...
+    #GTensorBase* createTensorFromImpl()
+    #const TorchTensorImpl* getImpl()
+}
+
+class GTensor<T> {
+    +GTensor(const string&, const vector<int64_t>&)
+    +T* data()
+    +const T* data() const
+    +void fillValue(const T&)
+    +void clipValue(const T&, const T&)
+    +unique_ptr<GTensor<T>> typedSlice()
+    +unique_ptr<GTensor<T>> typedSum()
+    +unique_ptr<GTensor<T>> typedMean()
+}
+
+' Enums
+enum TensorDataType {
+    kFloat32
+    kFloat64
+    kInt32
+    kInt64
+}
+
+' Relationships
+TensorRegistryManager ..> TensorRegistry : creates
+TensorRegistry o-- ITensor
+ITensor <|-- GTensorBase
+GTensorBase <|-- GTensor
+GTensorBase o-- TensorMeta
+TensorMeta -- TensorDataType
+
+@enduml
