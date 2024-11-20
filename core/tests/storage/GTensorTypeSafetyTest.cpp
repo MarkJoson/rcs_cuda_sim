@@ -39,7 +39,7 @@ TEST_F(GTensorTypeSafetyTest, TypeSafeOperations) {
 
     typed_tensor->toCPU();
     
-    const float* data = typed_tensor->typed_data();
+    const float* data = typed_tensor->data();
     for (int i = 0; i < 8; ++i) {
         EXPECT_FLOAT_EQ(data[i], 1.5f);
     }

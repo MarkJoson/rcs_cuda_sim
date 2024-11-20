@@ -8,17 +8,18 @@ file (
 )
 
 
-add_library(tensor_storage
+add_library(corelib
     ${tensor_storage_src}
+    src/tree.cpp
 )
 
 # 设置目标属性
-set_target_properties(tensor_storage PROPERTIES
+set_target_properties(corelib PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     POSITION_INDEPENDENT_CODE ON
 )
 
-target_include_directories(tensor_storage
+target_include_directories(corelib
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  # 构建时使用源代码中的 include 目录
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/roboSim/core>  # 安装后使用安装的 include 目录
@@ -27,17 +28,9 @@ target_include_directories(tensor_storage
 )
 
 # 链接依赖
-target_link_libraries(tensor_storage
+target_link_libraries(corelib
     PUBLIC
         ${TORCH_LIBRARIES}
-)
-
-add_executable(test_app
-    src/main.cpp
-)
-
-target_link_libraries(test_app
-    tensor_storage
 )
 
 
@@ -48,7 +41,7 @@ endif()
 
 
 # 创建组件导出
-install(TARGETS tensor_storage
+install(TARGETS corelib
     EXPORT RoboSimCoreTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

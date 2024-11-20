@@ -33,7 +33,7 @@ TEST_F(GTensorTest, DataOperations) {
     // 测试zero
     tensor->zero();
     tensor->toCPU();
-    float* data = static_cast<float*>(tensor->data());
+    float* data = static_cast<float*>(tensor->ptr());
     for (int i = 0; i < 8; ++i) { // 2(env) * 2 * 2
         EXPECT_FLOAT_EQ(data[i], 0.0f);
     }

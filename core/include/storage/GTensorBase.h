@@ -28,8 +28,8 @@ public:
     size_t dim() const override { return meta_.shape.size(); }
     
     // 数据访问实现
-    void* data() override;
-    const void* data() const override;
+    void* ptr() override;
+    const void* ptr() const override;
     
     // 设备操作实现
     bool isOnCPU() const override;

@@ -23,7 +23,7 @@ TEST_F(GTensorMathTest, BasicMathOperations) {
 
     // 测试abs
     tensor->abs();
-    float* data = static_cast<float*>(tensor->data());
+    float* data = static_cast<float*>(tensor->ptr());
     for (int i = 0; i < 8; ++i) {
         EXPECT_FLOAT_EQ(data[i], 2.0f);
     }
@@ -31,7 +31,7 @@ TEST_F(GTensorMathTest, BasicMathOperations) {
     // 测试clip
     float min_val = 1.0f, max_val = 1.5f;
     tensor->clip(&min_val, &max_val);
-    data = static_cast<float*>(tensor->data());
+    data = static_cast<float*>(tensor->ptr());
     for (int i = 0; i < 8; ++i) {
         EXPECT_FLOAT_EQ(data[i], 1.5f);
     }
@@ -47,11 +47,11 @@ TEST_F(GTensorMathTest, StatisticalOperations) {
     
     // 测试sum
     auto sum = tensor->sum();
-    EXPECT_FLOAT_EQ(*static_cast<float*>(sum->data()), 16.0f); // 2*2*2*2
+    EXPECT_FLOAT_EQ(*static_cast<float*>(sum->ptr()), 16.0f); // 2*2*2*2
     
     // 测试mean
     auto mean = tensor->mean();
-    EXPECT_FLOAT_EQ(*static_cast<float*>(mean->data()), 2.0f);
+    EXPECT_FLOAT_EQ(*static_cast<float*>(mean->ptr()), 2.0f);
     
     // 测试维度上的统计
     auto dim_sum = tensor->sum(1);
@@ -73,7 +73,7 @@ TEST_F(GTensorMathTest, ComparisonOperations) {
 
     // if(tensor1->isTypeMatch())
 
-    bool* data = (bool*)(tensor1->data());
+    bool* data = (bool*)(tensor1->ptr());
     for (int i = 0; i < 8; ++i) {
         EXPECT_FLOAT_EQ(data[i], 1.0f); // true in PyTorch is represented as 1.0f
     }

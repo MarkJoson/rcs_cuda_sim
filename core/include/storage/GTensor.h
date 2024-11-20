@@ -12,8 +12,8 @@ public:
         : GTensorBase(TensorMeta::create<T>(name, shape)) {}
         
     // 类型安全的数据访问
-    T* typed_data() { return static_cast<T*>(data()); }
-    const T* typed_data() const { return static_cast<const T*>(data()); }
+    T* data() { return static_cast<T*>(ptr()); }
+    const T* data() const { return static_cast<const T*>(ptr()); }
     
     // 类型安全的操作
     void fillValue(const T& value) {

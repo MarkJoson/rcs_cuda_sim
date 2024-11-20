@@ -22,8 +22,8 @@ public:
     virtual size_t dim() const = 0;
     
     // 数据访问
-    virtual void* data() = 0;
-    virtual const void* data() const = 0;
+    virtual void* ptr() = 0;
+    virtual const void* ptr() const = 0;
     
     // 设备操作
     virtual bool isOnCPU() const = 0;

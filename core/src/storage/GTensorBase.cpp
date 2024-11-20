@@ -41,11 +41,11 @@ GTensorBase::GTensorBase(const TensorMeta& meta)
 GTensorBase::~GTensorBase() = default;
 
 // 数据访问实现
-void* GTensorBase::data() {
+void* GTensorBase::ptr() {
     return impl_->tensor.data_ptr();
 }
 
-const void* GTensorBase::data() const {
+const void* GTensorBase::ptr() const {
     return impl_->tensor.data_ptr();
 }
 
