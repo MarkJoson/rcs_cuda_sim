@@ -9,8 +9,12 @@ namespace RSG_SIM {
 template<typename T>
 class GTensor : public GTensorBase {
 public:
-    GTensor(const std::string& name, const std::vector<int64_t>& shape)
-        : GTensorBase(TensorMeta::create<T>(name, shape)) {}
+    using value_type = T;
+    using iterator = T*;
+    using const_iterator = const T*;
+    
+    GTensor(const std::vector<int64_t>& shape)
+        : GTensorBase(TensorMeta::create<T>(shape)) {}
         
     // 类型安全的数据访问
     T* data() { return static_cast<T*>(ptr()); }
@@ -48,7 +52,16 @@ public:
         return std::unique_ptr<GTensor<T>>(
             static_cast<GTensor<T>*>(base_mean.release()));
     }
+
+
+    // Iterator接口
+    iterator begin() { return data(); }
+    iterator end() { return data() + elemCount(); }
+    const_iterator begin() const { return data(); }
+    const_iterator end() const { return data() + elemCount(); }
+
     };
+
 
 } // namespace RSG_SIM
 

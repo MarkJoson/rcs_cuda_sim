@@ -85,12 +85,14 @@ public:
     void le(const ITensor& other) override;
 
 protected:
+    void takeDeviceData(void* ptr, const std::type_index &tinfo, int tsize, const std::vector<int64_t>& shape);
+    void takeHostData(void* ptr, const std::type_index &tinfo, int tsize, const std::vector<int64_t>& shape);
+    void dropWithoutRelease();
+
+protected:
     TensorMeta meta_;
     std::unique_ptr<internal::TorchTensorImpl> impl_;
     
-    // 辅助函数
-    GTensorBase* createTensorFromImpl(const std::string& name, internal::TorchTensorImpl* impl) const;
-    const internal::TorchTensorImpl* getImpl(const ITensor& tensor) const;
 };
 
 } // namespace RSG_SIM

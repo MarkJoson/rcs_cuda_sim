@@ -5,6 +5,7 @@ file (
         tensor_storage_src
     CONFIGURE_DEPENDS
         src/storage/*.cpp
+        src/storage/*.cu
 )
 
 

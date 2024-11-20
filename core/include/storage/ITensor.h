@@ -13,6 +13,7 @@ enum class TensorDataType {
     kFloat64,
     kInt32,
     kInt64,
+    kUInt8
     // 可以根据需要添加更多类型
 };
 
@@ -35,6 +36,20 @@ struct TensorMeta {
         };
     }
 
+    static TensorDataType getDataType(const std::type_index &ti) {
+        using DT = TensorDataType;
+        if (ti == typeid(float))
+            return DT::kFloat32;
+        else if (ti == typeid(double))
+            return DT::kFloat64;
+        else if (ti == typeid(int32_t))
+            return DT::kInt32;
+        else if (ti == typeid(int64_t))
+            return DT::kInt64;
+        else
+            return DT::kUInt8;
+    }
+
     template<typename T>
     static constexpr TensorDataType getDataType() {
         using DT = TensorDataType;
@@ -47,7 +62,7 @@ struct TensorMeta {
         else if constexpr (std::is_same_v<T, int64_t>)
             return DT::kInt64;
         else
-            return DT::kFloat32;
+            return DT::kUInt8;
         
         // static_assert(always_false<T>::value, "Unsupported type");
     }

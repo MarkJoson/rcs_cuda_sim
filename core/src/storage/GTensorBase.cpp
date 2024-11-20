@@ -429,27 +429,63 @@ void GTensorBase::le(const ITensor& other) {
     }
 }
 
-// 辅助函数实现
-GTensorBase* GTensorBase::createTensorFromImpl(
-    const std::string& name,
-    internal::TorchTensorImpl* impl) const {
-    auto tensor = std::make_unique<GTensorBase>(
-        TensorMeta{
-            std::vector<int64_t>(impl->tensor.sizes().begin(), impl->tensor.sizes().end()),
-            meta_.dtype,
-            meta_.type_size,
-            meta_.type_info
-        }
-    );
-    tensor->impl_->tensor = impl->tensor;
-    return tensor.release();
+
+    // 接管设备内存的所有权
+void GTensorBase::takeDeviceData(void* ptr, const std::type_index &tinfo, int tsize, const std::vector<int64_t>& shape) {
+    // 更新meta信息
+    meta_.shape = shape;
+    meta_.type_size = tsize; 
+    meta_.type_info = tinfo;
+    meta_.dtype = TensorMeta::getDataType(tinfo);
+
+    // 计算总元素数
+    std::vector<int64_t> torch_shape;
+    torch_shape.reserve(shape.size());
+    for (auto dim : shape) {
+        torch_shape.push_back(static_cast<int64_t>(dim));
+    }
+    
+    // 创建tensor
+    impl_->tensor = torch::from_blob(
+        ptr,
+        torch_shape,  // 使用实际的shape而不是一维数组
+        torch::TensorOptions()
+            .device(torch::kCUDA)
+            .dtype(internal::TorchTensorImpl::getTorchDtype(meta_.dtype)));
 }
 
-const internal::TorchTensorImpl* GTensorBase::getImpl(const ITensor& tensor) const {
-    if (auto* base = dynamic_cast<const GTensorBase*>(&tensor)) {
-        return base->impl_.get();
+// 接管主机内存的所有权
+void GTensorBase::takeHostData(void* ptr, const std::type_index &tinfo, int tsize, const std::vector<int64_t>& shape) {
+    // 更新meta信息
+    meta_.shape = shape;
+    meta_.type_size = tsize; 
+    meta_.type_info = tinfo;
+    meta_.dtype = TensorMeta::getDataType(tinfo);
+
+    // 计算总元素数
+    std::vector<int64_t> torch_shape;
+    torch_shape.reserve(shape.size());
+    for (auto dim : shape) {
+        torch_shape.push_back(static_cast<int64_t>(dim));
     }
-    throw std::runtime_error("Invalid tensor type");
+    
+    // 创建tensor
+    impl_->tensor = torch::from_blob(
+        ptr,
+        torch_shape,  // 使用实际的shape而不是一维数组
+        torch::TensorOptions()
+            .device(torch::kCPU)
+            .dtype(internal::TorchTensorImpl::getTorchDtype(meta_.dtype)));
 }
+
+// 释放底层数据的所有权
+void GTensorBase::dropWithoutRelease() {
+    impl_->tensor = torch::Tensor();  // 创建一个空tensor
+    // 重置meta信息
+    meta_.shape.clear();
+    meta_.type_size = 0;
+}
+
+
 
 } // namespace RSG_SIM
