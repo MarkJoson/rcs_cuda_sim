@@ -4,23 +4,24 @@
 #include "GTensorTorchWrapper.h"
 #include <cassert>
 
-namespace RSG_SIM {
+namespace RSG_SIM
+{
 
-template<typename T>
-class GTensor : public GTensorTorchWrapper {
-public:
-    using value_type = T;
-    using iterator = T*;
-    using const_iterator = const T*;
-    
-    GTensor(const std::vector<int64_t>& shape)
-        : GTensorTorchWrapper(shape, getTensorDataType<T>()) {}
-        
-    // 类型安全的数据访问
-    T* data() { return static_cast<T*>(ptr()); }
-    const T* data() const { return static_cast<const T*>(ptr()); }
-};
+    template <typename T>
+    class GTensor : public GTensorTorchWrapper
+    {
+    public:
+        using value_type = T;
+        using iterator = T *;
+        using const_iterator = const T *;
 
+        GTensor(const std::vector<int64_t> &shape)
+            : GTensorTorchWrapper(shape, getTensorDataType<T>()) {}
+
+        // 类型安全的数据访问
+        T *data() { return static_cast<T *>(ptr()); }
+        const T *data() const { return static_cast<const T *>(ptr()); }
+    };
 
 } // namespace RSG_SIM
 

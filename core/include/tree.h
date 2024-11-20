@@ -5,7 +5,8 @@
 #include <vector>
 #include <functional>
 #include <memory>
-#include <optional>
+#include <algorithm>
+#include <iterator>
 
 
 enum class NotifyType
@@ -55,23 +56,23 @@ public:
     virtual std::string getName() const = 0;
     virtual void setName(const std::string &name) = 0;
     virtual ITreeNode *getParent() const = 0;
+    virtual void setParent(ITreeNode* parent) = 0;
     virtual std::vector<ITreeNode *> getChildren() const = 0;
-    virtual void addChild(ITreeNode *node) = 0;
+    virtual void addChild(std::unique_ptr<ITreeNode> node) = 0;
     virtual void removeChild(ITreeNode *node) = 0;
     virtual ITreeNode *findChild(const std::function<bool(ITreeNode *)> &predicate) = 0;
-    virtual std::string getPath() const = 0;
-    virtual ITreeNode *find(const std::function<bool(ITreeNode *)> &predicate) = 0;
     virtual void traverse(ITreeVisitor *visitor) = 0;
+    virtual std::string getPath() const = 0;
     virtual ITreeNode *findByPath(const std::string &path) = 0;
 };
 
-template <typename T>
+
 class TreeNode : public ITreeNode
 {
 protected:
     std::string name_;
     ITreeNode *parent_;
-    std::vector<ITreeNode *> children_;
+    std::vector<std::unique_ptr<ITreeNode>> children_;
     std::vector<ITreeObserver *> observers_;
 
 public:
@@ -93,25 +94,42 @@ public:
         return parent_;
     }
 
-    std::vector<ITreeNode *> getChildren() const override
+    void setParent(ITreeNode* parent) override
     {
-        return children_;
+        parent_ = static_cast<TreeNode*>(parent);
     }
 
-    void addChild(ITreeNode *node) override
+    std::vector<ITreeNode *> getChildren() const override
     {
-        auto treeNode = dynamic_cast<TreeNode *>(node);
-        if (treeNode)
+        std::vector<ITreeNode*> ret;
+        std::transform(
+            children_.begin(),
+            children_.end(),
+            std::back_inserter(ret),
+            [](const std::unique_ptr<ITreeNode>& ptr){
+                return ptr.get();
+            });
+        return ret;
+    }
+
+    void addChild(std::unique_ptr<ITreeNode> node) override
+    {
+        if (node)
         {
-            treeNode->parent_ = this;
-            children_.push_back(node);
-            notifyObservers(NotifyType::NODE_ADDED, node);
+            node->setParent(this);
+            children_.push_back(std::move(node));
+            notifyObservers(NotifyType::NODE_ADDED, node.get());
         }
     }
     
     void removeChild(ITreeNode *node) override
     {
-        auto it = std::find(children_.begin(), children_.end(), node);
+        auto it = std::find_if(
+            children_.begin(),
+            children_.end(),
+            [node](const auto& p)->bool {return p.get()==node;}
+        );
+        
         if (it != children_.end())
         {
             children_.erase(it);
@@ -126,11 +144,11 @@ public:
     
     ITreeNode *findChild(const std::function<bool(ITreeNode *)> &predicate) override
     {
-        for (auto child : children_)
+        for (const auto &child : children_)
         {
-            if (predicate(child))
+            if (predicate(child.get()))
             {
-                return child;
+                return child.get();
             }
         }
         return nullptr;
@@ -150,26 +168,10 @@ public:
         return PathUtils::combine(pathParts);
     }
     
-    ITreeNode *find(const std::function<bool(ITreeNode *)> &predicate) override
-    {
-        if (predicate(this))
-            return this;
-
-        for (auto child : children_)
-        {
-            if (auto result = child->find(predicate))
-            {
-                return result;
-            }
-        }
-
-        return nullptr;
-    }
-    
     void traverse(ITreeVisitor *visitor) override
     {
         visitor->visitEnter(this);
-        for (auto child : children_)
+        for (const auto &child : children_)
         {
             child->traverse(visitor);
         }
@@ -242,16 +244,6 @@ protected:
                 break;
             }
         }
-    }
-};
-
-template <typename T>
-class Tree : public TreeNode
-{
-public:
-    explicit Tree(const std::optional &data = std::nullopt) : TreeNode(data)
-    {
-        this->setName("");
     }
 };
 
