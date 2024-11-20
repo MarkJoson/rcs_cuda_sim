@@ -12,14 +12,8 @@ TensorRegistry::~TensorRegistry() = default;
 TensorRegistry::TensorRegistry(TensorRegistry&&) noexcept = default;
 TensorRegistry& TensorRegistry::operator=(TensorRegistry&&) noexcept = default;
 
-ITensor* TensorRegistry::createTensor(const std::string &uri, const TensorMeta& meta) {
-    auto full_shape = meta.shape;
-    full_shape.insert(full_shape.begin(), env_count_);
-    
-    auto tensor_meta = meta;
-    tensor_meta.shape = full_shape;
-    
-    auto tensor = std::make_unique<GTensorBase>(tensor_meta);
+ITensor* TensorRegistry::createTensor(const std::string &uri, const std::vector<int64_t> &shape, TensorDataType dtype) {
+    auto tensor = std::make_unique<GTensorTorchWrapper>(shape, dtype);
     auto* ptr = tensor.get();
     
     tensors[uri] = std::move(tensor);

@@ -28,13 +28,12 @@ public:
     TensorRegistry& operator=(TensorRegistry&&) noexcept;
 
     // 创建张量的非模板接口
-    ITensor* createTensor(const std::string &uri, const TensorMeta& meta);
+    ITensor* createTensor(const std::string &uri, const std::vector<int64_t> &shape, TensorDataType dtype);
     
     // 创建张量的模板接口
     template<typename T>
     GTensor<T>* createTensor(const std::string &uri, const std::vector<int64_t>& shape) {
-        auto meta = TensorMeta::create<T>(shape);
-        auto* tensor = static_cast<GTensor<T>*>(createTensor(uri, meta));
+        auto* tensor = static_cast<GTensor<T>*>(createTensor(uri, shape, GTensor<T>::getTensorDataType()));
         return tensor;
     }
     
@@ -44,8 +43,7 @@ public:
     template<typename T>
     GTensor<T>* getTensor(const std::string& uri) {
         auto* tensor = getTensor(uri);
-        return (tensor && tensor->isTypeMatch(typeid(T))) ?
-            static_cast<GTensor<T>*>(tensor) : nullptr;
+        return static_cast<GTensor<T>*>(tensor);
     }
     
     // 移除张量
