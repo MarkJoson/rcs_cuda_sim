@@ -6,13 +6,13 @@ namespace RSG_SIM
 
     bool TensorRegistryManager::initialized_ = false;
 
-    TensorRegistry TensorRegistryManager::createRegistry(int env_count)
+    TensorRegistry TensorRegistryManager::createRegistry()
     {
         if (!initialized_)
         {
             initialize();
         }
-        return TensorRegistry(env_count);
+        return TensorRegistry();
     }
 
     void TensorRegistryManager::setDefaultDevice(bool use_gpu)

@@ -13,7 +13,7 @@ namespace RSG_SIM
         TensorRegistryManager() = delete;
 
         // 创建注册表
-        static TensorRegistry createRegistry(int env_count);
+        static TensorRegistry createRegistry();
 
         // 设备管理
         static void setDefaultDevice(bool use_gpu);
