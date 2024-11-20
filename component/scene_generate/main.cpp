@@ -40,8 +40,8 @@ class Leaf {
 public:
     int x, y, width, height;
     static const int MIN_LEAF_SIZE = 10;
-    std::shared_ptr<Leaf> child1;
-    std::shared_ptr<Leaf> child2;
+    std::unique_ptr<Leaf> child1;
+    std::unique_ptr<Leaf> child2;
     std::unique_ptr<Room> room;
 
     Leaf(int x, int y, int width, int height)
@@ -64,11 +64,11 @@ public:
         int split = std::uniform_int_distribution<>(MIN_LEAF_SIZE, max)(gen);
 
         if (splitH) {
-            child1 = std::make_shared<Leaf>(x, y, width, split);
-            child2 = std::make_shared<Leaf>(x, y + split, width, height - split);
+            child1 = std::make_unique<Leaf>(x, y, width, split);
+            child2 = std::make_unique<Leaf>(x, y + split, width, height - split);
         } else {
-            child1 = std::make_shared<Leaf>(x, y, split, height);
-            child2 = std::make_shared<Leaf>(x + split, y, width - split, height);
+            child1 = std::make_unique<Leaf>(x, y, split, height);
+            child2 = std::make_unique<Leaf>(x + split, y, width - split, height);
         }
 
         return true;
@@ -181,7 +181,7 @@ private:
     const int MAX_LEAF_SIZE = 24;
     const int ROOM_MAX_SIZE = 15;
     const int ROOM_MIN_SIZE = 6;
-    std::vector<std::shared_ptr<Leaf>> leafs;
+    std::vector<Leaf*> leafs;
 
 public:
     DungeonGenerator* clone() const override {
@@ -189,23 +189,24 @@ public:
     }
 
     void generate() override {
+        leafs.reserve(512);
         clearMap();
         leafs.clear();
 
-        auto rootLeaf = std::make_shared<Leaf>(0, 0, MAP_WIDTH, MAP_HEIGHT);
-        leafs.push_back(rootLeaf);
+        auto rootLeaf = std::make_unique<Leaf>(0, 0, MAP_WIDTH, MAP_HEIGHT);
+        leafs.push_back(rootLeaf.get());
 
         bool splitSuccessfully = true;
         while (splitSuccessfully) {
             splitSuccessfully = false;
-            for (auto& leaf : leafs) {
+            for (auto leaf : leafs) {
                 if (!leaf->child1 && !leaf->child2) {
                     if (leaf->width > MAX_LEAF_SIZE ||
                         leaf->height > MAX_LEAF_SIZE ||
                         std::uniform_real_distribution<>(0, 1)(gen) > 0.8) {
                         if (leaf->split()) {
-                            leafs.push_back(leaf->child1);
-                            leafs.push_back(leaf->child2);
+                            leafs.push_back(leaf->child1.get());
+                            leafs.push_back(leaf->child2.get());
                             splitSuccessfully = true;
                         }
                     }
@@ -377,9 +378,9 @@ private:
 
 class CellularAutomataGenerator : public DungeonGenerator {
 private:
-    const int ITERATIONS = 30000;
+    const int ITERATIONS = 50000;
     const int NEIGHBORS = 4;
-    const float WALL_PROBABILITY = 0.50f;
+    const float WALL_PROBABILITY = 0.5f;
     const int ROOM_MIN_SIZE = 16;
     const int ROOM_MAX_SIZE = 500;
     const bool SMOOTH_EDGES = true;
@@ -427,10 +428,11 @@ private:
 
             if(getAdjacentWalls(tileX, tileY) > NEIGHBORS) {
                 map[tileX][tileY] = 1;
-            } else {
+            } else if(getAdjacentWalls(tileX, tileY) < NEIGHBORS) {
                 map[tileX][tileY] = 0;
             }
         }
+        cleanUpMap();
     }
 
     void cleanUpMap() {
@@ -446,6 +448,82 @@ private:
             }
         }
     }
+
+    void createTunnel(const std::set<std::pair<int,int>>& cave1,
+                    const std::pair<int,int>& point1,
+                    const std::pair<int,int>& point2) {
+        int x = point2.first;
+        int y = point2.second;
+
+        while(true) {
+            if(cave1.find(std::make_pair(x,y)) != cave1.end()) {
+                break;
+            }
+
+            // Calculate weights
+            double north = 1.0, south = 1.0, east = 1.0, west = 1.0;
+            const double weight = 1.0;
+
+            if(x < point1.first) east += weight;
+            else if(x > point1.first) west += weight;
+            if(y < point1.second) south += weight;
+            else if(y > point1.second) north += weight;
+
+            // Normalize weights
+            double total = north + south + east + west;
+            north /= total;
+            south /= total;
+            east /= total;
+            west /= total;
+
+            // Choose direction
+            double choice = std::uniform_real_distribution<>(0,1)(gen);
+            int dx = 0, dy = 0;
+
+            if(choice < north) {
+                dy = -1;
+            } else if(choice < north + south) {
+                dy = 1;
+            } else if(choice < north + south + east) {
+                dx = 1;
+            } else {
+                dx = -1;
+            }
+
+            // Check bounds and move
+            if(x + dx > 0 && x + dx < MAP_WIDTH-1 && y + dy > 0 && y + dy < MAP_HEIGHT-1) {
+                x += dx;
+                y += dy;
+                map[x][y] = 0;
+            }
+        }
+    }
+
+
+    int getAdjacentWallsSimple(int x, int y) {
+        int wallCount = 0;
+        if(map[x][y-1] == 1) wallCount++;
+        if(map[x][y+1] == 1) wallCount++;
+        if(map[x-1][y] == 1) wallCount++;
+        if(map[x+1][y] == 1) wallCount++;
+        return wallCount;
+    }
+
+    int getAdjacentWalls(int x, int y) {
+        int wallCount = 0;
+        for(int i = -1; i <= 1; i++) {
+            for(int j = -1; j <= 1; j++) {
+                if(i == 0 && j == 0) continue;
+                int checkX = x + i;
+                int checkY = y + j;
+                if(checkX > 0 && checkX < MAP_WIDTH && checkY > 0 && checkY < MAP_HEIGHT) {
+                    wallCount += map[checkX][checkY];
+                }
+            }
+        }
+        return wallCount;
+    }
+
 
     void getCaves() {
         for(int x = 0; x < MAP_WIDTH; x++) {
@@ -503,61 +581,72 @@ private:
     }
 
     void connectCaves() {
-        for(size_t i = 0; i < caves.size(); i++) {
-            if(i == 0) continue;
+        for(auto& currentCave : caves) {
+            std::pair<int,int> point1 = *currentCave.begin();
+            std::pair<int,int> point2;
+            const std::set<std::pair<int,int>>* targetCave = nullptr;
+            double minDistance = std::numeric_limits<double>::max();
 
-            auto& currentCave = caves[i];
-            auto& previousCave = caves[i-1];
+            for(auto& nextCave : caves) {
+                if(&nextCave != &currentCave && !checkConnectivity(currentCave, nextCave)) {
+                    std::pair<int,int> nextPoint = *nextCave.begin();
+                    double dist = distanceFormula(point1, nextPoint);
+                    if(dist < minDistance) {
+                        point2 = nextPoint;
+                        minDistance = dist;
+                        targetCave = &nextCave;
+                    }
+                }
+            }
 
-            // Get points from each cave
-            auto point1 = *currentCave.begin();
-            auto point2 = *previousCave.begin();
-
-            // Create tunnel between points
-            createTunnel(point1, point2);
+            if(targetCave) {
+                createTunnel(currentCave, point1, point2);
+            }
         }
     }
 
-    void createTunnel(const std::pair<int,int>& point1, const std::pair<int,int>& point2) {
-        int x1 = point1.first, y1 = point1.second;
-        int x2 = point2.first, y2 = point2.second;
 
-        int x = x1;
-        int y = y1;
+    bool checkConnectivity(const std::set<std::pair<int,int>>& cave1,
+                        const std::set<std::pair<int,int>>& cave2) {
+        std::set<std::pair<int,int>> connected;
+        std::set<std::pair<int,int>> toCheck;
+        toCheck.insert(*cave1.begin());
 
-        while(x != x2 || y != y2) {
-            if(x < x2) x++;
-            if(x > x2) x--;
-            if(y < y2) y++;
-            if(y > y2) y--;
+        while(!toCheck.empty()) {
+            auto current = *toCheck.begin();
+            toCheck.erase(toCheck.begin());
 
-            map[x][y] = 0;
-        }
-    }
+            if(connected.find(current) == connected.end()) {
+                connected.insert(current);
 
-    int getAdjacentWalls(int x, int y) {
-        int wallCount = 0;
-        for(int i = -1; i <= 1; i++) {
-            for(int j = -1; j <= 1; j++) {
-                if(i == 0 && j == 0) continue;
-                int checkX = x + i;
-                int checkY = y + j;
-                if(checkX > 0 && checkX < MAP_WIDTH && checkY > 0 && checkY < MAP_HEIGHT) {
-                    wallCount += map[checkX][checkY];
+                // Check adjacent cells
+                const std::vector<std::pair<int,int>> dirs = {
+                    {0,-1}, {0,1}, {1,0}, {-1,0}
+                };
+
+                for(const auto& dir : dirs) {
+                    int newX = current.first + dir.first;
+                    int newY = current.second + dir.second;
+                    std::pair<int,int> next{newX, newY};
+
+                    if(map[newX][newY] == 0 &&
+                    toCheck.find(next) == toCheck.end() &&
+                    connected.find(next) == connected.end()) {
+                        toCheck.insert(next);
+                    }
                 }
             }
         }
-        return wallCount;
+
+        return connected.find(*cave2.begin()) != connected.end();
     }
 
-    int getAdjacentWallsSimple(int x, int y) {
-        int wallCount = 0;
-        if(map[x][y-1] == 1) wallCount++;
-        if(map[x][y+1] == 1) wallCount++;
-        if(map[x-1][y] == 1) wallCount++;
-        if(map[x+1][y] == 1) wallCount++;
-        return wallCount;
+    double distanceFormula(const std::pair<int,int>& p1,
+                        const std::pair<int,int>& p2) {
+        return std::sqrt(std::pow(p2.first - p1.first, 2) +
+                        std::pow(p2.second - p1.second, 2));
     }
+
 };
 
 class RoomAdditionGenerator : public DungeonGenerator {
@@ -858,6 +947,7 @@ public:
     }
 
     void generate() override {
+        leafs.reserve(512);
         clearMap();
         leafs.clear();
         rooms.clear();
@@ -874,7 +964,7 @@ public:
         bool splitSuccessfully = true;
         while(splitSuccessfully) {
             splitSuccessfully = false;
-            for(auto& leaf : leafs) {
+            for(auto leaf : leafs) {
                 if(!leaf->child1 && !leaf->child2) {
                     if(leaf->width > MAX_LEAF_SIZE ||
                        leaf->height > MAX_LEAF_SIZE ||
@@ -1269,6 +1359,7 @@ public:
     }
 
     void generate() override {
+        leafs.reserve(512);
         clearMap();
         leafs.clear();
 
@@ -1281,7 +1372,7 @@ public:
         while(splitSuccessfully) {
             splitSuccessfully = false;
 
-            for(auto& leaf : leafs) {
+            for(auto leaf : leafs) {
                 if(!leaf->child1 && !leaf->child2) {
                     if(leaf->width > MAX_LEAF_SIZE ||
                        leaf->height > MAX_LEAF_SIZE ||
