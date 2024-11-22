@@ -194,8 +194,8 @@ private:
 
         sf::RectangleShape cell(sf::Vector2f(CELL_SIZE - 1, CELL_SIZE - 1));
 
-        for (int y = 0; y < currentGenerator->getWidth(); ++y) {
-            for (int x = 0; x < currentGenerator->getHeight(); ++x) {
+        for (int y = 0; y < currentGenerator->getHeight(); ++y) {
+            for (int x = 0; x < currentGenerator->getWidth(); ++x) {
                 cell.setPosition(x * CELL_SIZE, y * CELL_SIZE);
 
                 if (map[x][y] == 1) {

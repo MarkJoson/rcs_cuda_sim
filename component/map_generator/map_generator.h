@@ -136,11 +136,11 @@ private:
 class CellularAutomataGenerator : public DungeonGenerator
 {
 private:
-    const int ITERATIONS = 50000;
+    const int ITERATIONS = 200000;
     const int NEIGHBORS = 4;
     const float WALL_PROBABILITY = 0.5f;
     const int ROOM_MIN_SIZE = 16;
-    const int ROOM_MAX_SIZE = 500;
+    const int ROOM_MAX_SIZE = 200;
     const bool SMOOTH_EDGES = true;
     const int SMOOTHING = 1;
     std::vector<std::set<std::pair<int, int>>> caves_;

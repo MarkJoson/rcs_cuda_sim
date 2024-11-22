@@ -1,23 +1,28 @@
+find_package(OpenCV REQUIRED)
 
 file ( GLOB_RECURSE MAPGEN_SRC "map_generator/*.cpp"  )
 
 add_executable(map_generator
     ${MAPGEN_SRC}
+    edge_extractor.cpp
 )
 
 # 设置目标属性
 set_target_properties(map_generator PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
+    # COMPILE_FLAGS "-O3"
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
     POSITION_INDEPENDENT_CODE ON
 )
 
-# target_include_directories(map_generator
-#     PUBLIC
-#         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  # 构建时使用源代码中的 include 目录
-#         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/roboSim/core>  # 安装后使用安装的 include 目录
-#     PRIVATE
-#         ${TORCH_INCLUDE_DIRS}
-# )
+target_include_directories(map_generator
+    PUBLIC
+        ${OpenCV_INCLUDE_DIRS}
+        # $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  # 构建时使用源代码中的 include 目录
+        # $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/roboSim/core>  # 安装后使用安装的 include 目录
+    # PRIVATE
+        # ${TORCH_INCLUDE_DIRS}
+)
 
 # 链接依赖
 target_link_libraries(map_generator
@@ -25,6 +30,7 @@ target_link_libraries(map_generator
     sfml-graphics
     sfml-window
     sfml-system
+    ${OpenCV_LIBS}
 )
 
 
