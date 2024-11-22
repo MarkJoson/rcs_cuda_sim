@@ -20,8 +20,8 @@ set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
 set(CMAKE_STATIC_LIBRARY_PREFIX "")
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
@@ -55,12 +55,8 @@ include(GoogleTest)
 # Sub Dirs #
 ############
 
-# 设置安装目录
-include(GNUInstallDirs)
-
-
-
 add_subdirectory(core)
+add_subdirectory(component)
 
 #########
 # TESTS #
@@ -70,6 +66,8 @@ add_subdirectory(core)
 ##########
 # EXPORT #
 ##########
+# 设置安装目录
+include(GNUInstallDirs)
 
 include(CMakePackageConfigHelpers)
 

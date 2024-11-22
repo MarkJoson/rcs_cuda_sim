@@ -21,12 +21,12 @@ bool Leaf::split()
         return false;
 
     bool splitH = std::uniform_real_distribution<>(0, 1)(gen) > 0.5;
-    if (width > height && width / height >= 1.25)
+    if (w > h && w / h >= 1.25)
         splitH = false;
-    else if (height > width && height / width >= 1.25)
+    else if (h > w && h / w >= 1.25)
         splitH = true;
 
-    int max = (splitH ? height : width) - MIN_LEAF_SIZE;
+    int max = (splitH ? h : w) - MIN_LEAF_SIZE;
     if (max <= MIN_LEAF_SIZE)
         return false;
 
@@ -34,13 +34,13 @@ bool Leaf::split()
 
     if (splitH)
     {
-        child1 = std::make_unique<Leaf>(x, y, width, split);
-        child2 = std::make_unique<Leaf>(x, y + split, width, height - split);
+        child1 = std::make_unique<Leaf>(x, y, w, split);
+        child2 = std::make_unique<Leaf>(x, y + split, w, h - split);
     }
     else
     {
-        child1 = std::make_unique<Leaf>(x, y, split, height);
-        child2 = std::make_unique<Leaf>(x + split, y, width - split, height);
+        child1 = std::make_unique<Leaf>(x, y, split, h);
+        child2 = std::make_unique<Leaf>(x + split, y, w - split, h);
     }
 
     return true;
@@ -147,8 +147,8 @@ void BSPGenerator::generate()
         {
             if (!leaf->child1 && !leaf->child2)
             {
-                if (leaf->width > MAX_LEAF_SIZE ||
-                    leaf->height > MAX_LEAF_SIZE ||
+                if (leaf->w > MAX_LEAF_SIZE ||
+                    leaf->h > MAX_LEAF_SIZE ||
                     std::uniform_real_distribution<>(0, 1)(gen) > 0.8)
                 {
                     if (leaf->split())
@@ -172,13 +172,13 @@ void BSPGenerator::createRooms()
         if (!leaf->child1 && !leaf->child2)
         {
             int w = std::uniform_int_distribution<>(ROOM_MIN_SIZE,
-                                                    std::min(ROOM_MAX_SIZE, leaf->width - 1))(gen);
+                                                    std::min(ROOM_MAX_SIZE, leaf->w - 1))(gen);
             int h = std::uniform_int_distribution<>(ROOM_MIN_SIZE,
-                                                    std::min(ROOM_MAX_SIZE, leaf->height - 1))(gen);
+                                                    std::min(ROOM_MAX_SIZE, leaf->h - 1))(gen);
             int x = std::uniform_int_distribution<>(
-                leaf->x, leaf->x + (leaf->width - 1) - w)(gen);
+                leaf->x, leaf->x + (leaf->w - 1) - w)(gen);
             int y = std::uniform_int_distribution<>(
-                leaf->y, leaf->y + (leaf->height - 1) - h)(gen);
+                leaf->y, leaf->y + (leaf->h - 1) - h)(gen);
 
             leaf->room = std::make_unique<Room>(x, y, w, h);
             createRoom(*leaf->room);
@@ -1016,8 +1016,8 @@ void CityWallsGenerator::generate()
         {
             if (!leaf->child1 && !leaf->child2)
             {
-                if (leaf->width > MAX_LEAF_SIZE ||
-                    leaf->height > MAX_LEAF_SIZE ||
+                if (leaf->w > MAX_LEAF_SIZE ||
+                    leaf->h > MAX_LEAF_SIZE ||
                     std::uniform_real_distribution<>(0, 1)(gen) > 0.8)
                 {
                     if (leaf->split())
@@ -1043,14 +1043,14 @@ void CityWallsGenerator::createRooms()
         {
             int w = std::uniform_int_distribution<>(
                 ROOM_MIN_SIZE,
-                std::min(ROOM_MAX_SIZE, leaf->width - 1))(gen);
+                std::min(ROOM_MAX_SIZE, leaf->w - 1))(gen);
             int h = std::uniform_int_distribution<>(
                 ROOM_MIN_SIZE,
-                std::min(ROOM_MAX_SIZE, leaf->height - 1))(gen);
+                std::min(ROOM_MAX_SIZE, leaf->h - 1))(gen);
             int x = std::uniform_int_distribution<>(
-                leaf->x, leaf->x + (leaf->width - 1) - w)(gen);
+                leaf->x, leaf->x + (leaf->w - 1) - w)(gen);
             int y = std::uniform_int_distribution<>(
-                leaf->y, leaf->y + (leaf->height - 1) - h)(gen);
+                leaf->y, leaf->y + (leaf->h - 1) - h)(gen);
 
             createRoom(Room(x, y, w, h));
             rooms_.push_back(Room(x, y, w, h));
@@ -1474,8 +1474,8 @@ void MessyBSPGenerator::generate()
         {
             if (!leaf->child1 && !leaf->child2)
             {
-                if (leaf->width > MAX_LEAF_SIZE ||
-                    leaf->height > MAX_LEAF_SIZE ||
+                if (leaf->w > MAX_LEAF_SIZE ||
+                    leaf->h > MAX_LEAF_SIZE ||
                     std::uniform_real_distribution<>(0, 1)(gen) > 0.8)
                 {
                     if (leaf->split())
@@ -1518,14 +1518,14 @@ void MessyBSPGenerator::createRooms(Leaf &leaf)
 {
     int w = std::uniform_int_distribution<>(
         ROOM_MIN_SIZE,
-        std::min(ROOM_MAX_SIZE, leaf.width - 1))(gen);
+        std::min(ROOM_MAX_SIZE, leaf.w - 1))(gen);
     int h = std::uniform_int_distribution<>(
         ROOM_MIN_SIZE,
-        std::min(ROOM_MAX_SIZE, leaf.height - 1))(gen);
+        std::min(ROOM_MAX_SIZE, leaf.h - 1))(gen);
     int x = std::uniform_int_distribution<>(
-        leaf.x, leaf.x + (leaf.width - 1) - w)(gen);
+        leaf.x, leaf.x + (leaf.w - 1) - w)(gen);
     int y = std::uniform_int_distribution<>(
-        leaf.y, leaf.y + (leaf.height - 1) - h)(gen);
+        leaf.y, leaf.y + (leaf.h - 1) - h)(gen);
 
     leaf.room = std::make_unique<Room>(x, y, w, h);
     createRoom(*leaf.room);

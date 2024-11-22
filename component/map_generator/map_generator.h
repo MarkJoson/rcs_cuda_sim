@@ -33,13 +33,13 @@ public:
 class Leaf
 {
 public:
-    int x, y, width, height;
+    int x, y, w, h;
     static const int MIN_LEAF_SIZE = 10;
     std::unique_ptr<Leaf> child1;
     std::unique_ptr<Leaf> child2;
     std::unique_ptr<Room> room;
 
-    Leaf(int x, int y, int width, int height) : x(x), y(y), width(width), height(height) {}
+    Leaf(int _x, int _y, int width, int height) : x(_x), y(_y), w(width), h(height) {}
 
     bool split();
 };
@@ -81,6 +81,7 @@ private:
     std::vector<Room> rooms_;
 
 public:
+    using DungeonGenerator::DungeonGenerator;
     DungeonGenerator *clone() const override { return new TunnelingGenerator(*this); }
     void generate() override;
 
@@ -99,6 +100,7 @@ private:
     std::vector<Leaf *> leafs_;
 
 public:
+    using DungeonGenerator::DungeonGenerator;
     DungeonGenerator *clone() const override { return new BSPGenerator(*this); }
     void generate() override;
 
@@ -122,6 +124,7 @@ private:
     int drunkardX_, drunkardY_;
 
 public:
+    using DungeonGenerator::DungeonGenerator;
     DungeonGenerator *clone() const override { return new DrunkardWalkGenerator(*this); }
 
     void generate() override;
@@ -143,6 +146,7 @@ private:
     std::vector<std::set<std::pair<int, int>>> caves_;
 
 public:
+    using DungeonGenerator::DungeonGenerator;
     CellularAutomataGenerator *clone() const override { return new CellularAutomataGenerator(*this); }
     void generate() override;
 
@@ -184,6 +188,7 @@ private:
     std::vector<std::vector<std::vector<int>>> rooms_;
 
 public:
+    using DungeonGenerator::DungeonGenerator;
     DungeonGenerator *clone() const override { return new RoomAdditionGenerator(*this); }
     void generate() override;
 
@@ -213,6 +218,7 @@ private:
     std::vector<Room> rooms_;
 
 public:
+    using DungeonGenerator::DungeonGenerator;
     DungeonGenerator *clone() const override { return new CityWallsGenerator(*this); }
     void generate() override;
 
@@ -236,6 +242,7 @@ private:
     int currentRegion_;
 
 public:
+    using DungeonGenerator::DungeonGenerator;
     DungeonGenerator *clone() const override { return new MazeWithRoomsGenerator(*this); }
     void generate() override;
 
@@ -263,6 +270,7 @@ private:
     std::vector<Leaf *> leafs_;
 
 public:
+    using DungeonGenerator::DungeonGenerator;
     DungeonGenerator *clone() const override { return new MessyBSPGenerator(*this); }
     void generate() override;
 

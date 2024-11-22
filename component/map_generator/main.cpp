@@ -7,6 +7,8 @@ using namespace map_gen;
 
 constexpr int SCREEN_WIDTH = 800;
 constexpr int SCREEN_HEIGHT = 600;
+constexpr int MAP_WIDTH = 80;
+constexpr int MAP_HEIGHT = 60;
 
 class ColorScheme {
 public:
@@ -80,16 +82,16 @@ public:
         // }
 
         // Initialize generators
-        generators.push_back(std::make_unique<TunnelingGenerator>());
-        generators.push_back(std::make_unique<BSPGenerator>());
-        generators.push_back(std::make_unique<DrunkardWalkGenerator>());
-        generators.push_back(std::make_unique<CellularAutomataGenerator>());
-        generators.push_back(std::make_unique<RoomAdditionGenerator>());
-        generators.push_back(std::make_unique<CityWallsGenerator>());
-        generators.push_back(std::make_unique<MazeWithRoomsGenerator>());
-        generators.push_back(std::make_unique<MessyBSPGenerator>());
+        generators.push_back(std::make_unique<TunnelingGenerator>(MAP_WIDTH, MAP_HEIGHT));
+        generators.push_back(std::make_unique<BSPGenerator>(MAP_WIDTH, MAP_HEIGHT));
+        generators.push_back(std::make_unique<DrunkardWalkGenerator>(MAP_WIDTH, MAP_HEIGHT));
+        generators.push_back(std::make_unique<CellularAutomataGenerator>(MAP_WIDTH, MAP_HEIGHT));
+        generators.push_back(std::make_unique<RoomAdditionGenerator>(MAP_WIDTH, MAP_HEIGHT));
+        generators.push_back(std::make_unique<CityWallsGenerator>(MAP_WIDTH, MAP_HEIGHT));
+        generators.push_back(std::make_unique<MazeWithRoomsGenerator>(MAP_WIDTH, MAP_HEIGHT));
+        generators.push_back(std::make_unique<MessyBSPGenerator>(MAP_WIDTH, MAP_HEIGHT));
 
-        currentGenerator = std::make_unique<TunnelingGenerator>();
+        currentGenerator = std::make_unique<TunnelingGenerator>(MAP_WIDTH, MAP_HEIGHT);
         currentGenerator->generate();
 
         initializeHelpText();
@@ -161,6 +163,8 @@ private:
 
             case sf::Keyboard::Num8:
                 switchGenerator(7);
+                break;
+            default:
                 break;
         }
     }
