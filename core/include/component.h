@@ -2,17 +2,29 @@
 #define __COMPONENT_H__
 
 #include "tree.h"
-#include "TensorRegistry.h"
+#include "storage/TensorRegistry.h"
 
 namespace RSG_SIM
 {
+
+
+class EnvironGroup;
+
+
+class ExecutionCtx
+{
+public:
+    EnvironGroup *group;
+};
+
+
 class ExecutionNode
 {
 public:
     virtual ~ExecutionNode() = default;
-    virtual void initialize() = 0;
-    virtual void reset() = 0;
-    virtual void compute() = 0;
+    virtual void initialize(ExecutionCtx &ctx) = 0;
+    virtual void reset(ExecutionCtx &ctx) = 0;
+    virtual void compute(ExecutionCtx &ctx) = 0;
 };
 
 class EnvironGroup
@@ -29,6 +41,11 @@ public:
     auto addTensor(Component *com, const std::string &name, const std::vector<int64_t> shape) {
         std::string uri = PathUtils::joinPaths(com->getPath(), name);
         return registry_.createTensor<T>(uri, shape);
+    }
+
+    template<typename T>
+    GTensor<T>* getTensor(const std::string &uri) {
+        return static_cast<GTensor<T>*>(registry_.getTensor(uri));
     }
 };
 
