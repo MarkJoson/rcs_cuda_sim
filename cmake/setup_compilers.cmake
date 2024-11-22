@@ -11,7 +11,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/cuda/setup_compute_capability.cmake")
 # This option avoids any implementations using std::string in their signature in
 # header files Useful for Nvblox PyTorch wrapper, which requires the old
 # Pre-CXX11 ABI
-option(PRE_CXX11_ABI_LINKABLE "Better support pre-C++11 ABI library users" ON)
+option(PRE_CXX11_ABI_LINKABLE "Better support pre-C++11 ABI library users" OFF)
 
 # Treat warnings as errors on an opt-in basis. This flag should be enabled in CI
 # and is also recommended for developers. Reason for opt-in is to avoid

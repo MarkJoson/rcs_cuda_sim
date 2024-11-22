@@ -10,8 +10,6 @@ add_executable(map_generator
 # 设置目标属性
 set_target_properties(map_generator PROPERTIES
     # COMPILE_FLAGS "-O3"
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED ON
     POSITION_INDEPENDENT_CODE ON
 )
 

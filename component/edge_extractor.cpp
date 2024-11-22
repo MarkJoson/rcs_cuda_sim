@@ -5,25 +5,62 @@
 #include <ranges>
 #include <string_view>
 #include <deque>
+#include <ranges>
 #include <unordered_map>
+#include <unordered_set>
 #include <boost/iterator/zip_iterator.hpp>
-
+#include <boost/range/join.hpp>
 #include <opencv2/opencv.hpp>
 
 using namespace map_gen;
 using namespace std::literals;
 
-constexpr int MAP_WIDTH = 160;
-constexpr int MAP_HEIGHT = 120;
-constexpr int GRID_SIZE = 5;
+constexpr int MAP_WIDTH = 80;
+constexpr int MAP_HEIGHT = 60;
+constexpr int GRID_SIZE = 10;
+
+typedef struct Point {
+    int x;
+    int y;
+    bool operator==(const Point& other) const {
+        return x == other.x && y == other.y;
+    }
+} Pt;
+
+std::ostream& operator<< (std::ostream& out, const Point& d) {
+    out << " ["<<d.x<<","<<d.y<<"] ";
+    return out;
+}
+
+struct Edge {
+    Point start;
+    Point end;
+    bool operator==(const Edge& other) const {
+        return start == other.start && end == other.end;
+    }
+};
+
+template<>
+struct std::hash<Point> {
+public:
+    size_t operator()(const Point& pt) const {return ((uint64_t)pt.x << 32 | (uint64_t)pt.y);}
+};
+
+template<>
+class std::hash<Edge> {
+public:
+    size_t operator()(const Edge& e) const {return std::hash<Point>()(e.start) ^ std::hash<Point>()(e.start) << 1;}
+};
+
+// 计算单点Hash值
+uint64_t ptHash(const Pt &pt) { return std::hash<Pt>()(pt); }
 
 using Array2d = std::vector<std::vector<int>>;
-using Pt = std::pair<int, int>;
-using Edge = std::pair<Pt, Pt>;
 using ArrayPt = std::vector<Pt>;
 using Poly = ArrayPt;
 using ArrayEdge = std::vector<Edge>;
 using ArrayPoly = std::vector<ArrayPt>;
+using PtHash = uint64_t;
 
 void printMap(const Array2d &map)
 {
@@ -41,11 +78,12 @@ void printMap(const Array2d &map)
 }
 
 
+
 // 提取所有的独立联通区域
 void extractAllRegions(const Array2d &map, int width, int height, ArrayPoly &regions)
 {
     std::vector<std::vector<bool>> visited( width, std::vector<bool>(height, 0) );
-    
+
     // 标记空旷的区域为visited=1，无需遍历
     for(int y=0; y<height; y++)
         for(int x=0; x<width; x++)
@@ -68,18 +106,18 @@ void extractAllRegions(const Array2d &map, int width, int height, ArrayPoly &reg
         }
         // 记录当前找到非零点的坐标
         vx = ckpt_x, vy=ckpt_y;
-        
+
         // 检查完所有的点就退出
         if(ckpt_y == height) break;
-        
+
         // 当前区域的点集
-        std::vector<std::pair<int, int>> region_pts;
+        ArrayPt region_pts;
         // 从当前点出发，进行深度优先遍历，使用栈表
-        std::vector<std::pair<int, int>> ptstack;
+        ArrayPt ptstack;
         // 标记初始点
         visited[ckpt_x][ckpt_y] = 1;
         ptstack.push_back({ckpt_x, ckpt_y});
-        
+
         while(!ptstack.empty())
         {
             auto [x, y] = ptstack.back();
@@ -103,7 +141,7 @@ void extractAllRegions(const Array2d &map, int width, int height, ArrayPoly &reg
     }
 }
 
-
+// 提取region的边
 ArrayEdge extractRegionEdge(Array2d map, ArrayPt region_pts, int width, int height, int gs)
 {
     static constexpr std::array<Pt, 4> neighbors4 {{{-1, 0}, { 0, -1}, { 1, 0}, { 0, 1}}};
@@ -113,7 +151,7 @@ ArrayEdge extractRegionEdge(Array2d map, ArrayPt region_pts, int width, int heig
         {{gs,0}, {gs, gs}},
         {{gs,gs}, {0, gs}},
     }};
-        
+
 
     ArrayEdge edge_out;
     int edge_pixel = 0, edge_cnt = 0;
@@ -139,7 +177,7 @@ ArrayEdge extractRegionEdge(Array2d map, ArrayPt region_pts, int width, int heig
             if (!(n_flag & 1<<i)) {
                 edge_cnt ++;
                 auto &[p1, p2] = neighbor_edges[i];
-                edge_out.push_back({{x*gs+p1.first, y*gs+p1.second},{x*gs+p2.first, y*gs+p2.second}});
+                edge_out.push_back({{x*gs+p1.x, y*gs+p1.y},{x*gs+p2.x, y*gs+p2.y}});
             }
         }
     }
@@ -147,13 +185,7 @@ ArrayEdge extractRegionEdge(Array2d map, ArrayPt region_pts, int width, int heig
     return edge_out;
 }
 
-uint64_t ptHash(const Pt &pt)
-{
-    return ((uint64_t)pt.first << 32 | (uint64_t)pt.second);
-}
-
-using PtHash = uint64_t;
-
+// 将边集合拆分成顺时针的多边形
 ArrayPoly mergeEdgeToPoly(const ArrayEdge &edges)
 {
     ArrayPoly polys;
@@ -173,16 +205,16 @@ ArrayPoly mergeEdgeToPoly(const ArrayEdge &edges)
         map_ept_idx[hash_ept] = i;
     }
 
-    std::set<Edge> edge_set(edges.begin(), edges.end());
+    std::unordered_set<Edge> edge_set(edges.begin(), edges.end());
 
     while(!edge_set.empty())
     {
         Poly poly;
         // 此次edge的点集
-        std::set<PtHash> edge_pt_set;
+        std::unordered_set<PtHash> edge_pt_set;
 
         // 从随机一个边的起点开始
-        Pt pt = edge_set.begin()->first;
+        Pt pt = edge_set.begin()->start;
         poly.push_back(pt);
         edge_pt_set.insert(ptHash(pt));
         while(true)
@@ -191,13 +223,13 @@ ArrayPoly mergeEdgeToPoly(const ArrayEdge &edges)
             int edge_id = map_spt_idx[ptHash(pt)];
             const Edge &edge = edges[edge_id];
             edge_set.erase(edge);
-            
+
             // 如果点已经存在于点集
-            if(edge_pt_set.find(ptHash(edge.second)) != edge_pt_set.end())
+            if(edge_pt_set.find(ptHash(edge.end)) != edge_pt_set.end())
                 break;
-            
+
             // 加入下一个点到多边形和点集
-            pt = edge.second;
+            pt = edge.end;
             poly.push_back(pt);
             edge_pt_set.insert(ptHash(pt));
         }
@@ -206,7 +238,80 @@ ArrayPoly mergeEdgeToPoly(const ArrayEdge &edges)
     return polys;
 }
 
+float dist_to_line(Pt l1, Pt l2, Pt op)
+{
+    if(abs(l2.x-l1.x) == 0 && abs(l2.y-l1.y) == 0)
+        throw std::exception();
+    float dist = l1.x*l2.y + l2.x*op.y + op.x*l1.y - l1.x*op.y - op.x*l2.y - l2.x*l1.y;
+    dist /= 2*sqrtf((l2.x-l1.x)*(l2.x-l1.x)+(l2.y-l1.y)*(l2.y-l1.y));
+    return dist;
+}
 
+// 将点集精简
+ArrayPt douglasPeukcer(const ArrayPt &pts, float grid_size)
+{
+
+    auto head_tail_array = boost::join(pts, std::array<Pt,1>{pts[0]});
+    std::list<Pt> ptlst; //(pts.begin(), pts.end());
+
+
+    // 粗精简，合并同一条直线上的点
+    auto p1i = head_tail_array.begin();
+    auto p2i = head_tail_array.begin();
+    // ptlst.push_back(*p1i);
+    for(auto pt_iter=head_tail_array.begin()+1; pt_iter != head_tail_array.end(); pt_iter++)
+    {
+        //
+        if(p1i==p2i) {p2i = pt_iter; continue;}
+        // 如果不在直线上，则设置p1和p2到拐点，
+        const auto &p1 = *p1i, &p2 = *p2i, &p3 = *pt_iter;
+        if((p2.y-p1.y)*(p3.x-p2.x) != (p3.y-p2.y)*(p2.x-p1.x))
+        {
+            ptlst.push_back(*p2i);
+            p1i = p2i;
+        }
+        p2i = pt_iter;
+    }
+
+    std::vector<std::pair<std::list<Pt>::iterator, std::list<Pt>::iterator>> stack;
+    // 将第一个和最后一个存起来
+    stack.push_back({ptlst.begin(), std::prev(ptlst.end())});
+    while(!stack.empty())
+    {
+        auto [spi, epi] = stack.back();
+        stack.pop_back();
+        // 如果线段之间就差1个差距，可以直接退出
+        if(std::next(spi)==epi) continue;
+        // std::cout << std::endl << "**********************************************" << std::endl;
+
+        // 检查线段上的每个点，选择最大距离的点进行分割，此外，删除距离较小的点
+        std::pair<float, std::list<Pt>::iterator> max_pt = {-FLT_MAX, std::next(spi)};
+        auto sp = *spi, ep = *epi;
+        for(auto cki=std::next(spi); cki!=epi;) {
+            auto maybe_erase = cki;
+            cki++;
+
+            float d = fabsf(dist_to_line(sp, ep, *maybe_erase));
+            // std::cout << "sp: " << sp << ", ep: " << ep << ", mbe: " << *maybe_erase << ", d: " << d <<std::endl;
+            if(d <= grid_size*0.05) {
+                ptlst.erase(maybe_erase);
+            }
+            else if(max_pt.first < d){
+                // std::cout << "Overmax-- origin: " << *max_pt.second << ", mpt:" << *maybe_erase << std::endl;
+                max_pt = std::make_pair(d, maybe_erase);
+            }
+        }
+        if(max_pt.first >= 0)
+        {
+            stack.push_back({spi, max_pt.second});
+            stack.push_back({max_pt.second, epi});
+            // std::cout << "- - - - - " << std::endl;
+            // std::cout << "Push " << *max_pt.second << "," << *epi << std::endl;
+            // std::cout << "Push " << *spi << "," << *max_pt.second << std::endl;
+        }
+    }
+    return ArrayPt(ptlst.begin(), ptlst.end());
+}
 
 
 template <typename T>
@@ -229,7 +334,7 @@ class MapViewer
 public:
     cv::Mat matmap;
     MapViewer(const Array2d &map) {
-        // 可视化 
+        // 可视化
         matmap = 255 - vectorToMat<int>(map, CV_8UC1)*255;
         cv::resize(matmap, matmap, matmap.size()*GRID_SIZE, 0, 0, 0);
         cv::transpose(matmap, matmap);
@@ -243,8 +348,8 @@ public:
 
 void genShow()
 {
-    // auto map_generator = std::make_unique<CellularAutomataGenerator>(MAP_WIDTH, MAP_HEIGHT);
-    auto map_generator = std::make_unique<MessyBSPGenerator>(MAP_WIDTH, MAP_HEIGHT);
+    auto map_generator = std::make_unique<CellularAutomataGenerator>(MAP_WIDTH, MAP_HEIGHT);
+    // auto map_generator = std::make_unique<MessyBSPGenerator>(MAP_WIDTH, MAP_HEIGHT);
     map_generator->generate();
     auto map = map_generator->getMap();
     auto map_copy(map);
@@ -255,18 +360,26 @@ void genShow()
 
     // 提取边集
     std::vector<ArrayEdge> regions_edge;
-    std::transform(regions.begin(), regions.end(), std::back_inserter(regions_edge), [&](const ArrayPt &region_pts)->ArrayEdge {
+    std::transform(regions.begin(), regions.end(), std::back_inserter(regions_edge), [&](const auto &region_pts)->ArrayEdge {
         return extractRegionEdge(map, region_pts, map.size(), map[0].size(), GRID_SIZE);
     });
-    
+
     std::vector<ArrayPoly> array_polys;
-    std::transform(regions_edge.begin(), regions_edge.end(), std::back_inserter(array_polys), [](const ArrayEdge &edges) {
+    std::transform(regions_edge.begin(), regions_edge.end(), std::back_inserter(array_polys), [](const auto &edges) {
         return mergeEdgeToPoly(edges);
     });
 
+    std::vector<ArrayPoly> trim_polys;
+    std::transform(array_polys.begin(), array_polys.end(), std::back_inserter(trim_polys), [](const auto &convexs){
+        ArrayPoly trim_convexs;
+        std::transform(convexs.begin(), convexs.end(), std::back_inserter(trim_convexs),[](const Poly& convex){
+            return douglasPeukcer(convex, GRID_SIZE);
+        });
+        return trim_convexs;
+    });
 
-    auto region_iter = boost::make_zip_iterator(boost::make_tuple(regions_edge.begin(), array_polys.begin()));
-    auto iter_end = boost::make_zip_iterator(boost::make_tuple(regions_edge.end(), array_polys.end()));
+    auto region_iter = boost::make_zip_iterator(boost::make_tuple(regions_edge.begin(), trim_polys.begin()));
+    auto iter_end = boost::make_zip_iterator(boost::make_tuple(regions_edge.end(), trim_polys.end()));
 
     MapViewer dmv(map);
 
@@ -276,23 +389,34 @@ void genShow()
         dmv.show("dmv");
         ch = cv::waitKey(100);
 
-        const auto &[region_edge, region_polys] = *region_iter; 
-        
+        const auto &[region_edge, trim_poly] = *region_iter;
+
         for (const auto &[p1, p2] : region_edge)
-            cv::line(dmv.matmap, cv::Point(p1.first, p1.second), cv::Point(p2.first, p2.second), cv::Scalar(255,0,0), 1);
+            cv::line(dmv.matmap, cv::Point(p1.x, p1.y), cv::Point(p2.x, p2.y), cv::Scalar(255,0,0), 3);
+
+        std::vector<cv::Point> kps;
+        std::for_each(trim_poly.begin(), trim_poly.end(), [&kps](const auto& poly) {
+            std::transform(poly.begin(), poly.end(), std::back_inserter(kps), [](const Pt& pt) {
+                return cv::Point(pt.x, pt.y);
+            });
+        });
+
+        std::for_each(kps.begin(), kps.end(), [&dmv](const auto  &pt) {
+            cv::drawMarker(dmv.matmap, pt, cv::Scalar(0,0,255), cv::MARKER_DIAMOND, 5, 2);
+        });
+
 
         std::vector<std::vector<cv::Point>> polys;
-        for (const auto &poly : region_polys)
-        {
-            std::vector<cv::Point> pts;
-            std::transform(poly.begin(), poly.end(), std::back_inserter(pts), [](const Pt& pt) { return cv::Point(pt.first, pt.second); });
-            polys.push_back(pts);
-        }
-        cv::fillPoly(dmv.matmap, polys, cv::Scalar(0,255,0,500));
+        std::transform(trim_poly.begin(), trim_poly.end(), std::back_inserter(polys), [](const auto &convexs){
+            std::vector<cv::Point> cv_convex;
+            std::transform(convexs.begin(), convexs.end(), std::back_inserter(cv_convex), [](const Pt& pt) { return cv::Point(pt.x, pt.y); });
+            return cv_convex;
+        });
+        cv::fillPoly(dmv.matmap, polys, cv::Scalar(0,255,0,50));
     }
     if (ch == 'q') exit(0);
     dmv.show("dmv");
-    cv::waitKey(100);
+    cv::waitKey(0);
 }
 
 int main(int argc, char** args)
@@ -300,6 +424,20 @@ int main(int argc, char** args)
     while(1)
         genShow();
 }
+    // Array2d map = {
+    //     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    //     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    //     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    //     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    //     {0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0},
+    //     {0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0},
+    //     {0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0},
+    //     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    //     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    //     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    //     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    //     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
+    //     };
 
     // Array2d map = {
     //     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
