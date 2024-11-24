@@ -1,5 +1,5 @@
 
-#include "map_generator.h"
+#include "mapgen_generate.h"
 
 #include <cmath>
 #include <queue>
@@ -1647,7 +1647,7 @@ int MessyBSPGenerator::countAdjacentWalls(int x, int y)
     return count;
 }
 
-    
+
 } // namespace map_gen
 
 

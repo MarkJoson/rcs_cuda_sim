@@ -2,11 +2,11 @@ find_package(OpenCV REQUIRED)
 find_package(glog REQUIRED)
 
 
-file ( GLOB_RECURSE MAPGEN_SRC "map_generator/*.cpp"  )
+file ( GLOB_RECURSE MAPGEN_SRC "mapgen/*.cpp"  )
 
 add_executable(map_generator
     ${MAPGEN_SRC}
-    edge_extractor.cpp
+    mapgen_test.cpp
 )
 
 # 设置目标属性

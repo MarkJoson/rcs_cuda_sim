@@ -1,5 +1,5 @@
-#ifndef __MAP_GENERATOR__
-#define __MAP_GENERATOR__
+#ifndef __GENMAP_GENERATE__
+#define __GENMAP_GENERATE__
 
 #include <vector>
 #include <memory>
@@ -54,7 +54,7 @@ protected:
 public:
     DungeonGenerator(int width, int height)
         : width_(width), height_(height), map_(width, std::vector<int>(height, 1)) {}
-    
+
     int getWidth() { return width_; }
     int getHeight() { return height_; }
 
@@ -286,4 +286,4 @@ private:
 
 
 
-#endif //__MAP_GENERATOR__
+#endif //__GENMAP_GENERATE__
