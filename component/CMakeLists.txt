@@ -1,4 +1,6 @@
 find_package(OpenCV REQUIRED)
+find_package(glog REQUIRED)
+
 
 file ( GLOB_RECURSE MAPGEN_SRC "map_generator/*.cpp"  )
 
@@ -29,6 +31,7 @@ target_link_libraries(map_generator
     sfml-window
     sfml-system
     ${OpenCV_LIBS}
+    glog::glog
 )
 
 

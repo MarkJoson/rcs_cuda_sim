@@ -11,6 +11,8 @@
 #include <boost/iterator/zip_iterator.hpp>
 #include <boost/range/join.hpp>
 #include <opencv2/opencv.hpp>
+#include <glog/logging.h>
+
 
 using namespace map_gen;
 using namespace std::literals;
@@ -190,19 +192,28 @@ ArrayPoly mergeEdgeToPoly(const ArrayEdge &edges)
 {
     ArrayPoly polys;
 
-    std::unordered_map<PtHash, int> map_spt_idx;
-    std::unordered_map<PtHash, int> map_ept_idx;
+    std::unordered_map<PtHash, std::list<int>> map_spt_idx;
+    // std::unordered_map<PtHash, std::list<int>> map_ept_idx;
 
     for(int i=0; i<edges.size(); i++)
     {
         const auto &[spt, ept] = edges[i];
-        PtHash hash_spt = ptHash(spt), hash_ept = ptHash(spt);
-        if(map_spt_idx.find(hash_spt)!=map_spt_idx.end() || map_ept_idx.find(hash_spt)!=map_ept_idx.end())
-        {
-            throw std::exception();
-        }
-        map_spt_idx[hash_spt] = i;
-        map_ept_idx[hash_ept] = i;
+        PtHash hash_spt = ptHash(spt), hash_ept = ptHash(ept);
+
+        if(map_spt_idx.find(hash_spt)==map_spt_idx.end()) map_spt_idx[hash_spt] = std::list<int>();
+        // if(map_ept_idx.find(hash_ept)==map_ept_idx.end()) map_ept_idx[hash_ept] = std::list<int>();
+
+        map_spt_idx[hash_spt].push_back(i);
+        // map_ept_idx[hash_ept].push_back(i);
+
+        // {
+        //     auto old = map_spt_idx.find(hash_spt)->second;
+        //     printf("collide!! Edge %d:(%d,%d)->(%d,%d)\n", i, spt.x, spt.y, ept.x, ept.y);
+        //     printf("\t with Edge %d:(%d,%d)->(%d,%d)\n", old, edges[old].start.x, edges[old].start.y, edges[old].end.x, edges[old].end.y);
+        //     // throw std::exception();
+        // }
+        // map_spt_idx[hash_spt] = i;
+        // map_ept_idx[hash_ept] = i;
     }
 
     std::unordered_set<Edge> edge_set(edges.begin(), edges.end());
@@ -210,28 +221,36 @@ ArrayPoly mergeEdgeToPoly(const ArrayEdge &edges)
     while(!edge_set.empty())
     {
         Poly poly;
-        // 此次edge的点集
-        std::unordered_set<PtHash> edge_pt_set;
 
         // 从随机一个边的起点开始
         Pt pt = edge_set.begin()->start;
         poly.push_back(pt);
-        edge_pt_set.insert(ptHash(pt));
         while(true)
         {
-            // 寻找pt点对应的边，获得线段的end
-            int edge_id = map_spt_idx[ptHash(pt)];
+            // 寻找起始点spt点对应的边，获得线段的end
+            auto spt_vec_iter = map_spt_idx.find(ptHash(pt));
+            if(spt_vec_iter == map_spt_idx.end())
+            {
+                // 如果当前的曲线未闭合，连接head形成多边形闭合。
+                if(!(pt == poly.front()))
+                {
+                    printf("Polygon is not closed!!!\n");
+                    poly.push_back(poly[0]);
+                }
+                break;
+            }
+
+            auto &spt_vec = spt_vec_iter->second;
+            int edge_id = spt_vec.front();
+            spt_vec.pop_front();
+            if(spt_vec.empty()) map_spt_idx.erase(ptHash(pt));
+
             const Edge &edge = edges[edge_id];
             edge_set.erase(edge);
 
             // 如果点已经存在于点集
-            if(edge_pt_set.find(ptHash(edge.end)) != edge_pt_set.end())
-                break;
-
-            // 加入下一个点到多边形和点集
             pt = edge.end;
             poly.push_back(pt);
-            edge_pt_set.insert(ptHash(pt));
         }
         polys.push_back(poly);
     }
@@ -244,72 +263,67 @@ float dist_to_line(Pt l1, Pt l2, Pt op)
         throw std::exception();
     float dist = l1.x*l2.y + l2.x*op.y + op.x*l1.y - l1.x*op.y - op.x*l2.y - l2.x*l1.y;
     dist /= 2*sqrtf((l2.x-l1.x)*(l2.x-l1.x)+(l2.y-l1.y)*(l2.y-l1.y));
-    return dist;
+    return fabs(dist);
 }
 
 // 将点集精简
 ArrayPt douglasPeukcer(const ArrayPt &pts, float grid_size)
 {
-
-    auto head_tail_array = boost::join(pts, std::array<Pt,1>{pts[0]});
     std::list<Pt> ptlst; //(pts.begin(), pts.end());
 
-
-    // 粗精简，合并同一条直线上的点
-    auto p1i = head_tail_array.begin();
-    auto p2i = head_tail_array.begin();
-    // ptlst.push_back(*p1i);
-    for(auto pt_iter=head_tail_array.begin()+1; pt_iter != head_tail_array.end(); pt_iter++)
+    // !----- 粗精简，合并同一条直线上的点
+    // 拼接首尾tail, head, ..., tail, head
+    auto tht_arr = boost::join( std::array<Pt,1>({*std::prev(pts.end())}), boost::join(pts, std::array<Pt,1>{pts[0]}));
+    for(auto pt_iter=tht_arr.begin()+1; pt_iter != std::prev(tht_arr.end()); pt_iter++)
     {
-        //
-        if(p1i==p2i) {p2i = pt_iter; continue;}
+        auto p1i = std::prev(pt_iter);
+        auto p2i = std::next(pt_iter);
+        // if(p1i==p2i) {p2i = pt_iter; continue;}
         // 如果不在直线上，则设置p1和p2到拐点，
         const auto &p1 = *p1i, &p2 = *p2i, &p3 = *pt_iter;
         if((p2.y-p1.y)*(p3.x-p2.x) != (p3.y-p2.y)*(p2.x-p1.x))
         {
-            ptlst.push_back(*p2i);
-            p1i = p2i;
-        }
-        p2i = pt_iter;
-    }
-
-    std::vector<std::pair<std::list<Pt>::iterator, std::list<Pt>::iterator>> stack;
-    // 将第一个和最后一个存起来
-    stack.push_back({ptlst.begin(), std::prev(ptlst.end())});
-    while(!stack.empty())
-    {
-        auto [spi, epi] = stack.back();
-        stack.pop_back();
-        // 如果线段之间就差1个差距，可以直接退出
-        if(std::next(spi)==epi) continue;
-        // std::cout << std::endl << "**********************************************" << std::endl;
-
-        // 检查线段上的每个点，选择最大距离的点进行分割，此外，删除距离较小的点
-        std::pair<float, std::list<Pt>::iterator> max_pt = {-FLT_MAX, std::next(spi)};
-        auto sp = *spi, ep = *epi;
-        for(auto cki=std::next(spi); cki!=epi;) {
-            auto maybe_erase = cki;
-            cki++;
-
-            float d = fabsf(dist_to_line(sp, ep, *maybe_erase));
-            // std::cout << "sp: " << sp << ", ep: " << ep << ", mbe: " << *maybe_erase << ", d: " << d <<std::endl;
-            if(d <= grid_size*0.05) {
-                ptlst.erase(maybe_erase);
-            }
-            else if(max_pt.first < d){
-                // std::cout << "Overmax-- origin: " << *max_pt.second << ", mpt:" << *maybe_erase << std::endl;
-                max_pt = std::make_pair(d, maybe_erase);
-            }
-        }
-        if(max_pt.first >= 0)
-        {
-            stack.push_back({spi, max_pt.second});
-            stack.push_back({max_pt.second, epi});
-            // std::cout << "- - - - - " << std::endl;
-            // std::cout << "Push " << *max_pt.second << "," << *epi << std::endl;
-            // std::cout << "Push " << *spi << "," << *max_pt.second << std::endl;
+            ptlst.push_back(*pt_iter);
         }
     }
+
+    // std::vector<std::pair<std::list<Pt>::iterator, std::list<Pt>::iterator>> stack;
+    // // 将第一个和最后一个存起来
+    // stack.push_back({ptlst.begin(), std::prev(ptlst.end())});
+    // while(!stack.empty())
+    // {
+    //     auto [spi, epi] = stack.back();
+    //     stack.pop_back();
+    //     // 如果线段之间就差1个差距，可以直接退出
+    //     if(std::next(spi)==epi) continue;
+    //     // std::cout << std::endl << "**********************************************" << std::endl;
+
+    //     // 检查线段上的每个点，选择最大距离的点进行分割，此外，删除距离较小的点
+    //     std::pair<float, std::list<Pt>::iterator> max_pt = {-FLT_MAX, std::next(spi)};
+    //     auto sp = *spi, ep = *epi;
+    //     for(auto cki=std::next(spi); cki!=epi;) {
+    //         auto maybe_erase = cki;
+    //         cki++;
+
+    //         float d = dist_to_line(sp, ep, *maybe_erase);
+    //         // std::cout << "sp: " << sp << ", ep: " << ep << ", mbe: " << *maybe_erase << ", d: " << d <<std::endl;
+    //         if(d <= grid_size*0.05) {
+    //             ptlst.erase(maybe_erase);
+    //         }
+    //         else if(max_pt.first < d){
+    //             // std::cout << "Overmax-- origin: " << *max_pt.second << ", mpt:" << *maybe_erase << std::endl;
+    //             max_pt = std::make_pair(d, maybe_erase);
+    //         }
+    //     }
+    //     if(max_pt.first >= 0)
+    //     {
+    //         stack.push_back({spi, max_pt.second});
+    //         stack.push_back({max_pt.second, epi});
+    //         // std::cout << "- - - - - " << std::endl;
+    //         // std::cout << "Push " << *max_pt.second << "," << *epi << std::endl;
+    //         // std::cout << "Push " << *spi << "," << *max_pt.second << std::endl;
+    //     }
+    // }
     return ArrayPt(ptlst.begin(), ptlst.end());
 }
 
@@ -338,7 +352,7 @@ public:
         matmap = 255 - vectorToMat<int>(map, CV_8UC1)*255;
         cv::resize(matmap, matmap, matmap.size()*GRID_SIZE, 0, 0, 0);
         cv::transpose(matmap, matmap);
-        cv::cvtColor(matmap, matmap, cv::COLOR_GRAY2BGR);
+        cv::cvtColor(matmap, matmap, cv::COLOR_GRAY2BGRA);
     }
 
     void show(const std::string &name) {
@@ -348,8 +362,8 @@ public:
 
 void genShow()
 {
-    auto map_generator = std::make_unique<CellularAutomataGenerator>(MAP_WIDTH, MAP_HEIGHT);
-    // auto map_generator = std::make_unique<MessyBSPGenerator>(MAP_WIDTH, MAP_HEIGHT);
+    // auto map_generator = std::make_unique<CellularAutomataGenerator>(MAP_WIDTH, MAP_HEIGHT);
+    auto map_generator = std::make_unique<MessyBSPGenerator>(MAP_WIDTH, MAP_HEIGHT);
     map_generator->generate();
     auto map = map_generator->getMap();
     auto map_copy(map);
@@ -378,8 +392,8 @@ void genShow()
         return trim_convexs;
     });
 
-    auto region_iter = boost::make_zip_iterator(boost::make_tuple(regions_edge.begin(), trim_polys.begin()));
-    auto iter_end = boost::make_zip_iterator(boost::make_tuple(regions_edge.end(), trim_polys.end()));
+    auto region_iter = boost::make_zip_iterator(boost::make_tuple(regions_edge.begin(), array_polys.begin()));
+    auto iter_end = boost::make_zip_iterator(boost::make_tuple(regions_edge.end(), array_polys.end()));
 
     MapViewer dmv(map);
 
@@ -387,7 +401,8 @@ void genShow()
     for(;region_iter!=iter_end && ch!='q'; region_iter++)
     {
         dmv.show("dmv");
-        ch = cv::waitKey(100);
+        ch = cv::waitKey(10);
+        if (ch == 'q') exit(0);
 
         const auto &[region_edge, trim_poly] = *region_iter;
 
@@ -412,17 +427,21 @@ void genShow()
             std::transform(convexs.begin(), convexs.end(), std::back_inserter(cv_convex), [](const Pt& pt) { return cv::Point(pt.x, pt.y); });
             return cv_convex;
         });
-        cv::fillPoly(dmv.matmap, polys, cv::Scalar(0,255,0,50));
+        cv::fillPoly(dmv.matmap, polys, cv::Scalar(0,255,0,0.2));
     }
-    if (ch == 'q') exit(0);
     dmv.show("dmv");
-    cv::waitKey(0);
+    ch = cv::waitKey(0);
+    if (ch == 'q') exit(0);
 }
 
 int main(int argc, char** args)
 {
-    while(1)
+    google::InstallFailureSignalHandler();
+    // genShow();
+    for(int i=0;i<100;i++) {
         genShow();
+    }
+    printf("Generate Done!\n");
 }
     // Array2d map = {
     //     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
