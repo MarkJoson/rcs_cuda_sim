@@ -28,30 +28,47 @@ constexpr int MAP_WIDTH = 80;
 constexpr int MAP_HEIGHT = 60;
 constexpr int GRID_SIZE = 1;
 
-constexpr float scaling = 8;
-constexpr float offset = 20;
+constexpr float SCALING = 8;
+constexpr float OFFSET = 20;
 
 constexpr float PI = M_PI;
 
-#define LIDAR_LINES_LOG2    (8)         // 128lines
+#define LIDAR_LINES_LOG2    (10)         // 128lines
 #define LIDAR_LINES         (1<<LIDAR_LINES_LOG2)
 
 #define TILE_SIZE_LOG2      (5)         // 32lines
 #define TILE_SIZE           (1<<TILE_SIZE_LOG2)
-
 #define TILE_NUM            (1 << (LIDAR_LINES_LOG2-TILE_SIZE_LOG2))
 
 #define CTA_SIZE            (128)
-
 #define RASTER_WARPS        (CTA_SIZE/32)
 
 #define LINE_BUF_SIZE       (CTA_SIZE*2)
-
 #define FR_BUF_SIZE         (CTA_SIZE*2)
-
 #define FRAG_BUF_SIZE       (CTA_SIZE*6)
 
 #define EMIT_PER_THREAD     (2)
+#define TOTAL_EMITION       (EMIT_PER_THREAD * CTA_SIZE)
+
+
+#ifdef __DRIVER_TYPES_H__
+static inline const char *_cudaGetErrorEnum(cudaError_t error) {
+  return cudaGetErrorName(error);
+}
+#endif
+
+template <typename T>
+void check(T result, char const *const func, const char *const file,
+           int const line) {
+  if (result) {
+    fprintf(stderr, "CUDA error at %s:%d code=%d(%s) \"%s\" \n", file, line,
+            static_cast<unsigned int>(result), _cudaGetErrorEnum(result), func);
+    throw std::exception();
+    // exit(EXIT_FAILURE);
+  }
+}
+
+#define checkCudaErrors(val) check((val), #val, __FILE__, __LINE__)
 
 
 // thrust::device_vector<bool> lidar_inst_state;
@@ -59,12 +76,12 @@ constexpr float PI = M_PI;
 
 struct RCSParam
 {
-    int             *line_cnt;
-    float2          *line_s;
-    float2          *line_e;
+    // int             *line_cnt;
+    // float2          *line_s;
+    // float2          *line_e;
 
-    float2          *pos;
-    bool            *inst_enabled;
+    // float2          *pos;
+    // bool            *inst_enabled;
     float           max_range;
     float           resolu_inv;
     float           resolu;
@@ -105,130 +122,163 @@ __forceinline__ __host__ __device__ uint32_t genMask(int start, int end)
     // int pop = __builtin_popcount(mask);
 }
 
-__global__ void raster(int numLines, float3 *poses, float2 *line_begins, float2 *line_ends)
+// TODO. Texture 1D
+__global__ void rasterKernel(
+    int                         numLines,
+    const float3 __restrict__*  poses,
+    const float2 __restrict__*  line_begins,
+    const float2 __restrict__*  line_ends,
+             int             *  lidar_response
+)
 {
-    __shared__ uint32_t s_lineBuf[LINE_BUF_SIZE];        // 1K
-    __shared__ uint32_t s_frLineIdxBuf[FR_BUF_SIZE];     // 1K
-    __shared__ int s_frLineSGridBuf[FR_BUF_SIZE];        // 1K
-    __shared__ int s_frLineFragsBuf[FR_BUF_SIZE];        // 1K
-    __shared__ int s_lidarResponse[LIDAR_LINES];         // 1K
+    __shared__ uint32_t s_lineBuf[LINE_BUF_SIZE];           // 1K
+    __shared__ uint32_t s_frLineIdxBuf[FR_BUF_SIZE];        // 1K
+    __shared__ uint32_t s_frLineSGridFragsBuf[FR_BUF_SIZE]; // 1K
+    __shared__ int s_lidarResponse[LIDAR_LINES];            // 1K
 
     using BlockScan = cub::BlockScan<uint32_t, CTA_SIZE>;
     using BlockRunLengthDecodeT = cub::BlockRunLengthDecode<uint32_t, CTA_SIZE, 1, EMIT_PER_THREAD>;
-    union {
+
+    __shared__ union {
         typename BlockScan::TempStorage scan_temp_storage;
         typename BlockRunLengthDecodeT::TempStorage decode_temp_storage;
     } temp_storage;
 
+    // typename BlockScan::TempStorage scan_temp_storage;
+    // typename BlockRunLengthDecodeT::TempStorage decode_temp_storage;
+
     uint32_t tid = threadIdx.x;
+    uint32_t totalLineRead = 0;
     uint32_t lineBufRead=0, lineBufWrite=0;
     uint32_t frLineBufRead=0, frLineBufWrite=0;
-    uint32_t workerIdx = blockIdx.x;
-    float3 pose = poses[workerIdx];
+    float3 pose = poses[blockIdx.x];
 
     /********* 初始化lidar数据 *********/
     for(int i=tid; i<g_params.ray_num; i+=CTA_SIZE)
-        s_lidarResponse[i] = g_params.max_range;
+        s_lidarResponse[i] = g_params.max_range*100;
 
     for(;;)
     {
-        /********* 加载线段到Buffer *********/
-        while(lineBufWrite != numLines)
+        /********* Load Lines to Buffer *********/
+        while(lineBufWrite-lineBufRead < CTA_SIZE && totalLineRead < numLines)
         {
-            int lineIdx = lineBufWrite+tid;
-            if(lineBufWrite-lineBufRead >= CTA_SIZE && lineIdx >= numLines) break;
+            uint32_t visibility = false;
+            int lineIdx = -1;
+            if(tid < numLines)
+            {
+                lineIdx = totalLineRead+tid;
+                float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
+                float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
+                visibility = prepareLine(lb, le, g_params.max_range);
+            }
 
-            float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
-            float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
+            uint32_t scan, scan_reduce;
+            BlockScan(temp_storage.scan_temp_storage).ExclusiveSum(visibility, scan, scan_reduce);
 
-            bool visibility = prepareLine(lb, le, g_params.max_range);
-            uint32_t scan, scan_sum;
-            BlockScan(temp_storage.scan_temp_storage).ExclusiveSum(visibility, scan, scan_sum);
+            // if(tid == 0)
+            //     printf("exclusive scan: %d, %d\n", scan, scan_reduce);
 
             if(visibility)
                 s_lineBuf[lineBufWrite+scan] = lineIdx;
-            lineBufWrite += scan_sum;
+            lineBufWrite += scan_reduce;
+
+            totalLineRead += CTA_SIZE;
+            __syncthreads();
         }
-        __syncthreads();
 
         /********* 计算终止栅格，细光栅化，存入待发射线段缓冲区 *********/
-        if(lineBufRead + tid >= lineBufWrite)
         {
-            int lineIdx = s_lineBuf[(lineBufRead + tid) % LINE_BUF_SIZE];
-            float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
-            float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
-
-            auto s_angle = vec_atan2_0_360(lb);
-            auto e_angle = vec_atan2_0_360(le);
-            int s_grid = s_angle * g_params.resolu_inv;
-            int e_grid = e_angle * g_params.resolu_inv;
-
-            int frag = e_grid-s_grid + (e_grid < s_grid) ? g_params.ray_num : 0;
-
-            bool valid = frag > 0;
-            uint32_t scan, scan_sum;
-            BlockScan(temp_storage.scan_temp_storage).ExclusiveSum(valid, scan, scan_sum);
-            if(valid)
+            int lineIdx = -1;
+            int frag = 0;
+            int s_grid = -1;
+            if(lineBufRead + tid < lineBufWrite)
             {
-                uint32_t idx = frLineBufWrite+scan;
+                lineIdx = s_lineBuf[(lineBufRead + tid) % LINE_BUF_SIZE];
+                float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
+                float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
+
+                auto s_angle = vec_atan2_0_360(lb);
+                auto e_angle = vec_atan2_0_360(le);
+                s_grid = s_angle * g_params.resolu_inv;
+                int e_grid = e_angle * g_params.resolu_inv;
+
+                frag = (e_grid-s_grid) + ((e_grid < s_grid) ? g_params.ray_num : 0);
+                // printf("tid:%d, frag:%d, s_grid:%d, e_grid:%d\n", tid, frag, s_grid, e_grid);
+            }
+
+            uint32_t scan, scan_sum;
+            BlockScan(temp_storage.scan_temp_storage).ExclusiveSum(frag>0, scan, scan_sum);
+            if(frag > 0)
+            {
+                uint32_t idx = (frLineBufWrite+scan) % FR_BUF_SIZE;
                 s_frLineIdxBuf[idx] = lineIdx;
-                s_frLineFragsBuf[idx] = frag;
-                s_frLineSGridBuf[idx] = s_grid;
+                s_frLineSGridFragsBuf[idx] = (s_grid << 16) | (frag & 0xffff);
             }
             frLineBufWrite += scan_sum;
+            __syncthreads();
         }
         lineBufRead = min(lineBufRead+CTA_SIZE, lineBufWrite);
 
-        __syncthreads();
-
-        /********* 计算并发射 *********/
-        // 如果frLine的缓冲区没有到 CTA_SIZE 继续读取线段
-        if(frLineBufWrite-frLineBufRead < CTA_SIZE && lineBufWrite != numLines)
+        // 如果当前还有线段没读取，同时frLine的缓冲区没有到 CTA_SIZE，那么继续读取线段
+        if(frLineBufWrite-frLineBufRead < CTA_SIZE && totalLineRead < numLines)
             continue;
 
-        // 加载CTA_SIZE个到缓冲区，准备进行Decode
-        uint32_t runValue[1] = {0}, runLength[1] = {0};
-        int frLineBufIdx = frLineBufRead + tid;
-        if(frLineBufIdx < frLineBufWrite)
+        /********* Count and Emit *********/
+        do
         {
-            frLineBufIdx = frLineBufIdx % FR_BUF_SIZE;
-            runValue[0] = frLineBufIdx;
-            runLength[0] = s_frLineSGridBuf[frLineBufIdx];
-        }
-        frLineBufRead = min(frLineBufRead+CTA_SIZE, frLineBufWrite);
-
-        // TODO. Deocde 太费劲
-        uint32_t total_decoded_size = 0;
-        BlockRunLengthDecodeT blk_rld(temp_storage.decode_temp_storage, runValue, runLength, total_decoded_size);
-
-        uint32_t decoded_window_offset = 0;
-        while(decoded_window_offset < total_decoded_size)
-        {
-            uint32_t relative_offsets[2];
-            uint32_t decoded_items[2];
-            uint32_t num_valid_items = total_decoded_size - decoded_window_offset;
-            blk_rld.RunLengthDecode(decoded_items, decoded_window_offset);
-            decoded_window_offset += CTA_SIZE * EMIT_PER_THREAD;
-
-            #pragma unroll
-            for(int i=0; i<2; i++)
+            // 加载CTA_SIZE个到缓冲区，准备进行Decode
+            uint32_t runValue[1] = {0}, runLength[1] = {0};
+            int frLineBufIdx = frLineBufRead + tid;
+            if(frLineBufIdx < frLineBufWrite)
             {
-                if(tid*EMIT_PER_THREAD + i>num_valid_items)
-                    break;
-                uint32_t frLineBufIdx = decoded_items[i];
-                uint32_t lineIdx = s_frLineIdxBuf[frLineBufIdx];
-                int frag = s_frLineFragsBuf[frLineBufIdx];
-                int s_grid = s_frLineSGridBuf[frLineBufIdx];
-
-                float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
-                float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
-                int grid = (s_grid + frag + 1) % g_params.ray_num;
-                int response = getR(lb, le, grid*g_params.resolu) * 100;
-                s_lidarResponse[grid] = atomicMin_block(&s_lidarResponse[grid], response);
+                frLineBufIdx = frLineBufIdx % FR_BUF_SIZE;
+                runValue[0] = frLineBufIdx;
+                runLength[0] = s_frLineSGridFragsBuf[frLineBufIdx] & 0xffff;        // 取低16位的frag
             }
-        }
-        __syncthreads();
+            frLineBufRead = min(frLineBufRead+CTA_SIZE, frLineBufWrite);
+            __syncthreads();
+
+            // TODO. Deocde 太费劲，在fr阶段实现Exclusive-Scan
+            uint32_t total_decoded_size = 0;
+            BlockRunLengthDecodeT blk_rld(temp_storage.decode_temp_storage, runValue, runLength, total_decoded_size);
+
+            // 将本次读取的 CTA_SIZE 个frag全部发射
+            uint32_t decoded_window_offset = 0;
+            while(decoded_window_offset < total_decoded_size)
+            {
+                uint32_t relative_offsets[2];
+                uint32_t decoded_items[2];
+                uint32_t num_valid_items = min(total_decoded_size - decoded_window_offset, CTA_SIZE * EMIT_PER_THREAD);
+                blk_rld.RunLengthDecode(decoded_items, relative_offsets, decoded_window_offset);
+                decoded_window_offset += num_valid_items;
+
+                #pragma unroll
+                for(int i=0; i<2; i++)
+                {
+                    if(tid*EMIT_PER_THREAD + i >= num_valid_items)
+                        break;
+
+                    int fragIdx = relative_offsets[i];
+                    uint32_t frLineBufIdx = decoded_items[i];
+                    uint32_t lineIdx = s_frLineIdxBuf[frLineBufIdx];
+                    int s_grid = s_frLineSGridFragsBuf[frLineBufIdx] >> 16;
+
+                    float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
+                    float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
+                    int grid = (s_grid + fragIdx + 1) % g_params.ray_num;
+                    int response = getR(lb, le, grid*g_params.resolu) * 100;
+                    atomicMin_block(&s_lidarResponse[grid], response);
+                }
+            }
+            __syncthreads();
+        } while(frLineBufWrite != frLineBufRead && totalLineRead >= numLines);       // 如果当前已经没有线段了，则需要将剩余的frlineBufWrite处理完
+
+        // 全部线段已经处理完
+        if(totalLineRead >= numLines) break;
     }
+
+    for(int i=tid; i<g_params.ray_num; i+=CTA_SIZE)
+        lidar_response[i] = s_lidarResponse[i];
 }
 
 
@@ -251,9 +301,7 @@ RCSParam g_hparams {
 // }
 
 
-
-
-std::vector<float> cpuTest2(int numLines, float3 pose, const std::vector<float2> &line_begins, const std::vector<float2> &line_ends)
+std::vector<float> rasterCPU(int numLines, float3 pose, const std::vector<float2> &line_begins, const std::vector<float2> &line_ends)
 {
     // glm::vec2 pos = glm::vec2(inst_pos.x, inst_pos.y);
 
@@ -369,8 +417,8 @@ std::vector<float> cpuTest2(int numLines, float3 pose, const std::vector<float2>
         while(frBufWrite-frBufRead > 0)
         {
             // decompress，加载512个frag
-            int oldfragRead = frBufRead;
-            while(frBufRead != frBufWrite && fragWrite - fragRead < 512)
+            // int oldfragRead = frBufRead;
+            while(frBufRead != frBufWrite && fragWrite - fragRead < TOTAL_EMITION)
             {
                 for(int j=0; j<frLineFrag[frBufRead]; j++)
                     fragBuf[fragWrite++ % FRAG_BUF_SIZE] = {frBufRead, j};
@@ -379,10 +427,10 @@ std::vector<float> cpuTest2(int numLines, float3 pose, const std::vector<float2>
             // printf("[EMIT] LOAD LINE {%d-%d}, TOTAL_FRAG: %d \n", oldfragRead, frBufRead, fragWrite-fragRead);
 
             // 填充
-            for(int i=0; i<CTA_SIZE*4; i+=4)
+            for(int i=0; i<TOTAL_EMITION; i+=4)
             {
                 if(fragRead + i >= fragWrite) break;
-                for(int j=0; j<4; j++)
+                for(int j=0; j<EMIT_PER_THREAD; j++)
                 {
                     int fragBufIdx = fragRead + i + j;
                     if(fragBufIdx >= fragWrite)
@@ -396,7 +444,7 @@ std::vector<float> cpuTest2(int numLines, float3 pose, const std::vector<float2>
                 }
             }
 
-            fragRead = min(fragRead+CTA_SIZE*4, fragWrite);
+            fragRead = min(fragRead+TOTAL_EMITION, fragWrite);
         }
 
         lineBufRead = min(lineBufRead+CTA_SIZE, lineBufWrite);
@@ -440,11 +488,27 @@ std::vector<float> cpuTest2(int numLines, float3 pose, const std::vector<float2>
     return response;
 }
 
+std::vector<float> rasterGPU(int numLines, float3 pose, const std::vector<float2> &line_begins, const std::vector<float2> &line_ends)
+{
+    // float3 poses[1] {pose};
+    thrust::device_vector<float3> poses(1);
+    poses[0] = pose;
+
+    thrust::device_vector<int> lidar_response(LIDAR_LINES);
+    thrust::device_vector<float2> lbs = line_begins;
+    thrust::device_vector<float2> les = line_ends;
+
+    rasterKernel<<<1, CTA_SIZE>>>(numLines, poses.data().get(), lbs.data().get(), les.data().get(), lidar_response.data().get());
+    checkCudaErrors(cudaDeviceSynchronize());
+
+    return std::vector<float>(lidar_response.begin(), lidar_response.end());
+}
+
 template<typename T>
 sf::Vector2<T> convertPoint(sf::RenderWindow &window, sf::Vector2<T> v)
 {
     auto size = window.getView().getSize();
-    return sf::Vector2<T>(v.x * scaling + offset, size.y - (v.y*scaling + offset));
+    return sf::Vector2<T>(v.x * SCALING + OFFSET, size.y - (v.y*SCALING + OFFSET));
 }
 
 template<typename T>
@@ -454,14 +518,15 @@ sf::Vector2<T> invConvertPoint(sf::RenderWindow &window, sf::Vector2<T> v)
 
     printf("View.x:%d, View.y:%d\n", size.x, size.y);
 
-    return sf::Vector2<T>((v.x-offset)/(size.x/800.f) / scaling, ((size.y-v.y)-offset)/(size.y/600.f) /scaling);
+    return sf::Vector2<T>((v.x-OFFSET)/(size.x/800.f) / SCALING, ((size.y-v.y)-OFFSET)/(size.y/600.f) /SCALING);
 }
 
 
 void draw(const std::vector<float2>& lbegins, const std::vector<float2>& lends) {
     sf::RenderWindow window(sf::VideoMode(800, 600), "SFML Draw Lines");
+    window.setVerticalSyncEnabled(true); // call it once, after creating the window
 
-    float2 startPoint(2, 2); // 起点，初始为 {2, 2}
+    float2 startPoint = make_float2(2, 2); // 起点，初始为 {2, 2}
     std::vector<std::pair<float2, float2>> ray_shape;
 
     // 主循环
@@ -485,14 +550,15 @@ void draw(const std::vector<float2>& lbegins, const std::vector<float2>& lends) 
                 std::cout << "Mouse clicked at: (" << startPoint.x << ", " << startPoint.y << ")\n";
 
                 ray_shape.clear();
-                std::vector<float> rays = cpuTest2(
+                std::vector<float> rays = rasterGPU(
                     lbegins.size(),
                     make_float3(startPoint.x, startPoint.y, 0),
                     lbegins,
                     lends);
-                for (int i = 0; i < rays.size(); i++) {
+                for (size_t i = 0; i < rays.size(); i++) {
                     float angle = i * g_hparams.resolu;
-                    float2 endPoint = make_float2(rays[i] * cosf(angle) + startPoint.x, rays[i] * sinf(angle) + startPoint.y);
+                    float r = rays[i] / 100.f;
+                    float2 endPoint = make_float2(r * cosf(angle) + startPoint.x, r * sinf(angle) + startPoint.y);
                     ray_shape.push_back({ startPoint, endPoint});
                 }
 
@@ -503,7 +569,7 @@ void draw(const std::vector<float2>& lbegins, const std::vector<float2>& lends) 
         window.clear(sf::Color::Black);
 
         // 绘制所有直线
-        for (int i=0; i<lbegins.size(); i++) {
+        for (size_t i=0; i<lbegins.size(); i++) {
             // 创建一个 sf::VertexArray 用于绘制线段
             sf::VertexArray lineShape(sf::Lines, 2);
 
@@ -525,7 +591,7 @@ void draw(const std::vector<float2>& lbegins, const std::vector<float2>& lends) 
 
             // 设置第一个点
             lineShape[0].position = convertPoint(window, sf::Vector2f(line.first.x, line.first.y));
-            lineShape[0].color = sf::Color::Red;
+            lineShape[0].color = sf::Color::Blue;
 
             // 设置第二个点
             lineShape[1].position = convertPoint(window, sf::Vector2f(line.second.x, line.second.y));
@@ -546,6 +612,8 @@ int main()
 {
     google::InstallFailureSignalHandler();
 
+    checkCudaErrors(cudaMemcpyToSymbol(g_params, &g_hparams, sizeof(g_hparams)));
+
     auto map_generator = std::make_unique<map_gen::CellularAutomataGenerator>(MAP_WIDTH, MAP_HEIGHT);
     // auto map_generator = std::make_unique<MessyBSPGenerator>(MAP_WIDTH, MAP_HEIGHT);
     map_generator->generate();
@@ -554,11 +622,11 @@ int main()
 
     std::vector<float2> lbegins, lends;
     std::for_each(shapes.begin(), shapes.end(), [&lbegins, &lends](const auto& polygons){
-        for(int pgi=0; pgi<polygons.size(); pgi++) {
+        for(size_t pgi=0; pgi<polygons.size(); pgi++) {
             auto pg = polygons[pgi];
             pg.push_back(pg.front());
             if(polygons.size() != 2) continue;
-            for(int i=0; i<pg.size()-1; i++) {
+            for(size_t i=0; i<pg.size()-1; i++) {
                 auto lb = make_float2(pg[i].x, pg[i].y);
                 auto le = make_float2(pg[i+1].x, pg[i+1].y);
                 if(polygons.size() == 2) std::swap(lb, le);
@@ -569,12 +637,20 @@ int main()
 
     });
 
-    // lines =
+    // lbegins =
     //     {
-    //         {{1,1},{1,11}},
-    //         {{1,11},{11,11}},
-    //         {{11,11},{11,1}},
-    //         {{11,1},{1,1}},
+    //         {1,1}  ,
+    //         {1,11} ,
+    //         {11,11},
+    //         {11,1} ,
+    //     };
+
+    // lends =
+    //     {
+    //         {1,11},
+    //         {11,11},
+    //         {11,1},
+    //         {1,1},
     //     };
 
     draw(lbegins, lends);

@@ -57,7 +57,7 @@ add_compile_definitions(
 # Change namespace cub:: into nvblox::cub. This is to avoid conflicts when other modules calls non
 # thread safe functions in the cub namespace. Appending nvblox:: ensures an unique symbol that is
 # only accesed by this library.
-add_compile_definitions(CUB_WRAPPED_NAMESPACE=rcsim)
+# add_compile_definitions(CUB_WRAPPED_NAMESPACE=rcsim)
 
 # ##############################################################################
 # Setup c++ compiler flags

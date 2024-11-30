@@ -19,7 +19,7 @@ target_link_libraries(map_generator PUBLIC
 add_executable(rasterizer ${MAPGEN_SRC} rasterizer.cu)
 set_target_properties(rasterizer PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_options(rasterizer PUBLIC ${rcsim_link_options})
-target_include_directories(rasterizer PUBLIC ${OpenCV_INCLUDE_DIRS} )
+target_include_directories(rasterizer PUBLIC ${OpenCV_INCLUDE_DIRS} ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 target_link_libraries(rasterizer PUBLIC
     sfml-graphics
     sfml-window
