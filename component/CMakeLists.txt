@@ -4,34 +4,29 @@ find_package(glog REQUIRED)
 
 file ( GLOB_RECURSE MAPGEN_SRC "mapgen/*.cpp"  )
 
-add_executable(map_generator
-    ${MAPGEN_SRC}
-    mapgen_test.cpp
-)
-
-# 设置目标属性
-set_target_properties(map_generator PROPERTIES
-    # COMPILE_FLAGS "-O3"
-    POSITION_INDEPENDENT_CODE ON
-)
-
-target_include_directories(map_generator
-    PUBLIC
-        ${OpenCV_INCLUDE_DIRS}
-        # $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  # 构建时使用源代码中的 include 目录
-        # $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/roboSim/core>  # 安装后使用安装的 include 目录
-    # PRIVATE
-        # ${TORCH_INCLUDE_DIRS}
-)
-
-# 链接依赖
-target_link_libraries(map_generator
-    PUBLIC
+add_executable(map_generator ${MAPGEN_SRC} mapgen_postproc_test.cpp )
+set_target_properties(map_generator PROPERTIES POSITION_INDEPENDENT_CODE ON )
+target_include_directories(map_generator PUBLIC ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(map_generator PUBLIC
     sfml-graphics
     sfml-window
     sfml-system
     ${OpenCV_LIBS}
     glog::glog
+)
+
+
+add_executable(rasterizer ${MAPGEN_SRC} rasterizer.cu)
+set_target_properties(rasterizer PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_options(rasterizer PUBLIC ${rcsim_link_options})
+target_include_directories(rasterizer PUBLIC ${OpenCV_INCLUDE_DIRS} )
+target_link_libraries(rasterizer PUBLIC
+    sfml-graphics
+    sfml-window
+    sfml-system
+    ${OpenCV_LIBS}
+    glog::glog
+
 )
 
 

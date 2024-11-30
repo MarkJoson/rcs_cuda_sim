@@ -9,7 +9,7 @@ else()
 endif()
 
 # 启用CUDA编译
-project(cuda_sim VERSION 0.0.1 LANGUAGES CXX CUDA)
+project(rcsim VERSION 0.0.1 LANGUAGES CXX CUDA)
 
 ########################
 #        编译选项       #
@@ -35,6 +35,10 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES 0)
+set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_LIBRARIES 0)
+set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_OBJECTS 0)
+
 ################
 #    依赖库     #
 ################
@@ -43,11 +47,15 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 find_package(CUDAToolkit REQUIRED)
 
+include_directories(SYSTEM ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+# Setup options for nvcc and gcc
+# include(cmake/setup_compilers.cmake)
+
+# torch
 include(thirdparty/torch/torch.cmake)
 find_package(Torch REQUIRED)
 
-# Setup options for nvcc and gcc
-include(cmake/setup_compilers.cmake)
+# google test
 include(thirdparty/googletest/googletest.cmake)
 include(GoogleTest)
 

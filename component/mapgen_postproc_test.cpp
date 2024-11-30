@@ -92,7 +92,7 @@ void processAndShow(const Array2d &map)
         });
         cv::fillPoly(dmv.matmap, shapes, cv::Scalar(0, 255, 0, 0.2));
     }
-    dmv.show(0);
+    dmv.show("dmv", 0);
 }
 
 int main(int argc, char **args)

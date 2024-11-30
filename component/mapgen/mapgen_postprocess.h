@@ -8,61 +8,77 @@
 namespace map_gen
 {
 
-typedef struct Point
+template <typename T>
+struct Point
 {
-    int x;
-    int y;
-    bool operator==(const Point &other) const
+    T x;
+    T y;
+    bool operator==(const Point<T> &other) const
     {
         return x == other.x && y == other.y;
     }
-} Pt;
+};
 
-static std::ostream &operator<<(std::ostream &out, const Point &d)
+using Pointd = Point<int>;
+using Pointf = Point<float>;
+
+template<typename T>
+static std::ostream &operator<<(std::ostream &out, const Point<T> &d)
 {
     out << " [" << d.x << "," << d.y << "] ";
     return out;
 }
 
+template<typename T>
 struct Edge
 {
-    Point start;
-    Point end;
-    bool operator==(const Edge &other) const
+    Point<T> start;
+    Point<T> end;
+    bool operator==(const Edge<T> &other) const
     {
         return start == other.start && end == other.end;
     }
 };
 
 using Array2d = std::vector<std::vector<int>>;
-using ArrayEdge = std::vector<Edge>;
+
+template<typename T>
+using ArrayEdge = std::vector<Edge<T>>;
 
 using PtHash = uint64_t;
-using ArrayPt = std::vector<Pt>;
-using Poly = ArrayPt;
+template<typename T>
+using ArrayPt = std::vector<Point<T>>;
 
-using ArrayPoly = std::vector<ArrayPt>;
-using Shape = ArrayPoly;
+template<typename T>
+using Poly = ArrayPt<T>;
 
-using ArrayShape = std::vector<Shape>;
+template<typename T>
+using ArrayPoly = std::vector<ArrayPt<T>>;
 
-ArrayShape processGridmap(const Array2d &map, float grid_size);
-std::vector<std::vector<std::pair<int, int>>> cvtToPairPt(const ArrayShape& in);
+template<typename T>
+using Shape = ArrayPoly<T>;
+
+template<typename T>
+using ArrayShape = std::vector<Shape<T>>;
+
+ArrayShape<float> processGridmap(const Array2d &map, float grid_size);
 
 } // namespace map_gen
 
 template <>
-struct std::hash<map_gen::Point>
+struct std::hash<map_gen::Point<float>>
 {
 public:
-    size_t operator()(const map_gen::Point &pt) const { return ((uint64_t)pt.x << 32 | (uint64_t)pt.y); }
+    size_t operator()(const map_gen::Point<float> &pt) const { return ((uint64_t)pt.x << 32 | (uint64_t)pt.y); }
 };
 
-template <>
-class std::hash<map_gen::Edge>
+template <typename T>
+class std::hash<map_gen::Edge<T>>
 {
 public:
-    size_t operator()(const map_gen::Edge &e) const { return std::hash<map_gen::Point>()(e.start) ^ std::hash<map_gen::Point>()(e.start) << 1; }
+    size_t operator()(const map_gen::Edge<T> &e) const {
+        return std::hash<map_gen::Point<T>>()(e.start) ^ std::hash<map_gen::Point<T>>()(e.start) << 1;
+    }
 };
 
 

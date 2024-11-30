@@ -41,7 +41,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 # objects. This is important because it means the search paths are passed down
 # the shared object tree.
 # https://stackoverflow.com/questions/58997230/cmake-project-fails-to-find-shared-library
-set(cuda_sim_link_options "-Wl,--disable-new-dtags")
+set(rcsim_link_options "-Wl,--disable-new-dtags")
 
 # Cmake -fPIC flag.
 # NOTE(alexmillane): I needed to add this when I changed to linking against a
@@ -57,7 +57,7 @@ add_compile_definitions(
 # Change namespace cub:: into nvblox::cub. This is to avoid conflicts when other modules calls non
 # thread safe functions in the cub namespace. Appending nvblox:: ensures an unique symbol that is
 # only accesed by this library.
-add_compile_definitions(CUB_WRAPPED_NAMESPACE=cuda_sim)
+add_compile_definitions(CUB_WRAPPED_NAMESPACE=rcsim)
 
 # ##############################################################################
 # Setup c++ compiler flags
@@ -74,7 +74,7 @@ set(CXX_FLAGS_COMMON
 
 if (USE_SANITIZER)
   set(CXX_FLAGS_COMMON "${CXX_FLAGS_COMMON}" "-fsanitize=address")
-  set(cuda_sim_link_options "${cuda_sim_link_options}" "-fsanitize=address")
+  set(rcsim_link_options "${rcsim_link_options}" "-fsanitize=address")
 endif(USE_SANITIZER)
 
 set(CXX_FLAGS_DEBUG "${CXX_FLAGS_COMMON}" "-O0")
