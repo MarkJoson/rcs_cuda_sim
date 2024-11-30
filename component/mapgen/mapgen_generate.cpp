@@ -13,7 +13,7 @@ namespace map_gen
 
 // 随机数生成器
 std::random_device rd;
-std::mt19937 gen(rd());
+std::mt19937 gen(5);
 
 bool Leaf::split()
 {
