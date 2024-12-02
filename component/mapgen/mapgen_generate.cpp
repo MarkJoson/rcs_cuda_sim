@@ -5,15 +5,33 @@
 #include <queue>
 #include <map>
 #include <algorithm>
-// #include <iostream>
+#include <iostream>
 
 
 namespace map_gen
 {
 
 // 随机数生成器
-std::random_device rd;
-std::mt19937 gen(5);
+// std::random_device rd;
+
+class MyRDPrinter{
+public:
+    using RandomDeviceResultType = decltype(std::declval<std::random_device>()());
+    MyRDPrinter() {
+        priv_ = rd();
+        std::cout<< "************" << priv_ << "*************" << std::endl;
+    }
+    RandomDeviceResultType operator()() {
+        return priv_;
+    };
+private:
+
+    RandomDeviceResultType priv_;
+
+    std::random_device rd;
+} rd;
+
+std::mt19937 gen(2754291688);
 
 bool Leaf::split()
 {
