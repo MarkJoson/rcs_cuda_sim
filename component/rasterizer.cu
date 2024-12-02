@@ -33,7 +33,7 @@ constexpr float OFFSET = 20;
 
 constexpr float PI = M_PI;
 
-#define LIDAR_LINES_LOG2    (10)         // 128lines
+#define LIDAR_LINES_LOG2    (2)         // 128lines
 #define LIDAR_LINES         (1<<LIDAR_LINES_LOG2)
 
 #define TILE_SIZE_LOG2      (5)         // 32lines
@@ -157,11 +157,15 @@ __global__ void rasterKernel(
     for(int i=tid; i<g_params.ray_num; i+=CTA_SIZE)
         s_lidarResponse[i] = g_params.max_range*100;
 
+    if(tid == 0) printf("---------##### Task RECEIVED\n");
+
     for(;;)
     {
         /********* Load Lines to Buffer *********/
+
         while(lineBufWrite-lineBufRead < CTA_SIZE && totalLineRead < numLines)
         {
+            if(tid == 0) printf("[READ] LINE RANGE: %d~%d.\n", totalLineRead, totalLineRead+CTA_SIZE);
             uint32_t visibility = false;
             int lineIdx = -1;
             if(tid < numLines)
@@ -178,15 +182,23 @@ __global__ void rasterKernel(
             // if(tid == 0)
             //     printf("exclusive scan: %d, %d\n", scan, scan_reduce);
 
-            if(visibility)
+            if(visibility) {
+                if(lineIdx == 463) printf("**HOLA!! LINE ID 463 @ %d!**\n", lineBufWrite+scan);
                 s_lineBuf[lineBufWrite+scan] = lineIdx;
+            }
+
             lineBufWrite += scan_reduce;
 
             totalLineRead += CTA_SIZE;
             __syncthreads();
         }
 
+        // 第二部分继续的条件：已经读取了128个，或没有读取128个，但没有新的线段
+
+        if(tid == 0) printf("[READ] FINISHED! TOTAL READ: %d, LINE BUF:%d\n", totalLineRead, lineBufWrite);
+
         /********* 计算终止栅格，细光栅化，存入待发射线段缓冲区 *********/
+        // do
         {
             int lineIdx = -1;
             int frag = 0;
@@ -204,8 +216,12 @@ __global__ void rasterKernel(
 
                 frag = (e_grid-s_grid) + ((e_grid < s_grid) ? g_params.ray_num : 0);
                 // printf("tid:%d, frag:%d, s_grid:%d, e_grid:%d\n", tid, frag, s_grid, e_grid);
+                if(lineIdx == 463) printf("**CATCH LINE ID 463!**\n");
+                if(frag > 0)
+                printf("[RASTER] THREAD:%d, LINE_ID:%d, SGRID:%d, EGRID:%d, FRAG:%d\n", tid, lineIdx, s_grid, e_grid, frag);
             }
 
+            // 压缩到FR_BUF队列中
             uint32_t scan, scan_sum;
             BlockScan(temp_storage.scan_temp_storage).ExclusiveSum(frag>0, scan, scan_sum);
             if(frag > 0)
@@ -213,19 +229,31 @@ __global__ void rasterKernel(
                 uint32_t idx = (frLineBufWrite+scan) % FR_BUF_SIZE;
                 s_frLineIdxBuf[idx] = lineIdx;
                 s_frLineSGridFragsBuf[idx] = (s_grid << 16) | (frag & 0xffff);
+
             }
             frLineBufWrite += scan_sum;
             __syncthreads();
-        }
-        lineBufRead = min(lineBufRead+CTA_SIZE, lineBufWrite);
 
-        // 如果当前还有线段没读取，同时frLine的缓冲区没有到 CTA_SIZE，那么继续读取线段
-        if(frLineBufWrite-frLineBufRead < CTA_SIZE && totalLineRead < numLines)
+            //
+            lineBufRead = min(lineBufRead+CTA_SIZE, lineBufWrite);
+        }
+        // while(frLineBufWrite-frLineBufRead < CTA_SIZE && lineBufRead < lineBufWrite);      // 读取数量超过CTA_SIZE，或者已经处理完lineBuf，二者都是必须退出
+
+        // 此时要么 读取了128个，要么 lineBuf处理完了
+        if(tid == 0) printf("[RASTER] FRBuf:[R:%d,W:%d] VALID: %d\n", frLineBufRead, frLineBufWrite, frLineBufWrite - frLineBufRead);
+
+        // 第三部分继续的条件：读取到128个，或未读取到128个，但是已经无法再读取新的线段；
+        if(frLineBufWrite-frLineBufRead < CTA_SIZE && (lineBufRead < lineBufWrite || totalLineRead < numLines)) {
+            if(tid == 0) printf("[RASTER] CONTINUE LOOP!\n");
             continue;
+        }
+
+        if(tid == 0) printf("[RASTER] FINISHED!\n");
 
         /********* Count and Emit *********/
         do
         {
+            if(tid == 0) printf("[EMIT] LOAD LINE [%d-%d]\n", frLineBufRead, frLineBufWrite);
             // 加载CTA_SIZE个到缓冲区，准备进行Decode
             uint32_t runValue[1] = {0}, runLength[1] = {0};
             int frLineBufIdx = frLineBufRead + tid;
@@ -238,11 +266,10 @@ __global__ void rasterKernel(
             frLineBufRead = min(frLineBufRead+CTA_SIZE, frLineBufWrite);
             __syncthreads();
 
-            // TODO. Deocde 太费劲，在fr阶段实现Exclusive-Scan
             uint32_t total_decoded_size = 0;
             BlockRunLengthDecodeT blk_rld(temp_storage.decode_temp_storage, runValue, runLength, total_decoded_size);
 
-            // 将本次读取的 CTA_SIZE 个frag全部发射
+            // 将本次读取的 CTA_SIZE*EMIT_PER_LINE 个frag全部发射
             uint32_t decoded_window_offset = 0;
             while(decoded_window_offset < total_decoded_size)
             {
@@ -271,7 +298,8 @@ __global__ void rasterKernel(
                 }
             }
             __syncthreads();
-        } while(frLineBufWrite != frLineBufRead && totalLineRead >= numLines);       // 如果当前已经没有线段了，则需要将剩余的frlineBufWrite处理完
+        } while(frLineBufWrite != frLineBufRead && totalLineRead >= numLines);       // 继续的条件：已经没有办法读取更多的frag线段，则需要将剩余的frlineBufWrite处理完
+        if(tid == 0) printf("[EMIT] FINISHED!\n");
 
         // 全部线段已经处理完
         if(totalLineRead >= numLines) break;
@@ -326,7 +354,7 @@ std::vector<float> rasterCPU(int numLines, float3 pose, const std::vector<float2
 
     for(int i=0; i<CTA_SIZE; i++)
         for(int j=i; j<g_hparams.ray_num; j+=CTA_SIZE)
-            response[j] = g_hparams.max_range;
+            response[j] = g_hparams.max_range*100;
 
     // printf("---------##### Task RECEIVED\n");
     // 每次处理CTASize个线条
@@ -355,30 +383,6 @@ std::vector<float> rasterCPU(int numLines, float3 pose, const std::vector<float2
             // printf("[READ] Insufficient LINE: %d, Remain: %d, GO ON READING!\n", lineBufWrite-lineBufRead, numLines-batchIdx);
             continue;
         }
-
-        // 计算TILE线段覆盖，每个线程负责一条线段
-        // uint32_t bitMat[ctaSize];                       // LINE-TILE位矩阵
-        // uint32_t tileTriggerMask=0;                     // 连续或标志位，记录哪些tile出现过
-        // uint32_t tileRepMask=0;                         // 与标志位，检查哪些tile的直线数量>1
-
-        // std::vector<int> tileLineCnt(ctaSize);
-        // std::vector<int> numLineFrags(ctaSize);
-        // int totalFragments = 0;
-        //     // blockWide-Sum, block Scan 取最后一个
-        //     totalFragments += numLineFrags[i];
-
-        //     int s_tile = s_grid / TILE_SIZE;
-        //     int e_tile = e_grid / TILE_SIZE;
-
-        //     // TODO. 处理e_tile < s_tile的情况
-        //     uint32_t mask = genMask(s_tile, e_tile);
-        //     bitMat[i] = mask;
-        //     tileLineCnt[i] = __builtin_popcount(mask);
-
-        //     // block-wide操作
-        //     tileTriggerMask |= mask;
-        //     tileRepMask |= mask & tileTriggerMask;
-        // }
 
         // ---------------- 方案一：不分tile，针对每一条线段的占用格数计算前缀和发射数
 
@@ -440,7 +444,7 @@ std::vector<float> rasterCPU(int numLines, float3 pose, const std::vector<float2
                     float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
                     float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
                     int grid = (s_grid + frag + 1) % g_hparams.ray_num;
-                    response[grid] = min(response[grid], getR(lb, le, grid*g_hparams.resolu));
+                    response[grid] = min(response[grid], getR(lb, le, grid*g_hparams.resolu)*100);
                 }
             }
 
@@ -449,40 +453,7 @@ std::vector<float> rasterCPU(int numLines, float3 pose, const std::vector<float2
 
         lineBufRead = min(lineBufRead+CTA_SIZE, lineBufWrite);
 
-
-    // scan一遍line，累计512个写入任务，而后CTA中每个线程分配4个写入任务
-
-    // 问题在于TILE可能一般情况下比较少，32~128线：约1~4 Tiles
-    // 每个Warp分配的工作可能无法达到很高
-
-    //
     // TODO. 深度预裁剪
-
-
-    //-------------- 每Warp负责一个Tile --------------
-    // for(int warpId=0; warpId<warpCnt; warpId++) {
-    //     for(int i=0; i<32; i++) {
-    //         // warpId / TILE_NUM
-    //         // tiles[];
-    //     }
-    // }
-
-    // 得到每TILE的工作负载：按TILE划分的队列
-
-    // inclusive scan 得到每个线段的写入Index范围
-
-    // 计算当前warp的累计frag数量，如果大于32，进入发射阶段
-
-    // 取一部分线段的写入范围frag，该值是在之前scan过程中保存的
-
-    // for 每个线程取一个线段的fragidx，小于32的线段进行标记
-
-    // 发射阶段，计算当前线程应该写入哪条线段的哪个射线交点
-    // 发射标志位[0 0 0 0 0 1 0 0 0 1 0 0 0 1]
-    // 线段Id = popc(mask & lane mask)
-    // fragId = (inWarpIdx - fragRead) - 上一个三角形的frag数量
-    // frag = fragId + 线段start的索引
-
     }
 
     return response;
@@ -540,11 +511,12 @@ void draw(const std::vector<float2>& lbegins, const std::vector<float2>& lends) 
             // 鼠标点击事件
             if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
                 // 获取鼠标点击位置
-                sf::Vector2i mousePos = invConvertPoint(window, sf::Mouse::getPosition(window));
+                sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+                sf::Vector2f mouseWorldPos = invConvertPoint<float>(window, {mousePos.x, mousePos.y});
 
                 // 转换为逻辑坐标
-                startPoint.x = mousePos.x;
-                startPoint.y = mousePos.y;
+                startPoint.x = mouseWorldPos.x;
+                startPoint.y = mouseWorldPos.y;
 
                 // 打印鼠标点击位置（调试用）
                 std::cout << "Mouse clicked at: (" << startPoint.x << ", " << startPoint.y << ")\n";
@@ -629,7 +601,8 @@ int main()
             for(size_t i=0; i<pg.size()-1; i++) {
                 auto lb = make_float2(pg[i].x, pg[i].y);
                 auto le = make_float2(pg[i+1].x, pg[i+1].y);
-                if(polygons.size() == 2) std::swap(lb, le);
+                // if(polygons.size() == 2)
+                std::swap(lb, le);
                 lbegins.push_back(lb);
                 lends.push_back(le);
             }

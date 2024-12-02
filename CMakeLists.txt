@@ -15,7 +15,7 @@ project(rcsim VERSION 0.0.1 LANGUAGES CXX CUDA)
 #        编译选项       #
 ########################
 # Build options
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 
 set(CMAKE_SHARED_LIBRARY_PREFIX "")
 set(CMAKE_STATIC_LIBRARY_PREFIX "")
