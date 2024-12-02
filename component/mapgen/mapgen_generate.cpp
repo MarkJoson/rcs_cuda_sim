@@ -31,7 +31,7 @@ private:
     std::random_device rd;
 } rd;
 
-std::mt19937 gen(2754291688);
+std::mt19937 gen(rd());
 
 bool Leaf::split()
 {
