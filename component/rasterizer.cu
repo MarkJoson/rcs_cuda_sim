@@ -104,8 +104,9 @@ __host__ __device__ bool prepareLine(float2 vs, float2 ve, float max_range)
     float cdot = vs.x*ve.y - vs.y*ve.x;
     float dx = ve.x-vs.x;
     float dy = ve.y-vs.y;
-    float len = sqrtf(dx*dx+dy*dy);
-    float dist = fabs(cdot)/len;
+    // float len = sqrtf(dx*dx+dy*dy);
+    float invsqrt = rsqrtf(dx*dx+dy*dy);
+    float dist = fabs(cdot)*invsqrt;
 
     return dist < max_range && cdot>=0;
 }
