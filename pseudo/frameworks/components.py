@@ -1,21 +1,24 @@
 from common_types import *
 from message_bus_base import MessageBusBase
 from mesage_handler import Publisher, Subscriber
-from environ_group import IEnvironContext
+from environ_group import EGManagedObject, ContextBase
+from pseudo.frameworks.common_types import Tensor
 
 @dataclass
-class ComponentCtx(ABC):
-    eg_ctx_if: IEnvironContext
+class ComponentContext(ContextBase):
+    pass
+    # eg_ctx_if: IEnvironContext
 
-    @staticmethod
-    def build(eg_ctx: IEnvironContext):
-        return ComponentCtx(eg_ctx_if=eg_ctx)
+    # @staticmethod
+    # def build(eg_ctx: IEnvironContext):
+    #     return ComponentCtx(eg_ctx_if=eg_ctx)
 
 
 @dataclass
-class Component(ABC):
-    id        : ComponentID
-    graph_id  : GraphID
+class Component(EGManagedObject):
+    id          : ComponentID
+    graph_id    : GraphID
+    context_id  : ContextID
     mb_accessor : MessageBusBase
     pubs        : List[Publisher]   = list()
     subs        : List[Subscriber]  = list()
@@ -27,17 +30,12 @@ class Component(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def onInit(self, env_group_cfg:IEnvironContext) -> ComponentCtx:
-        ''' 当初始化环境组时调用，在该方法中定义组件的状态：返回组件状态上下文 '''
-        raise NotImplementedError
-
-    @abstractmethod
-    def onExecuate(self, context:ComponentCtx, input: Mapping[MessageID, Tensor]):
+    def onExecuate(self, context:Optional[ContextBase], input: Mapping[MessageID, Tensor]):
         ''' 执行期调用 '''
         raise NotImplementedError
 
     @abstractmethod
-    def onReset(self, context:ComponentCtx, reset_flag:Tensor):
+    def onReset(self, context:ComponentContext, reset_flag:Tensor):
         ''' 定义某个环境在reset时组件的动作 '''
         raise NotImplementedError
 
@@ -61,23 +59,28 @@ class Component(ABC):
 
         self.onEnabledChanged(enabled=enabled)
 
-    def createSubscriber(self, message_id:MessageID, shape:MessageDataShape, reduce_method:ReduceMethod, history_offset:int=0):
+    def createSubscriber(self,
+                         message_id:MessageID,
+                         shape:MessageDataShape,
+                         history_offset:int=0,
+                         history_padding_val: Optional[Tensor] = None,
+                         reduce_method:ReduceMethod = ReduceMethod.STACK):
         sub = self.mb_accessor.createSubscriber(
             component_id=self.id,
             message_id=message_id,
             shape=shape,
-            reduce_method=reduce_method,
             history_offset=history_offset,
+            history_padding_val=history_padding_val,
+            reduce_method=reduce_method,
         )
         self.subs.append(sub)
         return sub
 
-    def createPublisher(self, message_id:MessageID, shape:MessageDataShape, history_padding_val:Tensor):
+    def createPublisher(self, message_id:MessageID, shape:MessageDataShape):
         pub = self.mb_accessor.createPublisher(
             component_id=self.id,
             message_id=message_id,
             shape=shape,
-            history_padding_val=history_padding_val
         )
         self.pubs.append(pub)
         return pub

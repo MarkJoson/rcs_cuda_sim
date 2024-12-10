@@ -1,3 +1,4 @@
+import torch as th
 import networkx as nx
 from collections import deque, defaultdict
 from common_types import *
@@ -5,20 +6,39 @@ from components import Component
 from message_bus_base import MessageBusBase
 from mesage_handler import IPublish, Publisher, Subscriber
 from reducer_com import ReducerCom
+from environ_group import EGManagedObject, ContextBase, EnvironGroupConfig
 
 @dataclass
-class MessageQueue(deque[Tensor]):
+class MessageQueue:
     history: Deque[Tensor]
-    max_elem: int = 0
-    valid_count: int = 0
+    max_history_len: int = 0                # Maximum history length needed by subscribers
+    valid_count: int = 0                    # Count of valid messages in the queue
+    latest_update_time: int = 0             # Track when the queue was last updated
+
+    def __init__(self, max_history_len: int):
+        self.history = deque(maxlen=max_history_len)
+        self.max_history_len = max_history_len
+        self.valid_count = 0
+        self.latest_update_time = 0
+
+    def append(self, data:Tensor):
+        self.history.append(data)
+        self.valid_count += min(self.max_history_len, self.valid_count + 1)
+        self.latest_update_time += 1
+        return self.valid_count
+
+    def reset(self):
+        self.history.clear()
+        self.valid_count = 0
+        self.latest_update_time = 0
 
 
 @dataclass
-class MessageBusContext:
-    msg_queues : Mapping[MessageID, MessageQueue]
+class MessageBusContext(ContextBase):
+    msg_queues: Dict[Tuple[ComponentID, MessageID], MessageQueue]  # Map (publisher_id, message_id) to queue
 
 
-class MessageBus(MessageBusBase, IPublish):
+class MessageBus(EGManagedObject, MessageBusBase, IPublish):
     components          : Dict[ComponentID, 'Component'] = dict()
     component_graph_ids : Dict[ComponentID, GraphID] = dict()
     message_routes      : Dict[MessageID, Tuple[List[Publisher],List[Subscriber]]] = defaultdict(lambda :(list(), list()))
@@ -41,52 +61,86 @@ class MessageBus(MessageBusBase, IPublish):
 
     def createPublisher(
         self,
-        component_id: ComponentID,
-        tensor_id: MessageID,
-        shape: MessageDataShape,
-        max_history_len: int,
-        history_padding_val: Tensor
-    ) -> Publisher:
+        component_id: ComponentID,                  # 发布者所属节点ID
+        message_id: MessageID,                      # 发布Tensor的消息Id
+        shape: MessageDataShape,                    # 发布Tensor的形状
+    ) -> "Publisher":
         new_publisher = Publisher(
             component_id=component_id,
-            message_id=tensor_id,
+            message_id=message_id,
             shape=shape,
-            history_padding_val=history_padding_val,
             publish_if=self
         )
 
-        self.message_routes[tensor_id][0].append(new_publisher)
+        self.message_routes[message_id][0].append(new_publisher)
 
         return new_publisher
 
 
     def createSubscriber(
         self,
-        component_id: ComponentID,
-        tensor_id: MessageID,
-        shape: MessageDataShape,
-        reduce_method: ReduceMethod,
-        history_offset: int
-    ) -> Subscriber:
+        component_id: ComponentID,                  # 接收者所属节点Id
+        message_id: MessageID,                      # 接收Tensor的消息Id
+        shape: MessageDataShape,                    # 接收Tensor的形状
+        history_offset:int,                         # 接受Tensor的时间点
+        history_padding_val: Tensor,                # 无效历史的padding值
+        reduce_method: ReduceMethod,                # 多个相同消息Tensor时的合并方法
+    ) -> "Subscriber":
         new_subscriber = Subscriber(
             component_id=component_id,
-            message_id=tensor_id,
+            message_id=message_id,
             shape=shape,
-            reduce_method=reduce_method,
             history_offset=history_offset,
+            history_padding_val=history_padding_val,
+            reduce_method=reduce_method,
         )
 
-        self.message_routes[tensor_id][1].append(new_subscriber)
+        self.message_routes[message_id][1].append(new_subscriber)
 
         return new_subscriber
 
 
+    def publish(self, mbctx:MessageBusContext, publish_node: ComponentID, tensor_id: MessageID, tensor: Tensor):
+
+        queue_key = (publish_node, tensor_id)
+        if queue_key not in mbctx.msg_queues:
+            return
+
+        valid_count = mbctx.msg_queues[queue_key].append(tensor)
+
+        # Check if any subscribers need to be triggered
+        publishers, subscribers = self.message_routes[tensor_id]
+        for sub in subscribers:
+            # 有效数据大于历史数据
+            if sub.accept_invalid_history or valid_count >= sub.history_offset:
+                # Trigger component execution
+                self._trigger_component_execution(mbctx=mbctx, component_id=sub.component_id)
+
+    def onEnvGroupInit(self, ctx: ContextBase) -> MessageBusContext:
+        """初始化消息总线的环境组上下文"""
+        ctx = MessageBusContext(
+            msg_queues={},
+            **ctx.get_base_dict()
+        )
+        self._initialize_message_queues(ctx)
+        return ctx
+
+    def onEnvGroupReset(self, context: MessageBusContext, reset_flags: Tensor):
+        """重置消息队列"""
+        for queue in context.msg_queues.values():
+            queue.reset()
+
+
     @staticmethod
-    def reduceNodeName(message_id:MessageID, reduce_method:ReduceMethod):
-        return ComponentID(f"{message_id}.{str(ReduceMethod)}")
+    def genReduceNodeID(message_id:MessageID, reduce_method:ReduceMethod):
+        return f"_{message_id}.{reduce_method}", f"{message_id}.{reduce_method}"
 
     def buildGraph(self):
 
+        # 处理所有多pub对一个消息的情况
+        self._adjust_message_route()
+
+        # 建立消息发送图
         self._build_message_graph()
 
         # 屏蔽所有无效节点，遍历辅助接点的后续节点，并将enabled设置为false
@@ -101,14 +155,15 @@ class MessageBus(MessageBusBase, IPublish):
         # 检查某个消息是否存在环路，如果存在环路需要打印并报错
         self._check_active_graph_loop()
 
+        # 调整所有元件的路由属性:pubs, subs，以及
+        self._update_components_route_ref()
+
         # 由active_graph生成执行图
         self._build_execuation_graph()
 
         # 使用拓扑排序确定执行顺序并打印
         self.execution_order = self._group_topological_sort(self.execution_graph)
 
-    def execCPU(self):
-        pass
 
     def execuate(self):
         # 找到图中的源并执行 / 直接执行CUDA Graph
@@ -170,6 +225,81 @@ class MessageBus(MessageBusBase, IPublish):
                     raise ValueError(f"Shape mismatch for subscriber of message {message_id}")
 
 
+    def _adjust_message_route(self):
+        new_message_route = self.message_routes.copy()
+
+        # 处理多pub对一个消息的情况
+        for message_id in self.message_routes:
+            pubs, subs = self.message_routes[message_id]
+            reduce_nodes: Set[ComponentID] = set()
+
+            for sub in subs:
+                if (pubs is None) or (len(pubs) <= 1):
+                    continue
+                # 多个发布者情况
+                if(sub.reduce_method == ReduceMethod.STACK):
+                    # 修改维度信息
+                    sub.stack_dim = 1  # 默认在第一维度堆叠
+                    sub.stack_order = [pub.component_id for pub in pubs]
+                else:
+                    # 非堆叠选项：创建reduce组件
+                    reduce_node_id, new_message_id = MessageBus.genReduceNodeID(message_id=message_id,
+                                                                reduce_method=sub.reduce_method)
+                    if reduce_node_id not in reduce_nodes:
+                        # 创建reduce组件
+                        reduce_component = ReducerCom(
+                            component_id=reduce_node_id,
+                            message_id=message_id,
+                            new_message_id=new_message_id,
+                            shape=sub.shape,
+                            reduce_method=sub.reduce_method,
+                            msgbus=self,
+                        )
+                        # 挂载该组件
+                        reduce_component.onRegister()
+
+                        reduce_nodes.add(reduce_node_id)
+                        self.components[reduce_node_id] = reduce_component
+
+                        # 清空原有该消息的pub路径
+                        new_message_route[new_message_id][0].extend(pubs)
+                        new_message_route[message_id][0].clear()
+
+                    # 更改subscriber的接收消息id
+                    sub.message_id = new_message_id
+                    # 更改原有的消息的sub路径
+                    new_message_route[new_message_id][1].append(sub)
+                    new_message_route[message_id][1].remove(sub)
+
+        self.message_routes = new_message_route
+
+
+    def _update_components_route_ref(self):
+        """
+        Updates the publisher/subscriber cross-references in existing pubs and subs
+        based on current message routes.
+        """
+        # Go through all components
+        for component in self.components.values():
+            # Update publishers' subscribers references
+            for pub in component.pubs:
+                # Clear existing subscribers
+                pub.subscribers = []
+                # Find all subscribers for this message_id
+                _, subscribers = self.message_routes[pub.message_id]
+                # Add all subscribers that are enabled
+                pub.subscribers.extend([sub for sub in subscribers if sub.is_enabled])
+
+            # Update subscribers' publishers references
+            for sub in component.subs:
+                # Clear existing publishers
+                sub.publishers = []
+                # Find all publishers for this message_id
+                publishers, _ = self.message_routes[sub.message_id]
+                # Add all publishers that are enabled
+                sub.publishers.extend([pub for pub in publishers if pub.is_enabled])
+
+
     def _build_message_graph(self):
         self.message_graph.clear()
         # 添加辅助节点，所有没有发布者的消息都连接到该节点
@@ -182,53 +312,13 @@ class MessageBus(MessageBusBase, IPublish):
         # 建立消息依赖关系
         for message_id in self.message_routes:
             pubs, subs = self.message_routes[message_id]
-            reduce_nodes: Mapping[ReduceMethod, ComponentID] = dict()
-
             for sub in subs:
                 if not pubs:
                     # 不存在发布者时，将消息连接到辅助节点
-                    self.message_graph.add_edge("no_pub", sub.component_id)
-                    continue
-
-                if len(pubs) == 1:
-                    # 单个发布者情况：直接建立连接
-                    self.message_graph.add_edge(pubs[0].component_id, sub.component_id)
-                    sub.publishers = [pubs[0]]
-                    continue
-
-                # 多个发布者情况
-                if sub.reduce_method == ReduceMethod.STACK:
-                    # 堆叠选项：更新subscriber的堆叠属性
-                    sub.stack_dim = 1  # 默认在第一维度堆叠
-                    sub.stack_order = [pub.component_id for pub in pubs]
-                    sub.publishers = pubs
-                    for pub in pubs:
-                        self.message_graph.add_edge(pub.component_id, sub.component_id)
+                    self.message_graph.add_edge("no_pub", sub.component_id, message_id)
                 else:
-                    # 非堆叠选项：创建reduce组件
-                    reduce_node_id = MessageBus.reduceNodeName(message_id=message_id,
-                                                                reduce_method=sub.reduce_method)
-                    if reduce_node_id not in reduce_nodes:
-                        # 创建reduce组件
-                        reduce_component = ReducerCom(
-                            component_id=reduce_node_id,
-                            message_id=message_id,
-                            new_message_id=f"{message_id}.{sub.reduce_method}",
-                            shape=sub.shape,
-                            reduce_method=sub.reduce_method,
-                            msgbus=self,
-                            history_padding_val=[pub.history_padding_val for pub in pubs]
-                        )
-                        reduce_nodes[sub.reduce_method] = reduce_node_id
-                        self.components[reduce_node_id] = reduce_component
-                        self.message_graph.add_node(reduce_node_id, obj=reduce_component)
-
-                        # 连接所有发布者到reduce组件
-                        for pub in pubs:
-                            self.message_graph.add_edge(pub.component_id, reduce_node_id)
-
-                    # 连接reduce组件到订阅者
-                    self.message_graph.add_edge(reduce_node_id, sub.component_id)
+                    for pub in pubs:
+                        self.message_graph.add_edge(pub.component_id, sub.component_id, message_id)
 
 
     def _build_active_graph(self):
@@ -274,6 +364,74 @@ class MessageBus(MessageBusBase, IPublish):
             if neighbor in self.components:
                 self.components[neighbor].setEnabled(False)
 
+
+    def _initialize_message_queues(self, ctx:MessageBusContext):
+        """Initialize message queues for all publishers based on subscriber requirements."""
+        for message_id, (publishers, subscribers) in self.message_routes.items():
+            # Find maximum history offset required by subscribers
+            max_history = 0
+            for sub in subscribers:
+                max_history = max(max_history, sub.history_offset)
+
+            # Create queue for each publisher
+            for pub in publishers:
+                queue_key = (pub.component_id, message_id)
+                ctx.msg_queues[queue_key] = MessageQueue(
+                    max_history_len=max_history + 1,  # +1 for current message
+                )
+
+
+    def _trigger_component_execution(self, mbctx: MessageBusContext, component_id: ComponentID):
+        """
+        触发组件执行的方法。检查组件的所有输入是否就绪，如果就绪则执行组件。
+
+        Args:
+            mbctx: MessageBus上下文
+            component_id: 要触发的组件ID
+        """
+        component = self.components[component_id]
+        if not component.enabled:
+            return
+
+        # 收集所有输入数据
+        input_data = {}
+        all_inputs_ready = True
+
+        # 检查每个订阅者的输入是否就绪
+        for subscriber in component.subs:
+            if not subscriber.is_enabled:
+                continue
+
+            # 获取该订阅者的发布者数据
+            assert len(subscriber.publishers) == 1, "Each subscriber should have exactly one publisher after graph building"
+            pub = subscriber.publishers[0]
+            queue_key = (pub.component_id, subscriber.message_id)
+            queue = mbctx.msg_queues[queue_key]
+
+            if subscriber.history_offset == 0:
+                # 使用当前数据时，必须等待数据就绪
+                if queue.valid_count == 0:
+                    return
+                tensor = queue.history[-1]
+            else:
+                # 使用历史数据时，检查是否就绪或是否接受无效输入
+                if queue.valid_count < subscriber.history_offset + 1:
+                    if not subscriber.accept_invalid_history:
+                        all_inputs_ready = False
+                        break
+                    # 使用padding值
+                    tensor = subscriber.history_padding_val
+                else:
+                    # 获取历史数据
+                    idx = -1 - subscriber.history_offset
+                    tensor = queue.history[idx]
+
+            input_data[subscriber.message_id] = tensor
+
+        # 所有输入就绪时执行组件
+        if all_inputs_ready:
+            context = mbctx.ctx_manager.get_context(component.context_id)
+            component.onExecuate(context, input_data)
 
 class GameEngineManager:
     # buses           : Mapping[str, TensorMessageBus]
