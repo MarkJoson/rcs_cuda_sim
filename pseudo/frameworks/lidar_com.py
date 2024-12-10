@@ -11,7 +11,7 @@ class LidarCom(Component):
         super().__init__(ComponentID("lidar"), GraphID("dafault"), msgbus)
 
     def onRegister(self):
-        self.pose_sub = self.createSubscriber(MessageID("pose"), TensorShape((3,)), ReduceMethod.REPLACE)
+        self.pose_sub = self.createSubscriber(MessageID("pose"), MessageDataShape((3,)), ReduceMethod.REPLACE)
 
 
     def onInit(self, eg_ctx: IEnvironContext) -> ComponentCtx:

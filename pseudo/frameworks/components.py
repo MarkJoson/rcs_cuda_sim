@@ -15,7 +15,7 @@ class ComponentCtx(ABC):
 @dataclass
 class Component(ABC):
     id        : ComponentID
-    exec_graph  : GraphID
+    graph_id  : GraphID
     mb_accessor : MessageBusBase
     pubs        : List[Publisher]   = list()
     subs        : List[Subscriber]  = list()
@@ -61,10 +61,10 @@ class Component(ABC):
 
         self.onEnabledChanged(enabled=enabled)
 
-    def createSubscriber(self, tensor_id:MessageID, shape:TensorShape, reduce_method:ReduceMethod, history_offset:int=0):
+    def createSubscriber(self, message_id:MessageID, shape:MessageDataShape, reduce_method:ReduceMethod, history_offset:int=0):
         sub = self.mb_accessor.createSubscriber(
             component_id=self.id,
-            tensor_id=tensor_id,
+            message_id=message_id,
             shape=shape,
             reduce_method=reduce_method,
             history_offset=history_offset,
@@ -72,12 +72,11 @@ class Component(ABC):
         self.subs.append(sub)
         return sub
 
-    def createPublisher(self, tensor_id:MessageID, shape:TensorShape, expect_history_len:int, history_padding_val:Tensor):
+    def createPublisher(self, message_id:MessageID, shape:MessageDataShape, history_padding_val:Tensor):
         pub = self.mb_accessor.createPublisher(
             component_id=self.id,
-            tensor_id=tensor_id,
+            message_id=message_id,
             shape=shape,
-            max_history_len=expect_history_len,
             history_padding_val=history_padding_val
         )
         self.pubs.append(pub)

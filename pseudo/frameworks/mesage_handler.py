@@ -16,7 +16,7 @@ class IPublish(ABC):
 class MessageHandler:
     component_id        : ComponentID                                   # 所属对象
     message_id          : MessageID                                     # 消息名
-    shape               : TensorShape                                   # 形状
+    shape               : MessageDataShape                                   # 形状
     is_enabled          : bool = field(default=True)                    # 是否使能，如果没有发布者，订阅者将被禁用
 
     def setEnabled(self, enabled:bool):

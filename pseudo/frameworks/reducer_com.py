@@ -1,3 +1,4 @@
+import torch as th
 from common_types import *
 from components import ComponentCtx, Component
 from message_bus_base import MessageBusBase
@@ -8,51 +9,52 @@ class ReducerContext(ComponentCtx):
     reduce_method: ReduceMethod
 
 class ReducerCom(Component):
-    def __init__(self,
-                 component_id: ComponentID,
-                 msg_id: MessageID,
-                 shape: TensorShape,
-                 reduce_method: ReduceMethod,
-                 msgbus: MessageBusBase):
+    def __init__(
+        self,
+        component_id: ComponentID,
+        message_id: MessageID,
+        new_message_id: MessageID,
+        shape: MessageDataShape,
+        reduce_method: ReduceMethod,
+        msgbus: MessageBusBase,
+        history_padding_val: List[Tensor]
+    ):
         super().__init__(component_id, GraphID("reduce"), msgbus)
-        self.msg_id = msg_id
+        self.message_id = message_id
+        self.new_message_id = new_message_id
         self.tensor_shape = shape
         self.reduce_method = reduce_method
+        self.history_padding_val = th.stack(history_padding_val)
 
     def onRegister(self):
         self.input_sub = self.createSubscriber(
-            self.msg_id,
+            self.message_id,
             self.tensor_shape,
             ReduceMethod.STACK
         )
+
         self.output_pub = self.createPublisher(
-            self.msg_id,
+            self.new_message_id,
             self.tensor_shape,
-            1,
-            None  # TODO: 适当的padding值
+            self.history_padding_val
         )
 
     def onInit(self, env_group_cfg: IEnvironContext) -> ComponentCtx:
         return ReducerContext.build(eg_ctx=env_group_cfg)
 
     def onExecuate(self, context: ComponentCtx, input: Mapping[MessageID, Tensor]):
-        tensor = input[self.msg_id]
+        tensor = input[self.message_id]
         # 根据reduce_method进行相应的张量运算
         if self.reduce_method == ReduceMethod.SUM:
-            raise NotImplementedError
-            # result = th.sum(tensor, dim=1)
+            result = th.sum(tensor, dim=1)
         elif self.reduce_method == ReduceMethod.AVERAGE:
-            raise NotImplementedError
-            # result = th.mean(tensor, dim=1)
+            result = th.mean(tensor, dim=1)
         elif self.reduce_method == ReduceMethod.MAX:
-            raise NotImplementedError
-            # result = th.max(tensor, dim=1)[0]
+            result = th.max(tensor, dim=1)[0]
         elif self.reduce_method == ReduceMethod.MIN:
-            raise NotImplementedError
-            # result = th.min(tensor, dim=1)[0]
+            result = th.min(tensor, dim=1)[0]
         elif self.reduce_method == ReduceMethod.REPLACE:
-            raise NotImplementedError
-            # result = tensor[-1]  # 使用最后一个输入
+            result = tensor[-1]  # 使用最后一个输入
 
         self.output_pub.publish(context, result)
 
