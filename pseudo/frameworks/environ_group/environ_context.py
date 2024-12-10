@@ -2,7 +2,7 @@ from common_types import *
 from typing import Any, Type
 from environ_config import EnvironGroupConfig
 from environ_group_interface import EGManagedObject
-
+from threading import Lock
 
 @dataclass
 class ContextDescriptor:
@@ -19,6 +19,7 @@ class GlobalContextRegistry:
 
     def __init__(self):
         self.descriptors: Dict[str, ContextDescriptor] = {}
+        self._lock = Lock()
 
     @classmethod
     def get_instance(cls) -> 'GlobalContextRegistry':
@@ -28,7 +29,8 @@ class GlobalContextRegistry:
 
     def register_provider(self, context_id: str, descriptor: ContextDescriptor):
         """注册上下文提供者"""
-        self.descriptors[context_id] = descriptor
+        with self._lock:
+            self.descriptors[context_id] = descriptor
 
     def get_descriptor(self, context_id: str) -> Optional[ContextDescriptor]:
         return self.descriptors.get(context_id)

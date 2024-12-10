@@ -20,8 +20,21 @@ class MessageQueue:
         self.max_history_len = max_history_len
         self.valid_count = 0
         self.latest_update_time = 0
+        # 添加缓存以提高性能
+        self._cache = {}
+        self._cache_valid = False
 
-    def append(self, data:Tensor):
+    def get_history(self, offset: int) -> Tensor:
+        cache_key = offset
+        if self._cache_valid and cache_key in self._cache:
+            return self._cache[cache_key]
+
+        result = self.history[-1-offset]
+        self._cache[cache_key] = result
+        return result
+
+    def append(self, data: Tensor):
+        self._cache_valid = False  # 使缓存失效
         self.history.append(data)
         self.valid_count += min(self.max_history_len, self.valid_count + 1)
         self.latest_update_time += 1
@@ -104,7 +117,14 @@ class MessageBus(EGManagedObject, MessageBusBase, IPublish):
 
         queue_key = (publish_node, tensor_id)
         if queue_key not in mbctx.msg_queues:
-            return
+            raise ValueError(f"No message queue found for publisher {publish_node} and message {tensor_id}")
+
+        if not isinstance(tensor, Tensor):
+            raise TypeError(f"Expected torch.Tensor, got {type(tensor)}")
+
+        expected_shape = self.message_routes[tensor_id][0][0].shape
+        if tensor.shape[1:] != expected_shape:  # 忽略batch维度
+            raise ValueError(f"Shape mismatch: expected {expected_shape}, got {tensor.shape[1:]}")
 
         valid_count = mbctx.msg_queues[queue_key].append(tensor)
 
@@ -155,7 +175,7 @@ class MessageBus(EGManagedObject, MessageBusBase, IPublish):
         # 检查某个消息是否存在环路，如果存在环路需要打印并报错
         self._check_active_graph_loop()
 
-        # 调整所有元件的路由属性:pubs, subs，以及
+        # 调整所有元件的路由属性:pubs, subs
         self._update_components_route_ref()
 
         # 由active_graph生成执行图
@@ -412,7 +432,7 @@ class MessageBus(EGManagedObject, MessageBusBase, IPublish):
                 # 使用当前数据时，必须等待数据就绪
                 if queue.valid_count == 0:
                     return
-                tensor = queue.history[-1]
+                tensor = queue.get_history(0)
             else:
                 # 使用历史数据时，检查是否就绪或是否接受无效输入
                 if queue.valid_count < subscriber.history_offset + 1:
@@ -423,8 +443,7 @@ class MessageBus(EGManagedObject, MessageBusBase, IPublish):
                     tensor = subscriber.history_padding_val
                 else:
                     # 获取历史数据
-                    idx = -1 - subscriber.history_offset
-                    tensor = queue.history[idx]
+                    tensor = queue.get_history(subscriber.history_offset)
 
             input_data[subscriber.message_id] = tensor
 

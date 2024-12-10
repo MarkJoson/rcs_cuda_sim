@@ -13,7 +13,7 @@ __all__ = ['MessageDataShape', 'MessageID', 'ComponentID', 'GraphID', 'ReduceMet
            'dataclass', 'field']
 
 
-MessageDataShape    = NewType('MessageDataShape', Sequence[int])
+MessageDataShape    : TypeAlias = Sequence[int]
 MessageID           : TypeAlias = str
 ComponentID         : TypeAlias = str
 GraphID             : TypeAlias = str                               # 不同的执行流，所有的subscriber构成了一张依赖图，但在一步内可能将依赖图分为多个子图执行
