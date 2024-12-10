@@ -143,10 +143,10 @@ __global__ void rasterKernel(
     using BlockScan = cub::BlockScan<uint32_t, CTA_SIZE>;
     using BlockRunLengthDecodeT = cub::BlockRunLengthDecode<uint32_t, CTA_SIZE, 1, EMIT_PER_THREAD>;
 
-    __shared__ uint32_t s_lineBuf[LINE_BUF_SIZE];           // 1K
-    __shared__ uint32_t s_frLineIdxBuf[FR_BUF_SIZE];        // 1K
-    __shared__ uint32_t s_frLineSGridFragsBuf[FR_BUF_SIZE]; // 1K
-    __shared__ int s_lidarResponse[LIDAR_LINES];            // 1K
+    volatile __shared__ uint32_t s_lineBuf[LINE_BUF_SIZE];           // 1K
+    volatile __shared__ uint32_t s_frLineIdxBuf[FR_BUF_SIZE];        // 1K
+    volatile __shared__ uint32_t s_frLineSGridFragsBuf[FR_BUF_SIZE]; // 1K
+    __shared__ uint32_t s_lidarResponse[LIDAR_LINES];            // 1K
     __shared__ union {
         typename BlockScan::TempStorage scan_temp_storage;
         typename BlockRunLengthDecodeT::TempStorage decode_temp_storage;
@@ -301,8 +301,9 @@ __global__ void rasterKernel(
                     float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
                     float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
                     int grid = (s_grid + fragIdx + 1) % g_params.ray_num;
-                    int response = getR(lb, le, grid*g_params.resolu) * 100;
-                    atomicMin_block(&s_lidarResponse[grid], response);
+                    uint16_t response = getR(lb, le, grid*g_params.resolu) * 1024;        // 10位定点小数表示，最大距离64m
+                    uint32_t resp_idx = response << 16 | lineIdx & 0xffff;
+                    atomicMin_block(&s_lidarResponse[grid], resp_idx);
                 }
             }
             __syncthreads();
