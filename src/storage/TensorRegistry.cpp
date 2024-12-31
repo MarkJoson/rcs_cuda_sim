@@ -1,7 +1,7 @@
 #include "storage/TensorRegistry.h"
 #include "storage/GTensor.h"
 
-namespace RSG_SIM
+namespace cuda_simulator
 {
 
     TensorRegistry::TensorRegistry()
@@ -82,4 +82,4 @@ namespace RSG_SIM
         return uris;
     }
 
-} // namespace RSG_SIM
+} // namespace cuda_simulator

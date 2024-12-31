@@ -2,7 +2,7 @@
 #include <torch/torch.h>
 #include <stdexcept>
 
-namespace RSG_SIM
+namespace cuda_simulator
 {
 
     namespace internal
@@ -118,4 +118,4 @@ namespace RSG_SIM
         }
     }
 
-} // namespace RSG_SIM
+} // namespace cuda_simulator

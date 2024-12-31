@@ -4,7 +4,7 @@
 #include "tree.h"
 #include "storage/TensorRegistry.h"
 
-namespace RSG_SIM
+namespace cuda_simulator
 {
 
 
@@ -56,7 +56,7 @@ public:
     virtual void onNewEnvironGroupCreated(EnvironGroup* env_group);
 };
 
-} // namespace RSG_SIM
+} // namespace cuda_simulator
 
 
 

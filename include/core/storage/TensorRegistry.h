@@ -7,8 +7,11 @@
 #include <vector>
 #include "ITensor.h"
 
-namespace RSG_SIM
+namespace cuda_simulator
 {
+namespace core
+{
+
 
     template <typename T>
     class GTensor;
@@ -66,6 +69,7 @@ namespace RSG_SIM
         std::unordered_map<std::string, std::unique_ptr<ITensor>> tensors;
     };
 
-} // namespace RSG_SIM
+} // namespace core
+} // namespace cuda_simulator
 
 #endif

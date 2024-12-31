@@ -1,7 +1,7 @@
 #include "storage/TensorRegistryManager.h"
 #include <torch/torch.h>
 
-namespace RSG_SIM
+namespace cuda_simulator
 {
 
     bool TensorRegistryManager::initialized_ = false;
@@ -73,4 +73,4 @@ namespace RSG_SIM
         }
     }
 
-} // namespace RSG_SIM
+} // namespace cuda_simulator
