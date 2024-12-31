@@ -9,7 +9,7 @@ else()
 endif()
 
 # 启用CUDA编译
-project(rcsim VERSION 0.0.1 LANGUAGES CXX CUDA)
+project(cudaSim VERSION 0.0.1 LANGUAGES CXX CUDA)
 
 ########################
 #        编译选项       #
@@ -27,7 +27,7 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(BUILD_TESTING "Build tests" ON)
+set(BUILD_TESTING "Build tests" OFF)
 
 # set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/python/pyenv/)
 
@@ -60,11 +60,47 @@ include(thirdparty/googletest/googletest.cmake)
 include(GoogleTest)
 
 ############
-# Sub Dirs #
+# Targets #
 ############
 
-add_subdirectory(core)
-add_subdirectory(component)
+add_executable(test_core
+    src/test_core.cc
+)
+
+# 设置目标属性
+set_target_properties(test_core PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+    POSITION_INDEPENDENT_CODE ON
+)
+
+target_include_directories(test_core
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>    # 构建时使用源代码中的 include 目录
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>          # 安装后使用安装的 include 目录
+    PRIVATE
+        ${TORCH_INCLUDE_DIRS}
+)
+
+# 链接依赖
+target_link_libraries(test_core
+    PUBLIC
+        ${TORCH_LIBRARIES}
+)
+
+
+############
+#  Tests   #
+############
+
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+############
+#  Tests   #
+############
+
 
 #########
 # TESTS #
@@ -74,37 +110,58 @@ add_subdirectory(component)
 ##########
 # EXPORT #
 ##########
-# 设置安装目录
-include(GNUInstallDirs)
+# include(GNUInstallDirs)
 
-include(CMakePackageConfigHelpers)
+# include(CMakePackageConfigHelpers)
 
-# generate the config file that is includes the exports
-configure_package_config_file(cmake/Config.cmake.in
-    "${CMAKE_CURRENT_BINARY_DIR}/roboCudaSimConfig.cmake"
-    INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake"
-    NO_SET_AND_CHECK_MACRO
-    NO_CHECK_REQUIRED_COMPONENTS_MACRO
-    PATH_VARS
-        CMAKE_INSTALL_INCLUDEDIR
-        CMAKE_INSTALL_LIBDIR
-)
+# install(TARGETS ${PROJECT_EXPORT_TARGET}
+#     EXPORT ${PROJECT_EXPORT_NAME}Targets
+#     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+#     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+# )
 
-# generate the version file for the config file
-write_basic_package_version_file(
-    "roboCudaSimConfigVersion.cmake"
-    VERSION "${roboCudaSim_VERSION_MAJOR}.${roboCudaSim_VERSION_MINOR}"
-    COMPATIBILITY AnyNewerVersion
-)
+# # 安装公共头文件
+# install(
+#   DIRECTORY ${CMAKE_SOURCE_DIR}/include
+#   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+# )
 
-# install the configuration file
-install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/roboCudaSimConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/roboCudaSimConfigVersion.cmake
-    DESTINATION share/roboCudaSim/cmake)
+# # 安装生成的导出头文件
+# install(FILES ${CMAKE_CURRENT_BINARY_DIR}/cudaSim_core_export.h
+#     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cudaSim
+# )
+
 
 # install(
-#     EXPORT roboCudaSimTargets
-#     NAMESPACE roboCudaSim::
-#     DESTINATION share/roboCudaSim/cmake
+#   EXPORT ${PROJECT_EXPORT_NAME}Targets
+#   NAMESPACE ${PROJECT_EXPORT_NAME}
+#   FILE ${PROJECT_EXPORT_NAME}Targets.cmake
+#   DESTINATION ${PROJECT_INSTALL_CMAKEDIR}
 # )
+
+
+# # generate the config file that is includes the exports
+# configure_package_config_file(cmake/Config.cmake.in
+#     "${CMAKE_CURRENT_BINARY_DIR}/cudaSimConfig.cmake"
+#     INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake"
+#     NO_SET_AND_CHECK_MACRO
+#     NO_CHECK_REQUIRED_COMPONENTS_MACRO
+#     PATH_VARS
+#         CMAKE_INSTALL_INCLUDEDIR
+#         CMAKE_INSTALL_LIBDIR
+# )
+
+# # generate the version file for the config file
+# write_basic_package_version_file(
+#     ${PROJECT_EXPORT_NAME}ConfigVersion.cmake
+#     VERSION "${cudaSim_VERSION_MAJOR}.${cudaSim_VERSION_MINOR}"
+#     COMPATIBILITY AnyNewerVersion
+# )
+
+# # install the configuration file
+# install(FILES
+#     ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_EXPORT_NAME}Config.cmake
+#     ${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_EXPORT_NAME}ConfigVersion.cmake
+#     DESTINATION ${PROJECT_INSTALL_CMAKEDIR})

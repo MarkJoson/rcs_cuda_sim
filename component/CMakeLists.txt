@@ -47,17 +47,17 @@ install(TARGETS map_generator
 
 # 安装公共头文件
 install(FILES ${STORAGE_HEADERS}
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/roboSim/component
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cudaSim/component
 )
 
 # 安装生成的导出头文件
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/roboSim_core_export.h
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/roboSim/component
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cudaSim/component
 )
 
 # 安装导出目标
 install(EXPORT RoboSimCoreTargets
     FILE roboSimCoreTargets.cmake
-    NAMESPACE roboSim::component::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/roboSim/component
+    NAMESPACE cudaSim::component::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/cudaSim/component
 )

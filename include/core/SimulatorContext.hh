@@ -1,6 +1,12 @@
 #ifndef CUDASIM_SIMULATOR_CONTEXT_HH
 #define CUDASIM_SIMULATOR_CONTEXT_HH
 
+#include <memory>
+#include <MessageBus.hh>
+#include <Component.hh>
+#include <EnvironGroupConfigItem.hh>
+
+
 namespace cuda_simulator
 {
 namespace core
@@ -21,6 +27,7 @@ public:
 private:
     int num_max_exec_envs_;     // 应该是32的倍数
     int num_env_per_group;      // 每个环境组的env数量
+    std::unique_ptr<MessageBus> message_bus;
 };
 
 } // namespace core

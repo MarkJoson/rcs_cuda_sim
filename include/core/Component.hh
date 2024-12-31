@@ -3,7 +3,7 @@
 
 #include <string>
 #include <unordered_map>
-
+#include "storage/ITensor.h"
 
 namespace cuda_simulator
 {
@@ -25,12 +25,12 @@ public:
 
     virtual void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<std::string, GTensor> input,
-        const std::unordered_map<std::string, GTensor> output) = 0;
+        const std::unordered_map<std::string, ITensor*> input,
+        const std::unordered_map<std::string, ITensor*> output) = 0;
 
     virtual void onReset(
-        GTensor reset_flags,
-        std::unordered_map<std::string, GTensor> &state) = 0; //
+        ITensor* reset_flags,
+        std::unordered_map<std::string, ITensor*> &state) = 0; //
 
 
     const std::string& getName() const { return component_name_; }
