@@ -1,8 +1,10 @@
 from common_types import *
-from message_bus_base import MessageBusBase
 from mesage_handler import Publisher, Subscriber
 from environ_group import EGManagedObject, ContextBase
-from pseudo.frameworks.common_types import Tensor
+from common_types import Tensor
+
+if TYPE_CHECKING:
+    from message_bus import MessageBus
 
 @dataclass
 class ComponentContext(ContextBase):
@@ -19,7 +21,7 @@ class Component(EGManagedObject):
     id          : ComponentID
     graph_id    : GraphID
     context_id  : ContextID
-    mb_accessor : MessageBusBase
+    msgbus      : "MessageBus"
     pubs        : List[Publisher]   = list()
     subs        : List[Subscriber]  = list()
     enabled     : bool = True
@@ -65,7 +67,7 @@ class Component(EGManagedObject):
                          history_offset:int=0,
                          history_padding_val: Optional[Tensor] = None,
                          reduce_method:ReduceMethod = ReduceMethod.STACK):
-        sub = self.mb_accessor.createSubscriber(
+        sub = self.msgbus.createSubscriber(
             component_id=self.id,
             message_id=message_id,
             shape=shape,
@@ -77,7 +79,7 @@ class Component(EGManagedObject):
         return sub
 
     def createPublisher(self, message_id:MessageID, shape:MessageDataShape):
-        pub = self.mb_accessor.createPublisher(
+        pub = self.msgbus.createPublisher(
             component_id=self.id,
             message_id=message_id,
             shape=shape,

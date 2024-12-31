@@ -1,6 +1,5 @@
 from common_types import *
-from components import ComponentContext, Component
-from message_bus_base import MessageBusBase
+from component import ComponentContext, Component
 from environ_group import ContextBase
 
 class LidarContext(ComponentContext):

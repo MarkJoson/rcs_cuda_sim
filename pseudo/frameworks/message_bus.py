@@ -2,9 +2,8 @@ import torch as th
 import networkx as nx
 from collections import deque, defaultdict
 from common_types import *
-from components import Component
-from message_bus_base import MessageBusBase
-from mesage_handler import IPublish, Publisher, Subscriber
+from component import Component
+from mesage_handler import Publisher, Subscriber
 from reducer_com import ReducerCom
 from environ_group import EGManagedObject, ContextBase, EnvironGroupConfig
 
@@ -51,7 +50,7 @@ class MessageBusContext(ContextBase):
     msg_queues: Dict[Tuple[ComponentID, MessageID], MessageQueue]  # Map (publisher_id, message_id) to queue
 
 
-class MessageBus(EGManagedObject, MessageBusBase, IPublish):
+class MessageBus(EGManagedObject):
     components          : Dict[ComponentID, 'Component'] = dict()
     component_graph_ids : Dict[ComponentID, GraphID] = dict()
     message_routes      : Dict[MessageID, Tuple[List[Publisher],List[Subscriber]]] = defaultdict(lambda :(list(), list()))
@@ -96,7 +95,7 @@ class MessageBus(EGManagedObject, MessageBusBase, IPublish):
         message_id: MessageID,                      # 接收Tensor的消息Id
         shape: MessageDataShape,                    # 接收Tensor的形状
         history_offset:int,                         # 接受Tensor的时间点
-        history_padding_val: Tensor,                # 无效历史的padding值
+        history_padding_val: Optional[Tensor],      # 无效历史的padding值
         reduce_method: ReduceMethod,                # 多个相同消息Tensor时的合并方法
     ) -> "Subscriber":
         new_subscriber = Subscriber(
