@@ -59,12 +59,40 @@ find_package(Torch REQUIRED)
 include(thirdparty/googletest/googletest.cmake)
 include(GoogleTest)
 
+# boost
+find_package(Boost REQUIRED COMPONENTS graph)
+
 ############
 # Targets #
 ############
 
+add_executable(test_boost_graph
+    src/test_boost_graph.cpp
+)
+
+set_target_properties(test_boost_graph PROPERTIES
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+)
+
+target_include_directories(test_boost_graph
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>    # 构建时使用源代码中的 include 目录
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>          # 安装后使用安装的 include 目录
+    PRIVATE
+        ${TORCH_INCLUDE_DIRS}
+        ${Boost_INCLUDE_DIRS}
+)
+
+target_link_libraries(test_boost_graph
+    PUBLIC
+    ${Boost_LIBRARIES}
+    ${TORCH_LIBRARIES}
+)
+
+
 add_executable(test_core
-    src/test_core.cc
+    src/test_core.cu
 )
 
 # 设置目标属性

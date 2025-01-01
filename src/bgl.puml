@@ -1,0 +1,122 @@
+@startuml
+
+' 图接口
+interface Graph {
+  +vertices()
+  +edges()
+  +source()
+  +target()
+}
+
+' 顶点列表图接口
+interface VertexListGraph {
+  +vertices()
+  +num_vertices()
+}
+
+' 边列表图接口
+interface EdgeListGraph {
+  +edges()
+  +num_edges()
+}
+
+' 可修改图接口
+interface MutableGraph {
+  +add_vertex()
+  +remove_vertex()
+  +add_edge()
+  +remove_edge()
+}
+
+' 关联图接口
+interface IncidenceGraph {
+  +out_edges()
+  +out_degree()
+}
+
+' 双向图接口
+interface BidirectionalGraph {
+  +in_edges()
+  +in_degree()
+}
+
+' 邻接图接口
+interface AdjacencyGraph {
+  +adjacent_vertices()
+}
+
+' 属性图接口
+interface PropertyGraph {
+  +get()
+  +put()
+}
+
+' 主要实现类
+class adjacency_list {
+  -EdgeList out_edges
+  -VertexList vertices
+  +add_vertex()
+  +add_edge()
+  +vertices()
+  +edges()
+  +out_edges()
+  +in_edges()
+}
+
+class adjacency_matrix {
+  -Matrix matrix
+  +add_vertex()
+  +add_edge()
+  +vertices()
+  +edges()
+}
+
+' 迭代器类
+class graph_traits {
+  +vertex_iterator
+  +edge_iterator
+  +out_edge_iterator
+  +in_edge_iterator
+  +adjacency_iterator
+}
+
+' 属性相关类
+class property_map {
+  +get()
+  +put()
+}
+
+class property {
+  +Tag
+  +Type
+  +Next
+}
+
+' 继承关系
+Graph <|-- VertexListGraph
+Graph <|-- EdgeListGraph
+Graph <|-- IncidenceGraph
+IncidenceGraph <|-- BidirectionalGraph
+Graph <|-- AdjacencyGraph
+Graph <|-- PropertyGraph
+
+' 实现关系
+VertexListGraph <|.. adjacency_list
+EdgeListGraph <|.. adjacency_list
+IncidenceGraph <|.. adjacency_list
+BidirectionalGraph <|.. adjacency_list
+AdjacencyGraph <|.. adjacency_list
+PropertyGraph <|.. adjacency_list
+
+VertexListGraph <|.. adjacency_matrix
+EdgeListGraph <|.. adjacency_matrix
+IncidenceGraph <|.. adjacency_matrix
+PropertyGraph <|.. adjacency_matrix
+
+' 关联关系
+adjacency_list ..> graph_traits
+adjacency_matrix ..> graph_traits
+adjacency_list ..> property_map
+adjacency_list ..> property
+
+@enduml

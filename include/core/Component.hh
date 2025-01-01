@@ -15,7 +15,7 @@ class SimulatorContext;
 class ComponentBase
 {
 public:
-    ComponentBase(const std::string &name, const std::string &graph)
+    ComponentBase(const std::string &name, const std::string &graph = "default")
         : component_name_(name), exec_graph_(graph) { }
     virtual ~ComponentBase() {}
 

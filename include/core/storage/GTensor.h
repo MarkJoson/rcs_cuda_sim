@@ -26,7 +26,6 @@ public:
 };
 
 } // namespace core
-
 } // namespace cuda_simulator
 
 #endif
