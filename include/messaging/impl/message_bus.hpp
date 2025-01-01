@@ -138,7 +138,7 @@ public:
         checkActiveGraphCycles();
 
         // 7. 更新组件路由引用
-        0();
+        updateComponentsRouteRef();
 
         // 8. 构建执行图
         buildExecutionGraph();
