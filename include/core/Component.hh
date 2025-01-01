@@ -15,8 +15,8 @@ class SimulatorContext;
 class ComponentBase
 {
 public:
-    ComponentBase(const std::string &name, const std::string &graph = "default")
-        : component_name_(name), exec_graph_(graph) { }
+    ComponentBase(const std::string &name, const std::string &tag = "default")
+        : component_name_(name), tag_(tag) { }
     virtual ~ComponentBase() {}
 
     virtual void onRegister(SimulatorContext* context) = 0;
@@ -25,21 +25,21 @@ public:
 
     virtual void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<std::string, ITensor*> input,
-        const std::unordered_map<std::string, ITensor*> output) = 0;
+        const std::unordered_map<std::string, TensorHandle> input,
+        const std::unordered_map<std::string, TensorHandle> output) = 0;
 
     virtual void onReset(
-        ITensor* reset_flags,
-        std::unordered_map<std::string, ITensor*> &state) = 0; //
+        TensorHandle reset_flags,
+        std::unordered_map<std::string, TensorHandle> &state) = 0; //
 
 
     const std::string& getName() const { return component_name_; }
 
-    const std::string& getExecGraph() const { return exec_graph_; }
+    const std::string& getTag() const { return tag_; }
 
 private:
     std::string component_name_;
-    std::string exec_graph_;
+    std::string tag_;
 };
 
 } // namespace core

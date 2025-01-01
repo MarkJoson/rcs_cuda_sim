@@ -37,6 +37,8 @@ public:
     virtual const void *ptr() const = 0;
 };
 
+using TensorHandle = ITensor*;
+
 } // namespace core
 } // namespace cuda_simulator
 
