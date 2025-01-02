@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <optional>
 #include <iostream>
 #include <mutex>
 #include <unordered_map>
@@ -96,9 +95,15 @@ using DescriptionId = std::int32_t;
 class MessageQueue {
 public:
     explicit MessageQueue(NodeId pub_node_id, MessageId message_id, MessageNameRef message_name,
-        MessageShape shape, size_t max_history_len, std::optional<TensorHandle> history_padding_val = nullptr)
-        : pub_node_id_(pub_node_id) ,message_id_(message_id) , message_name_(message_name) , shape_(shape)
-        , max_history_len_(max_history_len) , write_index_(0), valid_count_(0) {
+        MessageShape shape, size_t max_history_len, TensorHandle history_padding_val = nullptr)
+        : pub_node_id_(pub_node_id)
+        ,message_id_(message_id)
+        , message_name_(message_name)
+        , shape_(shape)
+        , max_history_len_(max_history_len)
+        , history_padding_val_(history_padding_val)
+        , write_index_(0)
+        , valid_count_(0) {
             allocate();
         }
 
@@ -140,6 +145,7 @@ private:
     MessageNameRef message_name_;
     MessageShape shape_;
     size_t max_history_len_;
+    TensorHandle history_padding_val_;
 
     size_t write_index_ = 0;
     size_t valid_count_ = 0;
@@ -177,7 +183,7 @@ struct OutputDescription {
     // 消息形状
     MessageShape shape;
     // 无效历史数据的填充值
-    std::optional<TensorHandle> history_padding_val;
+    TensorHandle history_padding_val;
     // 消息队列ID
     MessageQueueId queue_id = INT_MAX;
 };
@@ -253,25 +259,11 @@ public:
     MessageBus(SimulatorContext *context) : context_(context)  {};
 
     void registerComponent(ComponentBase* component) {
-        const auto &node_name = component->getName();
-        if(node_id_map_.find(node_name) != node_id_map_.end()) {
-            std::cerr << "node has been registered!" << std::endl;
-            return;
-        }
-        NodeId node_id = node_descriptions_.size();
-        node_id_map_[node_name] = node_id;
+        std::lock_guard<std::mutex> lock(mutex_);
 
-        node_descriptions_.push_back({
-            node_id,
-            node_name,
-            component->getTag(),
-            component,
-            {},{},
-            {}, {},
-            {}, {}
-            }
-        );
+        createNodeId(component->getName(), component->getTag(), component);
 
+        // 调用注册回调函数，初始化输入输出
         component->onRegister(context_);
     }
 
@@ -282,6 +274,8 @@ public:
         int history_offset = 0,
         ReduceMethod reduce_method = ReduceMethod::STACK
     ) {
+        std::lock_guard<std::mutex> lock(mutex_);
+
         if (history_offset < 0) {
             throw std::runtime_error("Invalid history offset");
         }
@@ -320,8 +314,9 @@ public:
         ComponentBase* component,
         const MessageNameRef &message_name,
         const MessageShape &shape,
-        std::optional<TensorHandle> history_padding_val = nullptr
+        TensorHandle history_padding_val = nullptr
     ) {
+        std::lock_guard<std::mutex> lock(mutex_);
         MessageId message_id = lookUpOrCreateMessageId(message_name, shape);
 
         NodeId node_id = node_id_map_[component->getName()];
@@ -331,7 +326,7 @@ public:
             throw std::runtime_error("Input message already registered");
         }
 
-        DescriptionId output_des_id = input_descriptions_.size();
+        DescriptionId output_des_id = output_descriptions_.size();
         output_descriptions_.push_back({
             node_id,
             component->getName(),
@@ -381,6 +376,29 @@ public:
         updateNodeDescription();
     }
 
+    void clearAll() {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        node_descriptions_.clear();
+        node_id_map_.clear();
+        reducers_.clear();
+
+        messages_.clear();
+        message_id_map_.clear();
+        input_descriptions_.clear();
+        output_descriptions_.clear();
+
+        message_routes_.clear();
+        adjusted_message_routes_.clear();
+
+        message_graph_.clear();
+        active_graph_.clear();
+        vertex_map.clear();
+
+        active_messages_routes_.clear();
+        message_queues_.clear();
+    }
+
 
 private:    // ^---------------------------------------------- 私有定义 -------------------------------------------------------
 
@@ -425,6 +443,27 @@ private:    // ^---------------------------------------------- 私有定义 ----
     private:
         std::vector<Vertex>& inactive_nodes_;
     };
+
+    NodeId createNodeId(const NodeNameRef& node_name, const NodeTagRef& node_tag, ComponentBase* component) {
+        if(node_id_map_.find(node_name) != node_id_map_.end()) {
+            throw std::runtime_error("Node has been registered!");
+        }
+        NodeId node_id = node_descriptions_.size();
+        node_id_map_[node_name] = node_id;
+
+        node_descriptions_.push_back({
+            node_id,
+            node_name,
+            node_tag,
+            component,
+            {},{},
+            {}, {},
+            {}, {}
+            }
+        );
+
+        return node_id;
+    }
 
 
     MessageId lookUpOrCreateMessageId(const MessageNameRef& message_name, const MessageShape& shape) {
@@ -742,52 +781,9 @@ private:    // ^---------------------------------------------- 私有定义 ----
             output_data[message_name] = message_queues_[mq_id]->getWriteTensor();
         }
 
-
         // 所有输入就绪时执行组件
         component->onExecute(context_, input_data, output_data);
     }
-
-    // void triggerComponentExecution(const NodeTagRef& node_tag) {
-    //     auto component = components_.find(componentId);
-    //     if (component == components_.end() || !component->second->isEnabled()) {
-    //         return;
-    //     }
-
-    //     // 收集所有输入数据
-    //     std::map<core::MessageId, core::Tensor> inputData;
-    //     bool allInputsReady = true;
-
-    //     for (const auto& sub : component->second->getSubscribers()) {
-    //         if (!sub->isEnabled()) continue;
-
-    //         // 获取发布者数据
-    //         assert(sub->getPublishers().size() == 1);
-    //         auto pub = sub->getPublishers()[0];
-    //         auto queueKey = std::make_pair(pub->getComponentId(), sub->getMessageId());
-    //         auto& queue = messageQueues_[queueKey];
-
-    //         if (sub->getHistoryOffset() == 0) {
-    //             if (queue.getValidCount() == 0) return;
-    //             inputData[sub->getMessageId()] = queue.getHistory(0);
-    //         } else {
-    //             if (queue.getValidCount() < sub->getHistoryOffset() + 1) {
-    //                 if (!sub->acceptsInvalidHistory()) {
-    //                     allInputsReady = false;
-    //                     break;
-    //                 }
-    //                 inputData[sub->getMessageId()] = *sub->getHistoryPaddingVal();
-    //             } else {
-    //                 inputData[sub->getMessageId()] = queue.getHistory(sub->getHistoryOffset());
-    //             }
-    //         }
-    //     }
-
-    //     // 所有输入就绪时执行组件
-    //     if (allInputsReady) {
-    //         component->second->onExecute(context, inputData);
-    //     }
-    // }
-
 
 private:
     static constexpr const char* NOPUB_NODE_NAME = "no_pub";
