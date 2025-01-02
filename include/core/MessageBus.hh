@@ -35,43 +35,6 @@ namespace core
 
 class SimulatorContext;
 
-class MessageShape {
-public:
-    MessageShape(std::vector<int64_t> &shape) : shape_(shape.data()) {
-        dim_ = shape.size();
-    }
-
-    MessageShape(int64_t *shape) : shape_(shape) {
-        // 以0为终止符
-        for (dim_ = 0; shape[dim_] != 0; dim_++);
-    }
-
-    int64_t operator[](int index) const {
-        return shape_[index];
-    }
-
-    int64_t size() const {
-        return dim_;
-    }
-
-    bool operator==(const MessageShape &other) const {
-        if (dim_ != other.dim_) {
-            return false;
-        }
-
-        for (int i = 0; i < dim_; i++) {
-            if (shape_[i] != other.shape_[i]) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-private:
-    int64_t dim_;
-    int64_t *shape_;
-};
-
 using MessageQueueId = std::uint32_t;
 using DescriptionId = std::int32_t;
 
@@ -79,10 +42,11 @@ using DescriptionId = std::int32_t;
 // &---------------------------------------------- MessageQueue -------------------------------------------------------
 class MessageQueue {
 public:
-    explicit MessageQueue(NodeId pub_node_id, MessageId message_id, MessageNameRef message_name,
-        MessageShape shape, size_t max_history_len, TensorHandle history_padding_val = nullptr)
+    explicit MessageQueue(NodeId pub_node_id, NodeNameRef pub_node_name, MessageId message_id, MessageNameRef message_name,
+        MessageShapeRef shape, size_t max_history_len, TensorHandle history_padding_val = nullptr)
         : pub_node_id_(pub_node_id)
-        ,message_id_(message_id)
+        , pub_node_name_(pub_node_name)
+        , message_id_(message_id)
         , message_name_(message_name)
         , shape_(shape)
         , max_history_len_(max_history_len)
@@ -95,7 +59,13 @@ public:
     // 申请消息队列空间
     void allocate() {
         history_.resize(max_history_len_);
-        // TODO.
+
+        // 为每个历史槽位创建tensor
+        for(size_t i = 0; i < max_history_len_; i++) {
+            std::string tensor_uri = generateTensorUri(i);
+            // 根据shape创建对应的tensor
+            history_[i] = createTensorByShape(tensor_uri, shape_);
+        }
     }
 
     // 获取历史消息
@@ -125,10 +95,33 @@ public:
     }
 
 private:
+    std::string generateTensorUri(size_t index) const {
+        // 生成唯一的tensor URI: message_name/node_id/history_index
+        return std::string(message_name_) + "/" +
+               std::string(pub_node_name_) + "/" +
+               std::to_string(index);
+    }
+
+    TensorHandle createTensorByShape(const std::string& uri, const MessageShapeRef& shape) {
+        // 根据shape的维度创建tensor
+        std::vector<int64_t> tensor_shape;
+        for(int64_t i = 0; i < shape.size(); i++) {
+            tensor_shape.push_back(shape[i]);
+        }
+
+        // 创建float类型的tensor
+        // 注意：这里假设所有tensor都是float类型，如果需要支持其他类型，需要添加类型参数
+        return TensorRegistry::getInstance().createTensor<float>(uri, tensor_shape);
+    }
+
+private:
     NodeId      pub_node_id_;
+    NodeNameRef pub_node_name_;
+
     MessageId   message_id_;
     MessageNameRef message_name_;
-    MessageShape shape_;
+
+    MessageShapeRef shape_;
     size_t max_history_len_;
     TensorHandle history_padding_val_;
 
@@ -193,7 +186,8 @@ public:
     MessageBus(SimulatorContext *context) : context_(context)  {};
 
     void registerComponent(ComponentBase* component) {
-        std::lock_guard<std::mutex> lock(mutex_);
+        // std::lock_guard<std::mutex> lock(mutex_);
+        // TODO.
 
         createNodeId(component->getName(), component->getTag(), component);
 
@@ -208,7 +202,8 @@ public:
         int history_offset = 0,
         ReduceMethod reduce_method = ReduceMethod::STACK
     ) {
-        std::lock_guard<std::mutex> lock(mutex_);
+        // std::lock_guard<std::mutex> lock(mutex_);
+        // TODO.
 
         if (history_offset < 0) {
             throw std::runtime_error("Invalid history offset");
@@ -250,7 +245,9 @@ public:
         const MessageShape &shape,
         TensorHandle history_padding_val = nullptr
     ) {
-        std::lock_guard<std::mutex> lock(mutex_);
+        // std::lock_guard<std::mutex> lock(mutex_);
+        // TODO.
+
         MessageId message_id = lookUpOrCreateMessageId(message_name, shape);
 
         NodeId node_id = node_id_map_[component->getName()];
@@ -288,7 +285,8 @@ public:
     }
 
     void addTrigger(NodeTagRef trigger_tag) {
-        std::lock_guard<std::mutex> lock(mutex_);
+        // std::lock_guard<std::mutex> lock(mutex_);
+        // TODO.
 
         if (triggers_.find(trigger_tag) != triggers_.end()) {
             throw std::runtime_error("Trigger already exists");
@@ -302,7 +300,8 @@ public:
     }
 
     void buildGraph() {
-        std::lock_guard<std::mutex> lock(mutex_);
+        // std::lock_guard<std::mutex> lock(mutex_);
+        // TODO.
 
         // 1. 处理多发布者对一个消息的情况
         adjustMessageRoutes();
@@ -327,7 +326,8 @@ public:
     }
 
     void clearAll() {
-        std::lock_guard<std::mutex> lock(mutex_);
+        // std::lock_guard<std::mutex> lock(mutex_);
+        // TODO.
 
         node_descriptions_.clear();
         node_id_map_.clear();
@@ -351,7 +351,8 @@ public:
 
     void trigger(NodeTagRef trigger_tag) {
         /// 触发传递，执行某个Tag下的所有节点
-        std::lock_guard<std::mutex> lock(mutex_);
+        // std::lock_guard<std::mutex> lock(mutex_);
+        // TODO.
 
         auto &trigger_desc = triggers_[trigger_tag];
 
@@ -653,15 +654,17 @@ private:    // ^---- 私有定义 -----
         boost::breadth_first_search(message_graph_, vertex_map["no_pub"],
             boost::visitor(VertexVisitor(inactive_nodes)));
 
-        // 删除出度为0的节点
-        for (auto it = boost::vertices(active_graph_).first; it != boost::vertices(active_graph_).second; ++it) {
-            if (boost::out_degree(*it, active_graph_) == 0) {
-                inactive_nodes.push_back(*it);
-            }
-        }
+        active_graph_ = message_graph_;
 
-        // 删除no_pub节点
-        inactive_nodes.push_back(vertex_map["no_pub"]);
+        // // 删除出度为0的节点
+        // for (auto it = boost::vertices(active_graph_).first; it != boost::vertices(active_graph_).second; ++it) {
+        //     if (boost::out_degree(*it, active_graph_) == 0) {
+        //         inactive_nodes.push_back(*it);
+        //     }
+        // }
+
+        // // 删除no_pub节点
+        // inactive_nodes.push_back(vertex_map["no_pub"]);
 
         // 打印所有会被删除的节点，用于调试
         for (auto v : inactive_nodes) {
@@ -669,7 +672,6 @@ private:    // ^---- 私有定义 -----
         }
 
         // 修剪后的图作为活动图
-        active_graph_ = message_graph_;
         for (const Vertex& v : inactive_nodes) {
             boost::remove_vertex(v, active_graph_);
         }
@@ -718,6 +720,7 @@ private:    // ^---- 私有定义 -----
         // 遍历每一个节点的出边，建立消息队列
         for(auto [vi, vend] = boost::vertices(active_graph_); vi!=vend; vi++) {
             NodeId node_id = active_graph_[*vi].node_id;
+            NodeNameRef node_name = active_graph_[*vi].node_name;
             VertexOutEdgeIterator ei, eind;
             for(std::tie(ei, eind) = boost::out_edges(*vi, active_graph_); ei!=eind; ei++) {
                 const EdgeProperties &edge_props = active_graph_[*ei];
@@ -725,7 +728,7 @@ private:    // ^---- 私有定义 -----
                 const MessageNameRef& message_name = messages_[message_id].first;
                 OutputDescription &pub = output_descriptions_[ edge_props.pub_des_id ];
 
-                int mq_history_len = 0;
+                int max_mq_history_offset = 0;
 
                 // 遍历当前消息的所有接收者，得到最大历史长度
                 for(auto sub_id : active_messages_routes_[message_id].second) {
@@ -735,14 +738,19 @@ private:    // ^---- 私有定义 -----
                         throw std::runtime_error("Shape mismatch for subscriber of message " + std::string(message_name));
                     }
 
-                    if (sub.history_offset > mq_history_len)
-                        mq_history_len = sub.history_offset;
+                    if (sub.history_offset > max_mq_history_offset)
+                        max_mq_history_offset = sub.history_offset;
                 }
 
                 // 创建MQ_Id, 修改OutputDescription，注明MessageQueueId
                 pub.queue_id = message_queues_.size();
                 message_queues_.push_back(std::make_unique<MessageQueue>(
-                    node_id, message_id, message_name, pub.shape, mq_history_len));
+                    node_id,
+                    node_name,
+                    message_id,
+                    message_name,
+                    pub.shape,
+                    max_mq_history_offset+1));
             }
         }
     }

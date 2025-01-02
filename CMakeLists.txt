@@ -68,8 +68,6 @@ find_package(Boost REQUIRED COMPONENTS graph)
 
 add_executable(test_boost_graph
     src/test_boost_graph.cpp
-    src/core/storage/GTensorTorchWrapper.cpp
-    src/core/storage/TensorRegistryManager.cpp
 )
 
 set_target_properties(test_boost_graph PROPERTIES
@@ -95,6 +93,8 @@ target_link_libraries(test_boost_graph
 
 add_executable(test_core
     src/test_core.cu
+    src/core/storage/GTensorTorchWrapper.cpp
+    src/core/storage/TensorRegistryManager.cpp
 )
 
 # 设置目标属性

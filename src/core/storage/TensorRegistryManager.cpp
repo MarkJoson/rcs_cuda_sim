@@ -7,15 +7,6 @@ namespace core
 
 bool TensorRegistryManager::initialized_ = false;
 
-TensorRegistry TensorRegistryManager::createRegistry()
-{
-    if (!initialized_)
-    {
-        initialize();
-    }
-    return TensorRegistry();
-}
-
 void TensorRegistryManager::setDefaultDevice(bool use_gpu)
 {
     // torch::set_default_tensor_type(

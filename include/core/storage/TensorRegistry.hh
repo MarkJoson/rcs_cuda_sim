@@ -6,34 +6,32 @@
 #include <unordered_map>
 #include <vector>
 
-#include "GTensorTorchWrapper.hh"
+#include "GTensor.hh"
 #include "ITensor.hh"
 
 namespace cuda_simulator {
 namespace core {
 
-template <typename T> class GTensor;
+
 class TensorRegistry;
 class TensorRegistryManager;
 
 class TensorRegistry {
 public:
-    explicit TensorRegistry() {}
+    static TensorRegistry& getInstance() {
+        static TensorRegistry instance;
+        return instance;
+    }
 
-    ~TensorRegistry() = default;
+    // 删除拷贝和移动操作
+    TensorRegistry(const TensorRegistry&) = delete;
+    TensorRegistry& operator=(const TensorRegistry&) = delete;
+    TensorRegistry(TensorRegistry&&) = delete;
+    TensorRegistry& operator=(TensorRegistry&&) = delete;
 
-    // 禁用拷贝
-    TensorRegistry(const TensorRegistry &) = delete;
-    TensorRegistry &operator=(const TensorRegistry &) = delete;
-
-    // 启用移动
-    TensorRegistry(TensorRegistry &&) noexcept = default;
-    TensorRegistry &operator=(TensorRegistry &&) noexcept = default;
 
     // 创建张量的非模板接口
-    ITensor *createTensor(const std::string &uri,
-                                                const std::vector<int64_t> &shape,
-                                                TensorDataType dtype) {
+    ITensor *createTensor(const std::string &uri, const std::vector<int64_t> &shape, TensorDataType dtype) {
         auto tensor = std::make_unique<GTensorTorchWrapper>(shape, dtype);
         auto *ptr = tensor.get();
 
@@ -43,10 +41,9 @@ public:
 
     // 创建张量的模板接口
     template <typename T>
-    GTensor<T> *createTensor(const std::string &uri,
-                                                     const std::vector<int64_t> &shape) {
-        auto *tensor = static_cast<GTensor<T> *>(
-                createTensor(uri, shape, GTensor<T>::getTensorDataType()));
+    GTensor<T> *createTensor(const std::string &uri, const std::vector<int64_t> &shape) {
+        TensorDataType type = GTensorTorchWrapper::getTensorDataType<T>();
+        auto *tensor = static_cast<GTensor<T> *>(createTensor(uri, shape, type));
         return tensor;
     }
 
@@ -100,6 +97,10 @@ public:
         }
         return uris;
     }
+
+private:
+    TensorRegistry() = default;  // 私有构造函数
+    ~TensorRegistry() = default;
 
 private:
     std::unordered_map<std::string, std::unique_ptr<ITensor>> tensors;

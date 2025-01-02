@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
+
 
 namespace cuda_simulator
 {
@@ -30,6 +32,44 @@ using NodeTagRef = std::string_view;
 using MessageId = std::uint32_t;
 using MessageName = std::string;
 using MessageNameRef = std::string_view;
+using MessageShape = std::vector<int64_t>;
+
+class MessageShapeRef {
+public:
+    MessageShapeRef(std::vector<int64_t> &shape) : shape_(shape.data()) {
+        dim_ = shape.size();
+    }
+
+    MessageShapeRef(int64_t *shape) : shape_(shape) {
+        // 以0为终止符
+        for (dim_ = 0; shape[dim_] != 0; dim_++);
+    }
+
+    int64_t operator[](int index) const {
+        return shape_[index];
+    }
+
+    int64_t size() const {
+        return dim_;
+    }
+
+    bool operator==(const MessageShapeRef &other) const {
+        if (dim_ != other.dim_) {
+            return false;
+        }
+
+        for (int i = 0; i < dim_; i++) {
+            if (shape_[i] != other.shape_[i]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+private:
+    int64_t dim_;
+    int64_t *shape_;
+};
 
 
 }

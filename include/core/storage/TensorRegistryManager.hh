@@ -14,9 +14,6 @@ public:
     // 禁止实例化
     TensorRegistryManager() = delete;
 
-    // 创建注册表
-    static TensorRegistry createRegistry();
-
     // 设备管理
     static void setDefaultDevice(bool use_gpu);
     static bool isGPUAvailable();

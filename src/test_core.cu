@@ -26,6 +26,7 @@ public:
         const std::unordered_map<MessageNameRef, TensorHandle>& input,
         const std::unordered_map<MessageNameRef, TensorHandle>& output) override {
         auto* tensor = static_cast<GTensor<float>*>(output.at("source_output"));
+        printf("source_output: %lx\n", tensor->data());
         tensor->data()[0] = 42.0f;
     }
 
