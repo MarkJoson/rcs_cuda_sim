@@ -2,6 +2,7 @@
 #define CUDASIM_MESSAGEBUS_HH
 
 
+#include <cassert>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -150,6 +151,7 @@ private:
 // &---------------------------------------------- Descriptions -------------------------------------------------------
 struct InputDescription {
     // 所属组件名
+    NodeId node_id;
     NodeNameRef node_name;
     // 接收消息名
     MessageId message_id;
@@ -160,14 +162,14 @@ struct InputDescription {
     int history_offset;
     // 多输出消息时的归约方法，当reduce_method为STACK时，stack_dim和stack_order有效
     ReduceMethod reduce_method;
-    // 多输出消息时的堆叠维度
-    int stack_dim;
     // 多输出消息时的堆叠顺序
-    std::vector<NodeId> stack_order;
+    std::vector<NodeNameRef> stack_order;
+    std::vector<NodeId> stack_order_pub_id;
 };
 
 struct OutputDescription {
     // 所属组件名
+    NodeId node_id;
     NodeNameRef node_name;
     // 发布消息名
     MessageId message_id;
@@ -186,9 +188,15 @@ struct NodeDescription {
     NodeNameRef node_name;
     NodeTagRef node_tag;
     ComponentBase* component;
-    std::vector<DescriptionId> active_inputs;
-    std::vector<DescriptionId> active_outputs;
-    std::unordered_map<MessageNameRef, std::vector<MessageQueueId>> active_input_map;
+
+    std::unordered_map<MessageId, DescriptionId> input_map;
+    std::unordered_map<MessageId, DescriptionId> output_map;
+
+    std::unordered_map<MessageId, DescriptionId> active_input_desc;
+    std::unordered_map<MessageId, DescriptionId> active_outputs_desc;
+
+    std::unordered_map<MessageNameRef, std::vector<
+        std::pair<MessageQueueId, int>>> active_input_map;
     std::unordered_map<MessageNameRef, MessageQueueId> active_output_map;
 };
 
@@ -258,7 +266,9 @@ public:
             node_name,
             component->getTag(),
             component,
-            {},{}, {}, {}
+            {},{},
+            {}, {},
+            {}, {}
             }
         );
 
@@ -278,18 +288,28 @@ public:
 
         MessageId message_id = lookUpOrCreateMessageId(message_name, shape);
 
+        NodeId node_id = node_id_map_[component->getName()];
+
+        NodeDescription &node_desc = node_descriptions_[node_id];
+        if (node_desc.input_map.find(message_id) != node_desc.input_map.end()) {
+            throw std::runtime_error("Input message already registered");
+        }
+
         DescriptionId input_des_id = input_descriptions_.size();
         input_descriptions_.push_back({
+            node_id,
             component->getName(),
             message_id,
             message_name,
             shape,
             history_offset,
             reduce_method,
-            0,
-            {}
+            {}, {}
             }
         );
+
+        // 更新节点接收消息列表
+        node_descriptions_[node_id].input_map[message_id] = input_des_id;
 
         // 更新路由表
         message_routes_[message_id].second.insert(input_des_id);
@@ -304,8 +324,16 @@ public:
     ) {
         MessageId message_id = lookUpOrCreateMessageId(message_name, shape);
 
+        NodeId node_id = node_id_map_[component->getName()];
+
+        NodeDescription &node_desc = node_descriptions_[node_id];
+        if (node_desc.output_map.find(message_id) != node_desc.output_map.end()) {
+            throw std::runtime_error("Input message already registered");
+        }
+
         DescriptionId output_des_id = input_descriptions_.size();
         output_descriptions_.push_back({
+            node_id,
             component->getName(),
             message_id,
             message_name,
@@ -313,6 +341,9 @@ public:
             history_padding_val,
             INT_MAX
         });
+
+        // 更新节点接收消息列表
+        node_descriptions_[node_id].output_map[message_id] = output_des_id;
 
         message_routes_[message_id].first.insert(output_des_id);
     }
@@ -432,30 +463,51 @@ private:    // ^---------------------------------------------- 私有定义 ----
         std::unordered_map<MessageId, MessageRoute> newRoutes = message_routes_;
 
         // 遍历所有消息, 处理多发布者发布同一个一个消息的情况
-        for (auto& [messageId, routes] : message_routes_) {
+        for (auto& [message_id, routes] : message_routes_) {
             auto& [pub_ids, sub_ids] = routes;
-            if (pub_ids.size() <= 1) continue;
 
             for (auto sub_id : sub_ids) {
                 auto& sub = input_descriptions_[sub_id];
 
-                // Reduce方法如果是STACK，则按照stack_order进行堆叠。当stack_order不存在时根据pub_ids顺序重建
-                if (sub.reduce_method == core::ReduceMethod::STACK) {
-                    if (sub.stack_order.size() == 0) {
-                        for (auto pub_id : pub_ids) {
-                            int pub_node_id = node_id_map_[ output_descriptions_[pub_id].node_name ];
-                            sub.stack_order.push_back(pub_node_id);
-                        }
-                    }
-                } else {    // 如果不是STACK，则需要创建reducer组件
+                // 仅有一个publisher时，统一将reduce_method设置为stack
+                if (pub_ids.size() == 1) {
+                    sub.stack_order.clear();
+                    sub.reduce_method = ReduceMethod::STACK;
+                }
+
+                // 如果不是STACK，则需要创建reducer组件
+                if (sub.reduce_method != ReduceMethod::STACK) {
                     auto reducer = lookUpOrCreateReducerNode(sub.message_name, sub.reduce_method, sub.shape);
 
                     // 更改newRoute中的subscriber的接收消息id，为Reducer发布的消息ID
                     MessageNameRef reducer_pub_msg_name = reducer->getOutputMessageName();
                     sub.message_name = reducer_pub_msg_name;
+                    sub.message_id = message_id_map_[reducer_pub_msg_name];
+
                     newRoutes[message_id_map_[reducer_pub_msg_name]].second.insert(sub_id);
                     // 删除原有message到subscriber的消息路由
-                    newRoutes[messageId].second.erase(sub_id);
+                    newRoutes[message_id].second.erase(sub_id);
+                }
+
+                // 在最后只允许reduce_method==STACK
+                // 为空时，按照默认顺序填充stack_order
+                if (sub.stack_order.size() == 0) {
+                    for (auto pub_id : pub_ids) {
+                        sub.stack_order.push_back( output_descriptions_[pub_id].node_name );
+                    }
+                }
+
+                assert(sub.stack_order.size() == pub_ids.size());
+
+                // 将stack_order转换为node_id
+                for (auto& stack_node : sub.stack_order) {
+                    if (node_id_map_.find(stack_node) == node_id_map_.end()) {
+                        throw std::runtime_error("Invalid stack order");
+                    }
+
+                    // NodeNameRef -> NodeId -> Node Description -> Publisher DescriptionId
+                    DescriptionId pub_id = node_descriptions_[ node_id_map_[stack_node] ].output_map[message_id];
+                    sub.stack_order_pub_id.push_back(pub_id);
                 }
             }
         }
@@ -617,25 +669,33 @@ private:    // ^---------------------------------------------- 私有定义 ----
             VertexOutEdgeIterator ei, eind;
             for(std::tie(ei, eind) = boost::out_edges(*vi, active_graph_); ei!=eind; ei++) {
                 const EdgeProperties &edge_props = active_graph_[*ei];
-                node_des.active_inputs.push_back(edge_props.sub_des_id);
-                node_des.active_outputs.push_back(edge_props.pub_des_id);
+                node_des.active_input_desc.insert({edge_props.message_id, edge_props.sub_des_id});
+                node_des.active_outputs_desc.insert({edge_props.message_id, edge_props.pub_des_id});
             }
 
             // 填充active_output_map
-            for(auto pub_id : node_des.active_outputs) {
+            for(auto [message_id, pub_id] : node_des.active_outputs_desc) {
                 const MessageNameRef &message_name = output_descriptions_[pub_id].message_name;
                 node_des.active_output_map[message_name] = output_descriptions_[pub_id].queue_id;
             }
 
-            // 对于所有的active_input, 查找对应消息的pub, 得到message_queue_id, 填充input_map
-            for(auto sub_id : node_des.active_inputs) {
+            // 对于所有的active_input, 根据stack order的顺序查找对应消息的pub, 得到message_queue_id, 填充input_map
+            for(auto [message_id, sub_id] : node_des.active_input_desc) {
                 const MessageNameRef &message_name = input_descriptions_[sub_id].message_name;
-                MessageId message_id = input_descriptions_[sub_id].message_id;
+                InputDescription &sub = input_descriptions_[sub_id];
 
-                std::vector<MessageQueueId> mq_ids {};
-                for(auto pub_id : active_messages_routes_[message_id].first) {
+                auto &active_pubs = active_messages_routes_[message_id].first;
+
+                // 所有其他方法都由Reducer节点处理了
+                assert (sub.reduce_method == ReduceMethod::STACK);
+
+                std::vector<std::pair<MessageQueueId, int>> mq_ids {};
+                for(DescriptionId pub_id : sub.stack_order_pub_id) {
+                    // 如果消息不是活跃的，就跳过
+                    if (active_pubs.find(pub_id) == active_pubs.end()) continue;
+
                     const auto &pub = output_descriptions_[pub_id];
-                    mq_ids.push_back(pub.queue_id);
+                    mq_ids.push_back({pub.queue_id, sub.history_offset});
                 }
                 node_des.active_input_map[message_name] = mq_ids;
             }
@@ -649,6 +709,42 @@ private:    // ^---------------------------------------------- 私有定义 ----
         Vertex entry_vertex = boost::add_vertex({0, ENTRY_NODE_NAME, ENTRY_NODE_TAG}, active_graph_);
 
         // TODO. 后续还需要根据TAG分离子图
+    }
+
+    void executeNode(NodeId node) {
+        /// 执行节点，将节点的输出写入消息队列
+
+        auto &node_des = node_descriptions_[node];
+        auto &component = node_des.component;
+
+        // 收集所有输入数据
+        std::map<MessageNameRef, TensorHandle> input_data;
+
+
+        for (const auto& [message_name, sub_mq_ids] : node_des.active_input_map) {
+            // 如果只有一个消息发布者，简化操作
+            if (sub_mq_ids.size() == 1) {
+                auto [mq_id, hist_off] = sub_mq_ids[0];
+                input_data[message_name] = message_queues_[mq_id]->getHistory(hist_off);
+            } else {
+                std::vector<TensorHandle> stack_data;
+
+                for (auto [mq_id, hist_off] : sub_mq_ids) {
+                    stack_data.push_back(message_queues_[mq_id]->getHistory(hist_off));
+                }
+                // TODO. 调用Tensor管理器进行STACK
+            }
+        }
+
+        std::map<MessageNameRef, TensorHandle> output_data;
+
+        for (const auto& [message_name, mq_id] : node_des.active_output_map) {
+            output_data[message_name] = message_queues_[mq_id]->getWriteTensor();
+        }
+
+
+        // 所有输入就绪时执行组件
+        component->onExecute(context_, input_data, output_data);
     }
 
     // void triggerComponentExecution(const NodeTagRef& node_tag) {
