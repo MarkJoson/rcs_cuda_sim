@@ -1,73 +1,109 @@
 #ifndef __TENSOR_REGISTRY_H__
 #define __TENSOR_REGISTRY_H__
 
-#include <string>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "GTensorTorchWrapper.hh"
 #include "ITensor.hh"
 
-namespace cuda_simulator
-{
-namespace core
-{
+namespace cuda_simulator {
+namespace core {
 
+template <typename T> class GTensor;
+class TensorRegistry;
+class TensorRegistryManager;
 
+class TensorRegistry {
+public:
+    explicit TensorRegistry() {}
+
+    ~TensorRegistry() = default;
+
+    // 禁用拷贝
+    TensorRegistry(const TensorRegistry &) = delete;
+    TensorRegistry &operator=(const TensorRegistry &) = delete;
+
+    // 启用移动
+    TensorRegistry(TensorRegistry &&) noexcept = default;
+    TensorRegistry &operator=(TensorRegistry &&) noexcept = default;
+
+    // 创建张量的非模板接口
+    ITensor *createTensor(const std::string &uri,
+                                                const std::vector<int64_t> &shape,
+                                                TensorDataType dtype) {
+        auto tensor = std::make_unique<GTensorTorchWrapper>(shape, dtype);
+        auto *ptr = tensor.get();
+
+        tensors[uri] = std::move(tensor);
+        return ptr;
+    }
+
+    // 创建张量的模板接口
     template <typename T>
-    class GTensor;
-    class TensorRegistry;
-    class TensorRegistryManager;
+    GTensor<T> *createTensor(const std::string &uri,
+                                                     const std::vector<int64_t> &shape) {
+        auto *tensor = static_cast<GTensor<T> *>(
+                createTensor(uri, shape, GTensor<T>::getTensorDataType()));
+        return tensor;
+    }
 
-    class TensorRegistry
-    {
-    public:
-        explicit TensorRegistry();
-        ~TensorRegistry();
+    // 获取张量
+    ITensor *getTensor(const std::string &uri) {
+        auto it = tensors.find(uri);
+        return it != tensors.end() ? it->second.get() : nullptr;
+    }
 
-        // 禁用拷贝
-        TensorRegistry(const TensorRegistry &) = delete;
-        TensorRegistry &operator=(const TensorRegistry &) = delete;
+    template <typename T> GTensor<T> *getTensor(const std::string &uri) {
+        auto *tensor = getTensor(uri);
+        return static_cast<GTensor<T> *>(tensor);
+    }
 
-        // 启用移动
-        TensorRegistry(TensorRegistry &&) noexcept;
-        TensorRegistry &operator=(TensorRegistry &&) noexcept;
+    // 移除张量
+    void removeTensor(const std::string &uri) { tensors.erase(uri); }
 
-        // 创建张量的非模板接口
-        ITensor *createTensor(const std::string &uri, const std::vector<int64_t> &shape, TensorDataType dtype);
-
-        // 创建张量的模板接口
-        template <typename T>
-        GTensor<T> *createTensor(const std::string &uri, const std::vector<int64_t> &shape)
-        {
-            auto *tensor = static_cast<GTensor<T> *>(createTensor(uri, shape, GTensor<T>::getTensorDataType()));
-            return tensor;
+    // 批量操作
+    std::vector<ITensor *> getTensorsByPrefix(const std::string &prefix) {
+        std::vector<ITensor *> result;
+        for (const auto &[uri, tensor] : tensors) {
+            if (uri.substr(0, prefix.length()) == prefix) {
+                result.push_back(tensor.get());
+            }
         }
+        return result;
+    }
 
-        // 获取张量
-        ITensor *getTensor(const std::string &uri);
-
-        template <typename T>
-        GTensor<T> *getTensor(const std::string &uri)
-        {
-            auto *tensor = getTensor(uri);
-            return static_cast<GTensor<T> *>(tensor);
+    void removeTensorsByPrefix(const std::string &prefix) {
+        for (auto it = tensors.begin(); it != tensors.end();) {
+            if (it->first.substr(0, prefix.length()) == prefix) {
+                it = tensors.erase(it);
+            } else {
+                ++it;
+            }
         }
+    }
 
-        // 移除张量
-        void removeTensor(const std::string &uri);
+    // 信息查询
+    size_t size() const { return tensors.size(); }
 
-        // 批量操作
-        std::vector<ITensor *> getTensorsByPrefix(const std::string &prefix);
-        void removeTensorsByPrefix(const std::string &prefix);
+    bool exists(const std::string &uri) const {
+        return tensors.find(uri) != tensors.end();
+    }
 
-        // 信息查询
-        size_t size() const;
-        bool exists(const std::string &uri) const;
-        std::vector<std::string> getAllTensorUri() const;
+    std::vector<std::string> getAllTensorUri() const {
+        std::vector<std::string> uris;
+        uris.reserve(tensors.size());
+        for (const auto &[uri, _] : tensors) {
+            uris.push_back(uri);
+        }
+        return uris;
+    }
 
-    private:
-        std::unordered_map<std::string, std::unique_ptr<ITensor>> tensors;
-    };
+private:
+    std::unordered_map<std::string, std::unique_ptr<ITensor>> tensors;
+};
 
 } // namespace core
 } // namespace cuda_simulator

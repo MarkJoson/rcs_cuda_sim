@@ -2,7 +2,8 @@
 #include <cassert>
 #include "core/MessageBus.hh"
 #include "core/SimulatorContext.hh"
-#include "core/storate/GTensor.hh"
+#include "core/storage/GTensor.hh"
+#include "core/storage/TensorRegistryManager.hh"
 
 using namespace cuda_simulator::core;
 
@@ -167,6 +168,7 @@ void testMessageHistory() {
 class FusionComponent : public ComponentBase {
 public:
     FusionComponent() : ComponentBase("fusion") {}
+    ~FusionComponent() override = default;
     std::vector<float> received_values;
 
     void onRegister(SimulatorContext* context) override {
