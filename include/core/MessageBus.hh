@@ -1,6 +1,7 @@
 #ifndef CUDASIM_MESSAGEBUS_HH
 #define CUDASIM_MESSAGEBUS_HH
 
+#include <boost/config.hpp>
 
 #include <cassert>
 #include <cstdint>
@@ -11,8 +12,9 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <queue>
 
-
+#include <boost/utility.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/topological_sort.hpp>
 #include <boost/graph/graph_traits.hpp>
@@ -137,57 +139,6 @@ private:
     std::vector<TensorHandle> history_;
 };
 
-// &---------------------------------------------- Descriptions -------------------------------------------------------
-struct InputDescription {
-    // 所属组件名
-    NodeId node_id;
-    NodeNameRef node_name;
-    // 接收消息名
-    MessageId message_id;
-    MessageNameRef message_name;
-    // 消息形状
-    MessageShape shape;
-    // 历史偏移
-    int history_offset;
-    // 多输出消息时的归约方法，当reduce_method为STACK时，stack_dim和stack_order有效
-    ReduceMethod reduce_method;
-    // 多输出消息时的堆叠顺序
-    std::vector<NodeNameRef> stack_order;
-    std::vector<NodeId> stack_order_pub_id;
-};
-
-struct OutputDescription {
-    // 所属组件名
-    NodeId node_id;
-    NodeNameRef node_name;
-    // 发布消息名
-    MessageId message_id;
-    MessageNameRef message_name;
-    // 消息形状
-    MessageShape shape;
-    // 无效历史数据的填充值
-    TensorHandle history_padding_val;
-    // 消息队列ID
-    MessageQueueId queue_id = INT_MAX;
-};
-
-
-struct NodeDescription {
-    NodeId node_id;
-    NodeNameRef node_name;
-    NodeTagRef node_tag;
-    ComponentBase* component;
-
-    std::unordered_map<MessageId, DescriptionId> input_map;
-    std::unordered_map<MessageId, DescriptionId> output_map;
-
-    std::unordered_map<MessageId, DescriptionId> active_input_desc;
-    std::unordered_map<MessageId, DescriptionId> active_outputs_desc;
-
-    std::unordered_map<MessageNameRef, std::vector<
-        std::pair<MessageQueueId, int>>> active_input_map;
-    std::unordered_map<MessageNameRef, MessageQueueId> active_output_map;
-};
 
 
 // &---------------------------------------------- ReducerComponent -------------------------------------------------------
@@ -336,6 +287,19 @@ public:
         }
     }
 
+    void addTrigger(NodeTagRef trigger_tag) {
+        std::lock_guard<std::mutex> lock(mutex_);
+
+        if (triggers_.find(trigger_tag) != triggers_.end()) {
+            throw std::runtime_error("Trigger already exists");
+        }
+
+        triggers_[trigger_tag] = {
+            0,
+            trigger_tag,
+            {}
+        };
+    }
 
     void buildGraph() {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -382,9 +346,38 @@ public:
         message_queues_.clear();
     }
 
+    void trigger(NodeTagRef trigger_tag) {
+        /// 触发传递，执行某个Tag下的所有节点
+        std::lock_guard<std::mutex> lock(mutex_);
 
-private:    // ^---------------------------------------------- 私有定义 -------------------------------------------------------
+        auto &trigger_desc = triggers_[trigger_tag];
 
+        for (const auto &[node_order, node_ids] : trigger_desc.node_order) {
+            if (node_order >= current_execute_order_ + 1) {
+                std::cout << "Trigger [" << trigger_tag << "] stopped at order " << current_execute_order_ << std::endl;
+                break;
+            }
+
+            // 找到本次需要执行的节点然后停下
+            if (node_order < current_execute_order_)
+                continue;
+
+            // TODO. 下述节点可以并行执行
+            for (NodeId node_id : node_ids) {
+                executeNode(node_id);
+            }
+            current_execute_order_ ++;
+        }
+    }
+
+    void resetExecuteOrder() {
+        current_execute_order_ = 0;
+    }
+
+
+private:    // ^---- 私有定义 -----
+
+    // **---- 图 -----
     struct VertexProperties {
         NodeId node_id;
         NodeNameRef node_name;
@@ -398,13 +391,76 @@ private:    // ^---------------------------------------------- 私有定义 ----
         DescriptionId sub_des_id;
     };
 
-    using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS, VertexProperties, EdgeProperties>;
+
+    using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, VertexProperties, EdgeProperties>;
     using GraphId = std::string;
     using MessageRoute = std::pair<std::unordered_set<DescriptionId>, std::unordered_set<DescriptionId>>;
     using Vertex = boost::graph_traits<Graph>::vertex_descriptor;
     using VertexIterator = boost::graph_traits<Graph>::vertex_iterator;
     using EdgeIterator = boost::graph_traits<Graph>::edge_iterator;
     using VertexOutEdgeIterator = boost::graph_traits<Graph>::out_edge_iterator;
+
+    // **---- Descriptions -----
+    struct InputDescription {
+        // 所属组件名
+        NodeId node_id;
+        NodeNameRef node_name;
+        // 接收消息名
+        MessageId message_id;
+        MessageNameRef message_name;
+        // 消息形状
+        MessageShape shape;
+        // 历史偏移
+        int history_offset;
+        // 多输出消息时的归约方法，当reduce_method为STACK时，stack_dim和stack_order有效
+        ReduceMethod reduce_method;
+        // 多输出消息时的堆叠顺序
+        std::vector<NodeNameRef> stack_order;
+        std::vector<NodeId> stack_order_pub_id;
+    };
+
+    struct OutputDescription {
+        // 所属组件名
+        NodeId node_id;
+        NodeNameRef node_name;
+        // 发布消息名
+        MessageId message_id;
+        MessageNameRef message_name;
+        // 消息形状
+        MessageShape shape;
+        // 无效历史数据的填充值
+        TensorHandle history_padding_val;
+        // 消息队列ID
+        MessageQueueId queue_id = INT_MAX;
+    };
+
+    struct NodeDescription {
+        NodeId node_id;
+        NodeNameRef node_name;
+        NodeTagRef node_tag;
+        ComponentBase* component;
+
+        std::unordered_map<MessageId, DescriptionId> input_map;
+        std::unordered_map<MessageId, DescriptionId> output_map;
+
+        std::unordered_map<MessageId, DescriptionId> active_input_desc;
+        std::unordered_map<MessageId, DescriptionId> active_outputs_desc;
+
+        std::unordered_map<MessageNameRef, std::vector<
+            std::pair<MessageQueueId, int>>> active_input_map;
+        std::unordered_map<MessageNameRef, MessageQueueId> active_output_map;
+    };
+
+
+    // Trigger 在依赖图中连接所有Tag == trigger_tag的节点, 用于触发消息传递
+    struct TriggerDescription {
+        // 触发节点标识符
+        boost::graph_traits<Graph>::vertex_descriptor trigger_vertex;
+        // 触发标签
+        NodeTagRef trigger_tag;
+        // 拓扑排序结果，用于并行执行
+        std::vector<std::pair<int, std::unordered_set<NodeId>>> node_order;
+    };
 
 
     struct CycleDetector : public boost::dfs_visitor<> {
@@ -725,12 +781,74 @@ private:    // ^---------------------------------------------- 私有定义 ----
         }
     }
 
-    void addEntryVertex() {
-        /// 添加一个入口节点，用于并行执行后续节点。这个节点将是所有其他无依赖节点的入口。
+    void addTriggerToGraph() {
+        /// 为每个触发器创建一个顶点，连接所有具有相同tag的节点，计算所有节点的距离
 
-        Vertex entry_vertex = boost::add_vertex({0, ENTRY_NODE_NAME, ENTRY_NODE_TAG}, active_graph_);
+        trigger_graph_ = active_graph_;
 
-        // TODO. 后续还需要根据TAG分离子图
+        // 为每个触发器创建一个顶点
+        for (auto& [trigger_tag, trigger_desc] : triggers_) {
+            Vertex trigger_vertex = boost::add_vertex({
+                TRIGGER_NODE_ID,
+                TRIGGER_NODE_NAME,
+                TRIGGER_NODE_TAG
+            }, trigger_graph_);
+            trigger_desc.trigger_vertex = trigger_vertex;
+
+            // 连接所有具有相同tag的节点
+            typename boost::graph_traits<Graph>::vertex_iterator vi, vend;
+            for (std::tie(vi, vend) = boost::vertices(trigger_graph_); vi != vend; ++vi) {
+                if (trigger_graph_[*vi].node_tag == trigger_tag) {
+                    boost::add_edge(trigger_vertex, *vi, {0, 0, 0}, active_graph_);
+                }
+            }
+            // trigger_desc.node_distances = distance_buckets;
+        }
+        // ---- 拓扑排序确定依赖 ----
+
+        // 拓扑排序
+        std::list<Vertex> topo_order;
+        boost::topological_sort(
+            trigger_graph_,
+            std::front_inserter(topo_order),
+            boost::vertex_index_map(boost::get(boost::vertex_index, trigger_graph_))
+        );
+
+        // 根据拓扑顺序计算每个顶点的层级
+        std::vector<int> orders(boost::num_vertices(trigger_graph_), 0);
+        for (Vertex v : topo_order) {
+            // 找所有的前驱，令 layer[v] = max(layer[u] + 1)
+            Graph::in_edge_iterator in_i, in_end;
+            for (std::tie(in_i, in_end) = boost::in_edges(v, trigger_graph_); in_i != in_end; ++in_i) {
+                auto u = boost::source(*in_i, trigger_graph_);
+                orders[v] = std::max(orders[v], orders[u] + 1);
+            }
+            // 记录节点的order
+            if (trigger_graph_[v].node_id != TRIGGER_NODE_ID)
+                node_order_[trigger_graph_[v].node_id] = orders[v];
+        }
+
+        // 收集每一层中的节点
+        int max_layer = 0;
+        for (auto l : orders) {
+            max_layer = std::max(max_layer, l);
+        }
+
+        for (auto& [trigger_tag, trigger_desc] : triggers_) {
+            trigger_desc.node_order.clear();
+            trigger_desc.node_order.resize(max_layer + 1);
+
+            // 第一个单元填充具体的order
+            for(int i=0; i<=max_layer; i++) {
+                trigger_desc.node_order[i] = {i, {}};
+            }
+            // 第二个单元填充并行执行的节点
+            for (std::size_t i = 0; i < orders.size(); ++i) {
+                if (trigger_graph_[i].node_tag == trigger_tag && trigger_graph_[i].node_id != TRIGGER_NODE_ID) {
+                    trigger_desc.node_order[orders[i]].second.insert(trigger_graph_[i].node_id);
+                }
+            }
+        }
     }
 
     void executeNode(NodeId node) {
@@ -741,7 +859,6 @@ private:    // ^---------------------------------------------- 私有定义 ----
 
         // 收集所有输入数据
         std::unordered_map<MessageNameRef, TensorHandle> input_data;
-
 
         for (const auto& [message_name, sub_mq_ids] : node_des.active_input_map) {
             // 如果只有一个消息发布者，简化操作
@@ -773,9 +890,9 @@ private:
     static constexpr const char* NOPUB_NODE_TAG = "default";
     static constexpr NodeId NOPUB_NODE_ID = 65536;
 
-    static constexpr const char* ENTRY_NODE_NAME = "entry";
-    static constexpr const char* ENTRY_NODE_TAG = "default";
-    static constexpr NodeId ENTRY_NODE_ID = 65537;
+    static constexpr const char* TRIGGER_NODE_NAME = "trigger";
+    static constexpr const char* TRIGGER_NODE_TAG = "$trigger";
+    static constexpr NodeId TRIGGER_NODE_ID = 65537;
 
     SimulatorContext *context_;
 
@@ -788,6 +905,8 @@ private:
 
     // Reducer
     std::unordered_set<std::unique_ptr<ReducerComponent>> reducers_;
+
+    std::unordered_map<NodeTagRef, TriggerDescription> triggers_;
 
     // 消息
     std::vector<std::pair<MessageNameRef, MessageShape>> messages_;
@@ -802,6 +921,7 @@ private:
     // 节点消息图
     Graph message_graph_;
     Graph active_graph_;
+    Graph trigger_graph_;      //
     std::unordered_map<NodeNameRef, Vertex> vertex_map;
 
     // 消息队列
@@ -810,7 +930,8 @@ private:
 
     // 执行顺序
     std::vector<std::vector<NodeId>> execution_order_;
-
+    std::unordered_map<NodeId, int> node_order_;
+    int current_execute_order_ = 0;
 };
 
 } // namespace core
