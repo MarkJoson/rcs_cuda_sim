@@ -3,6 +3,8 @@
 
 #include <string>
 #include <unordered_map>
+
+#include "core_types.hh"
 #include "storage/ITensor.h"
 
 namespace cuda_simulator
@@ -15,7 +17,7 @@ class SimulatorContext;
 class ComponentBase
 {
 public:
-    ComponentBase(const std::string &name, const std::string &tag = "default")
+    ComponentBase(const NodeName &name, const NodeTag &tag = "default")
         : component_name_(name), tag_(tag) { }
     virtual ~ComponentBase() {}
 
@@ -25,21 +27,21 @@ public:
 
     virtual void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<std::string, TensorHandle> input,
-        const std::unordered_map<std::string, TensorHandle> output) = 0;
+        const std::unordered_map<MessageNameRef, TensorHandle> input,
+        const std::unordered_map<MessageNameRef, TensorHandle> output) = 0;
 
     virtual void onReset(
         TensorHandle reset_flags,
-        std::unordered_map<std::string, TensorHandle> &state) = 0; //
+        std::unordered_map<MessageNameRef, TensorHandle> &state) = 0; //
 
 
-    const std::string& getName() const { return component_name_; }
+    const NodeName& getName() const { return component_name_; }
 
-    const std::string& getTag() const { return tag_; }
+    const NodeTag& getTag() const { return tag_; }
 
 private:
-    std::string component_name_;
-    std::string tag_;
+    NodeName component_name_;
+    NodeTag tag_;
 };
 
 } // namespace core

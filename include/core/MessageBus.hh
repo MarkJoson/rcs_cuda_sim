@@ -22,6 +22,7 @@
 #include <boost/graph/depth_first_search.hpp>
 #include <boost/graph/visitors.hpp>
 
+#include "core_types.hh"
 #include "Component.hh"
 #include "storage/ITensor.h"
 #include "storage/TensorRegistry.h"
@@ -31,24 +32,6 @@ namespace cuda_simulator
 namespace core
 {
 
-// 枚举定义
-enum class ReduceMethod {
-    STACK,      // 堆叠
-    REPLACE,    // 替换
-    SUM,        // 求和
-    MAX,        // 求最大值
-    MIN,        // 求最小值
-    AVERAGE     // 求平均值
-};
-
-using NodeId = std::uint32_t;
-using NodeName = std::string;
-using NodeNameRef = std::string_view;
-using NodeTagRef = std::string_view;
-
-using MessageId = std::uint32_t;
-using MessageName = std::string;
-using MessageNameRef = std::string_view;
 
 class MessageShape {
 public:
@@ -229,19 +212,19 @@ public:
 
     }
 
-    virtual void onEnvironGroupInit(SimulatorContext* context) override { };
+    void onEnvironGroupInit(SimulatorContext* context) override { };
 
-    virtual void onExecute(
+    void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<std::string, TensorHandle> input,
-        const std::unordered_map<std::string, TensorHandle> output
+        const std::unordered_map<MessageNameRef, TensorHandle> input,
+        const std::unordered_map<MessageNameRef, TensorHandle> output
     ) override {
 
     };
 
-    virtual void onReset(
+    void onReset(
         TensorHandle reset_flags,
-        std::unordered_map<std::string, TensorHandle> &state
+        std::unordered_map<MessageNameRef, TensorHandle> &state
     ) override {
         // TODO. 处理MessageQueue
     }
@@ -757,7 +740,7 @@ private:    // ^---------------------------------------------- 私有定义 ----
         auto &component = node_des.component;
 
         // 收集所有输入数据
-        std::map<MessageNameRef, TensorHandle> input_data;
+        std::unordered_map<MessageNameRef, TensorHandle> input_data;
 
 
         for (const auto& [message_name, sub_mq_ids] : node_des.active_input_map) {
@@ -775,7 +758,7 @@ private:    // ^---------------------------------------------- 私有定义 ----
             }
         }
 
-        std::map<MessageNameRef, TensorHandle> output_data;
+        std::unordered_map<MessageNameRef, TensorHandle> output_data;
 
         for (const auto& [message_name, mq_id] : node_des.active_output_map) {
             output_data[message_name] = message_queues_[mq_id]->getWriteTensor();
