@@ -2,9 +2,8 @@
 #define CUDASIM_SIMULATOR_CONTEXT_HH
 
 #include <memory>
-#include <MessageBus.hh>
-#include <Component.hh>
-#include <EnvironGroupConfigItem.hh>
+#include "MessageBus.hh"
+#include "Component.hh"
 
 
 namespace cuda_simulator
@@ -15,11 +14,15 @@ namespace core
 class SimulatorContext
 {
 public:
-    SimulatorContext() {}
+    SimulatorContext() {
+        message_bus = std::make_unique<MessageBus>(this);
+    }
     virtual ~SimulatorContext() {}
 
     void registerComponent() {}
-    void getMessageBus() {}
+    MessageBus* getMessageBus() {
+        return message_bus.get();
+    }
     void getEnvironGroupManager() {}
 
     void loadBasicComponent() {}

@@ -1,7 +1,7 @@
 #ifndef __GTENSOR_TORCH_WRAPPER_H__
 #define __GTENSOR_TORCH_WRAPPER_H__
 
-#include "ITensor.h"
+#include "ITensor.hh"
 
 namespace cuda_simulator
 {

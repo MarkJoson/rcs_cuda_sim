@@ -5,7 +5,7 @@
 #include <unordered_map>
 
 #include "core_types.hh"
-#include "storage/ITensor.h"
+#include "storage/ITensor.hh"
 
 namespace cuda_simulator
 {
@@ -27,8 +27,8 @@ public:
 
     virtual void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<MessageNameRef, TensorHandle> input,
-        const std::unordered_map<MessageNameRef, TensorHandle> output) = 0;
+        const std::unordered_map<MessageNameRef, TensorHandle> &input,
+        const std::unordered_map<MessageNameRef, TensorHandle> &output) = 0;
 
     virtual void onReset(
         TensorHandle reset_flags,

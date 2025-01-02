@@ -1,7 +1,7 @@
 #ifndef __TENSOR_REGISTRY_MANAGER_H__
 #define __TENSOR_REGISTRY_MANAGER_H__
 
-#include "TensorRegistry.h"
+#include "TensorRegistry.hh"
 
 namespace cuda_simulator
 {

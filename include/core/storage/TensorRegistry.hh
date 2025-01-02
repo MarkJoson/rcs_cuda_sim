@@ -5,7 +5,7 @@
 #include <memory>
 #include <unordered_map>
 #include <vector>
-#include "ITensor.h"
+#include "ITensor.hh"
 
 namespace cuda_simulator
 {

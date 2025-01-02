@@ -6,6 +6,7 @@
 #include <string>
 #include <typeindex>
 #include <any>
+
 namespace cuda_simulator
 {
 namespace core

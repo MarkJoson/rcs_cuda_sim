@@ -7,6 +7,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <optional>
+#include <vector>
 #include "config.h"
 #include "cuda_helper.h"
 
@@ -89,6 +90,10 @@ public:
             }
             const_mem_offset = constant_mempool_offset_;
             constant_mempool_offset_ += pre_alloc_size;
+
+            // 初始化常量内存空间
+            std::vector<typename EGConfigCls::valueType> host_mem(MAX_NUM_ACTIVE_ENV_GROUP, default_value);
+            checkCudaErrors(cudaMemcpyToSymbol(env_group_impl::constant_mem_pool + const_mem_offset, host_mem.data(), sizeof(T)*MAX_NUM_ACTIVE_ENV_GROUP));
         }
 
         // 不论如何，会在Global memory中申请，所需内存是最大内存组的数量
@@ -97,7 +102,12 @@ public:
             if(dev_memsize != 0 && dev_memsize != sizeof(T)*MAX_NUM_ENV_GROUP) {
                 std::cerr << "wrong dev_memsize! it should be sizeof(T)*MAX_NUM_ENV_GROUP" << std::endl;
             }
+
             checkCudaErrors(cudaMalloc(dev_ptr, sizeof(T)*MAX_NUM_ENV_GROUP));
+
+            // 初始化全局内存空间
+            std::vector<typename EGConfigCls::valueType> host_mem(MAX_NUM_ENV_GROUP, default_value);
+            checkCudaErrors(cudaMemcpy(dev_ptr, host_mem.data(), sizeof(T)*MAX_NUM_ENV_GROUP, cudaMemcpyHostToDevice));
         }
 
         auto item = std::make_unique<EGConfigCls>(sizeof(T), mem_type, dev_ptr, const_mem_offset);

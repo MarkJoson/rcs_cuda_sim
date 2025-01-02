@@ -12,7 +12,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <queue>
 
 #include <boost/utility.hpp>
 #include <boost/graph/adjacency_list.hpp>
@@ -26,14 +25,15 @@
 
 #include "core_types.hh"
 #include "Component.hh"
-#include "storage/ITensor.h"
-#include "storage/TensorRegistry.h"
+#include "storage/ITensor.hh"
+#include "storage/TensorRegistry.hh"
 
 namespace cuda_simulator
 {
 namespace core
 {
 
+class SimulatorContext;
 
 class MessageShape {
 public:
@@ -167,8 +167,8 @@ public:
 
     void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<MessageNameRef, TensorHandle> input,
-        const std::unordered_map<MessageNameRef, TensorHandle> output
+        const std::unordered_map<MessageNameRef, TensorHandle> &input,
+        const std::unordered_map<MessageNameRef, TensorHandle> &output
     ) override {
 
     };
@@ -321,6 +321,9 @@ public:
 
         // 6. 更新Node的Input-MessageQueue映射
         updateNodeDescription();
+
+        // 7. 添加触发器到图中
+        addTriggerToGraph();
     }
 
     void clearAll() {
@@ -372,6 +375,14 @@ public:
 
     void resetExecuteOrder() {
         current_execute_order_ = 0;
+    }
+
+    int getCurrentExecuteOrder() {
+        return current_execute_order_;
+    }
+
+    int getNodeOrder(NodeId node_id) {
+        return node_order_[node_id];
     }
 
 
