@@ -44,6 +44,12 @@ public:
     virtual void copyFrom(const Derived& other) = 0;
     virtual void copyTo(Derived& other) const = 0;
 
+    // Gather方法
+    virtual void gather_sum(const std::vector<const Derived*> src) = 0;
+    virtual void gather_mean(const std::vector<const Derived*> src) = 0;
+    virtual void gather_max(const std::vector<const Derived*> src) = 0;
+    virtual void gather_min(const std::vector<const Derived*> src) = 0;
+
     template<typename T>
     T item() const { return derived().template item_impl<T>(); }
 

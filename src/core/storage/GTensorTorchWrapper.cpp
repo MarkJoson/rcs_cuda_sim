@@ -110,9 +110,9 @@ GTensorTorchWrapper::GTensorTorchWrapper(const Scalar &scalar)
     impl_->tensor = torch::full({}, internal::toTorchScalar(scalar), options);
 }
 
-GTensorTorchWrapper::~GTensorTorchWrapper() {
-    std::cout << "GTensorTorchWrapper::~GTensorTorchWrapper()" << std::endl;
-}
+// GTensorTorchWrapper::~GTensorTorchWrapper() {
+//     std::cout << "GTensorTorchWrapper::~GTensorTorchWrapper()" << std::endl;
+// }
 
 // 数据访问实现
 // 打印实现
@@ -370,6 +370,60 @@ GTensorTorchWrapper& GTensorTorchWrapper::mul_inplace_scalar_impl(const Scalar& 
 GTensorTorchWrapper& GTensorTorchWrapper::div_inplace_scalar_impl(const Scalar& scalar) {
     impl_->tensor.div_(internal::toTorchScalar(scalar));
     return *this;
+}
+
+void GTensorTorchWrapper::gather_sum(const std::vector<const GTensorTorchWrapper*> src) {
+    std::vector<torch::Tensor> tensors;
+    tensors.reserve(src.size());
+
+    // 收集所有源张量
+    for (const auto* tensor : src) {
+        tensors.push_back(tensor->impl_->tensor);
+    }
+
+    // 使用stack在新维度上堆叠所有张量，然后在该维度上求和
+    auto stacked = torch::stack(tensors, 0);
+    impl_->tensor = torch::sum(stacked, 0);
+}
+
+void GTensorTorchWrapper::gather_mean(const std::vector<const GTensorTorchWrapper*> src) {
+    std::vector<torch::Tensor> tensors;
+    tensors.reserve(src.size());
+
+    for (const auto* tensor : src) {
+        tensors.push_back(tensor->impl_->tensor);
+    }
+
+    auto stacked = torch::stack(tensors, 0);
+    impl_->tensor = torch::mean(stacked, 0);
+}
+
+void GTensorTorchWrapper::gather_max(const std::vector<const GTensorTorchWrapper*> src) {
+    std::vector<torch::Tensor> tensors;
+    tensors.reserve(src.size());
+
+    for (const auto* tensor : src) {
+        tensors.push_back(tensor->impl_->tensor);
+    }
+
+    auto stacked = torch::stack(tensors, 0);
+    // max 返回两个值：最大值和最大值的索引，我们只需要最大值
+    auto [values, indices] = torch::max(stacked, 0);
+    impl_->tensor = values;
+}
+
+void GTensorTorchWrapper::gather_min(const std::vector<const GTensorTorchWrapper*> src) {
+    std::vector<torch::Tensor> tensors;
+    tensors.reserve(src.size());
+
+    for (const auto* tensor : src) {
+        tensors.push_back(tensor->impl_->tensor);
+    }
+
+    auto stacked = torch::stack(tensors, 0);
+    // min 返回两个值：最小值和最小值的索引，我们只需要最小值
+    auto [values, indices] = torch::min(stacked, 0);
+    impl_->tensor = values;
 }
 
 } // namespace core

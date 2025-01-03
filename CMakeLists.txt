@@ -95,6 +95,7 @@ add_executable(test_core
     src/test_core.cu
     src/core/storage/GTensorTorchWrapper.cpp
     src/core/storage/TensorRegistryManager.cpp
+    src/core/ReducerComponent.cc
 )
 
 # 设置目标属性

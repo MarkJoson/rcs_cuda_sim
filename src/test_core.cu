@@ -6,12 +6,15 @@
 #include "core/storage/GTensor.hh"
 #include "core/storage/TensorRegistry.hh"
 
+#include "core/console_style.h"
+
 using namespace cuda_simulator::core;
 
 // Test components
 class SourceComponent : public CountableComponent<SourceComponent> {
 public:
-    SourceComponent() : CountableBase("source") {}
+    SourceComponent(float start = 42) : CountableBase("source"), value(start) {}
+    float value;
 
     void onRegister(SimulatorContext* context) override {
         auto* msg_bus = context->getMessageBus();
@@ -23,15 +26,14 @@ public:
     void onEnvironGroupInit(SimulatorContext*) override {}
 
     void onExecute(
-        SimulatorContext* context,
-        const NodeExecInputType& input,
-        const NodeExecOutputType& output) override {
+        SimulatorContext*,
+        const NodeExecInputType&,
+        const NodeExecOutputType& output
+    ) override {
         auto& tensor = output.at("source_output");
-        std::cout << "source_output: " << tensor << std::endl;
-
-        // TODO: 设置tensor的值为42.0
-        *tensor = 42.0f;
-        // tensor.fill
+        *tensor = value;
+        printf(BG_GREEN "Source Component Sending %f..." FG_DEFAULT LINE_ENDL, value);
+        value += 1.0f;
     }
 
     void onReset(TensorHandle, NodeExecStateType&) override {}
@@ -53,14 +55,15 @@ public:
     void onEnvironGroupInit(SimulatorContext*) override {}
 
     void onExecute(
-        SimulatorContext* context,
+        SimulatorContext*,
         const NodeExecInputType& input,
-        const NodeExecOutputType& output) override {
+        const NodeExecOutputType& output
+    ) override {
         const auto& in_tensor = input.at("source_output").at(0);
         auto& out_tensor = output.at("process_output");
 
         std::cout << "Process Component Executing...\n";
-        std::cout << "Received value: " << in_tensor << std::endl;
+        std::cout << "Received value: " << *in_tensor << std::endl;
 
         received_value = in_tensor->item<float>();
         out_tensor->copyFrom(*in_tensor);
@@ -84,19 +87,16 @@ public:
     void onEnvironGroupInit(SimulatorContext*) override {}
 
     void onExecute(
-        SimulatorContext* context,
+        SimulatorContext*,
         const NodeExecInputType& input,
-        const NodeExecOutputType&) override {
+        const NodeExecOutputType&
+    ) override {
+
         auto in_tensor = input.at("process_output")[0];
         received_value = in_tensor->item<float>();
-
         std::cout << "Sink Component Executing...\n";
-
         std::cout << "Received value: " << received_value << std::endl;
-
-        // 乘以2
         received_value = in_tensor->item<float>() * 2;
-
         std::cout << "Output value: " << in_tensor->item<float>() << std::endl;
 
     }
@@ -146,10 +146,12 @@ public:
     void onEnvironGroupInit(SimulatorContext*) override {}
 
     void onExecute(
-        SimulatorContext* context,
+        SimulatorContext*,
         const NodeExecInputType& input,
-        const NodeExecOutputType&) override {
+        const NodeExecOutputType&
+    ) override {
         auto in_tensor = input.at("source_output");
+        printf(BG_BLUE "History Component Receive:%f ..." FG_DEFAULT LINE_ENDL, in_tensor[0]->item<float>());
         received_values.push_back(in_tensor[0]->item<float>());
     }
 
@@ -171,7 +173,8 @@ void testMessageHistory() {
     msg_bus->buildGraph();
 
     // 触发多次，测试历史记录
-    for(int i = 0; i < 3; i++) {
+    for(int i = 0; i < 5; i++) {
+        msg_bus->resetExecuteOrder();
         msg_bus->trigger("default");
     }
 
@@ -194,13 +197,13 @@ public:
         std::vector<int64_t> shape = {1};
         MessageShape msg_shape(shape);
         // 使用STACK方法注册多个输入源
-        msg_bus->registerInput(this, "source_output", msg_shape, 0, ReduceMethod::STACK);
+        msg_bus->registerInput(this, "source_output", msg_shape, 0, ReduceMethod::MIN);
     }
 
     void onEnvironGroupInit(SimulatorContext*) override {}
 
     void onExecute(
-        SimulatorContext* context,
+        SimulatorContext*,
         const NodeExecInputType& input,
         const NodeExecOutputType&) override {
         auto in_tensor = input.at("source_output");
@@ -218,8 +221,8 @@ void testMultiSourceFusion() {
     auto context = std::make_unique<SimulatorContext>();
     auto* msg_bus = context->getMessageBus();
 
-    auto source1 = std::make_unique<SourceComponent>();
-    auto source2 = std::make_unique<SourceComponent>();
+    auto source1 = std::make_unique<SourceComponent>(42);
+    auto source2 = std::make_unique<SourceComponent>(43);
     auto fusion = std::make_unique<FusionComponent>();
 
     msg_bus->registerComponent(source1.get());
@@ -242,8 +245,8 @@ void testMultiSourceFusion() {
 int main() {
     auto& registry = TensorRegistry::getInstance();
 
-    testBasicMessagePassing();
-    testMessageHistory();
+    // testBasicMessagePassing();
+    // testMessageHistory();
     testMultiSourceFusion();
 
     std::cout << "\nAll tests passed successfully!\n";

@@ -21,12 +21,14 @@ template<typename T>
 inline constexpr bool always_false_v = false;
 
 // PyTorch后端的基类实现
-class GTensorTorchWrapper : public ITensor<GTensorTorchWrapper> {
+class GTensorTorchWrapper final : public ITensor<GTensorTorchWrapper> {
     friend class ITensor<GTensorTorchWrapper>;
 public:
     // explicit GTensorTorchWrapper();
     explicit GTensorTorchWrapper(const std::vector<int64_t>& shape, NumericalDataType dtype);
     explicit GTensorTorchWrapper(const Scalar& scalar);
+
+    virtual ~GTensorTorchWrapper() final = default;
 
     GTensorTorchWrapper(const GTensorTorchWrapper& other)
         : impl_(internal::shareTorchTensorImpl(other.impl_)), dtype_(other.dtype_) {}
@@ -56,7 +58,6 @@ public:
         return *this;
     }
 
-    ~GTensorTorchWrapper();
 
     std::vector<int64_t> shape() const override;
     size_t elemCount() const override;
@@ -81,6 +82,11 @@ public:
     // Scalar方法实现
     Scalar toScalar() const override;
     GTensorTorchWrapper& fromScalar(const Scalar& scalar) override;
+
+    void gather_sum(const std::vector<const GTensorTorchWrapper*> src) override;
+    void gather_mean(const std::vector<const GTensorTorchWrapper*> src) override;
+    void gather_max(const std::vector<const GTensorTorchWrapper*> src) override;
+    void gather_min(const std::vector<const GTensorTorchWrapper*> src) override;
 
 protected:
     // 具体实现方法

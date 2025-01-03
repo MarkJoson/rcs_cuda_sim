@@ -19,12 +19,24 @@ namespace core
 // 枚举定义
 enum class ReduceMethod {
     STACK,      // 堆叠
-    REPLACE,    // 替换
     SUM,        // 求和
     MAX,        // 求最大值
     MIN,        // 求最小值
     AVERAGE     // 求平均值
 };
+
+inline std::string reduce_method_to_string(ReduceMethod method) {
+    switch (method) {
+        case ReduceMethod::STACK: return "STACK";
+        case ReduceMethod::SUM: return "SUM";
+        case ReduceMethod::MAX: return "MAX";
+        case ReduceMethod::MIN: return "MIN";
+        case ReduceMethod::AVERAGE: return "AVERAGE";
+        default: return "UNKNOWN";
+    }
+}
+
+
 
 using NodeId = std::uint32_t;
 using NodeName = std::string;

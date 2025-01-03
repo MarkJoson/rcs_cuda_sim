@@ -29,10 +29,11 @@
 
 #include <boost/format.hpp>
 
+#include "console_style.h"
 #include "core_types.hh"
 #include "Component.hh"
-#include "storage/ITensor.hh"
-#include "storage/TensorRegistry.hh"
+#include "MessageQueue.hh"
+#include "ReducerComponent.hh"
 
 namespace cuda_simulator
 {
@@ -43,153 +44,6 @@ class SimulatorContext;
 
 using MessageQueueId = std::uint32_t;
 using DescriptionId = std::int32_t;
-
-
-// &---------------------------------------------- MessageQueue -------------------------------------------------------
-class MessageQueue {
-public:
-    explicit MessageQueue(NodeId pub_node_id, NodeNameRef pub_node_name, MessageId message_id, MessageNameRef message_name,
-        MessageShapeRef shape, size_t max_history_len, std::optional<TensorHandle> history_padding_val = std::nullopt)
-        : pub_node_id_(pub_node_id)
-        , pub_node_name_(pub_node_name)
-        , message_id_(message_id)
-        , message_name_(message_name)
-        , shape_(shape)
-        , max_history_len_(max_history_len)
-        , history_padding_val_(history_padding_val)
-        , write_index_(0)
-        , valid_count_(0)
-        , history_() {
-            allocate();
-        }
-
-    // 申请消息队列空间
-    void allocate() {
-        history_.clear();
-
-        for(size_t i = 0; i < max_history_len_; i++) {
-            std::string tensor_uri = generateTensorUri(i);
-            // 根据shape创建对应的tensor
-            history_.push_back(createTensorByShape(tensor_uri, shape_));
-
-            if(history_padding_val_.has_value()) {
-                // 填充历史数据
-                history_[i] = *history_padding_val_;
-            }
-        }
-    }
-
-    // 获取历史消息
-    const TensorHandle* getHistoryTensorPtr(size_t offset) {
-        if (offset >= max_history_len_) {
-            throw std::runtime_error("Invalid history offset");
-        }
-
-        int index = (write_index_ - offset + max_history_len_) % max_history_len_;
-        return &history_[index];
-    }
-
-    // 获取当前的写入Tensor
-    TensorHandle* getWriteTensorPtr() {
-        auto &result = history_[write_index_];
-        write_index_ = (write_index_ + 1) % max_history_len_;
-        return &result;
-    }
-
-    // TODO. 增加一个添加外部WriteTensor的接口，当history_len=1时，可以直接使用外部的Tensor
-
-    void resetEnvData(int env_group_id, int env_id) {
-        // TODO.
-    }
-
-    void reset() {
-        valid_count_ = 0;
-        write_index_ = 0;
-    }
-
-private:
-    std::string generateTensorUri(size_t index) const {
-        // 生成唯一的tensor URI: message_name/node_id/history_index
-        return std::string(message_name_) + "/" +
-               std::string(pub_node_name_) + "/" +
-               std::to_string(index);
-    }
-
-    TensorHandle createTensorByShape(const std::string& uri, const MessageShapeRef& shape) {
-        // 根据shape的维度创建tensor
-        std::vector<int64_t> tensor_shape;
-        for(int64_t i = 0; i < shape.size(); i++) {
-            tensor_shape.push_back(shape[i]);
-        }
-        // 创建float类型的tensor
-        // 注意：这里假设所有tensor都是float类型，如果需要支持其他类型，需要添加类型参数
-        return TensorRegistry::getInstance().createTensor<float>(uri, tensor_shape);
-    }
-
-private:
-    NodeId      pub_node_id_;
-    NodeNameRef pub_node_name_;
-
-    MessageId   message_id_;
-    MessageNameRef message_name_;
-
-    MessageShapeRef shape_;
-    size_t max_history_len_;
-    std::optional<TensorHandle> history_padding_val_;
-
-    size_t write_index_ = 0;
-    size_t valid_count_ = 0;
-
-    // [History_len, env_group_size, env_cnt, *shape...]
-    std::vector<TensorHandle> history_;
-};
-
-
-
-// &---------------------------------------------- ReducerComponent -------------------------------------------------------
-class ReducerComponent : public Component {
-
-public:
-    ReducerComponent(const MessageNameRef &message_name, ReduceMethod reduce_method, MessageShape shape)
-        : Component(generateNodeName(message_name, reduce_method)), message_shape_(shape) {
-
-    }
-
-    MessageNameRef getOutputMessageName() {
-        return getName();
-    }
-
-    static MessageName generateNodeName(const MessageNameRef &message_name, ReduceMethod reduce_method) {
-        return std::string(message_name) + "." + std::to_string(static_cast<int>(reduce_method));
-    }
-
-    void onRegister(SimulatorContext* context) override {
-        // 注册组件
-
-    }
-
-    void onEnvironGroupInit(SimulatorContext* context) override { };
-
-    void onExecute(
-        SimulatorContext* context,
-        const NodeExecInputType &input,
-        const NodeExecOutputType &output
-    ) override {
-
-    };
-
-    void onReset(
-        TensorHandle reset_flags,
-        NodeExecStateType &state
-    ) override {
-        // TODO. 处理MessageQueue
-    }
-
-    // void onInit
-private:
-    MessageShape message_shape_;
-};
-
 
 // &---------------------------------------------- MessageBus -------------------------------------------------------
 class MessageBus
@@ -385,12 +239,9 @@ public:
                 continue;
 
             // TODO. 下述节点可以并行执行
-            printf("~~~~~~~~~~ Trigger [%s] order %d Parallel ↓↓↓↓↓ ~~~~~~~~~~\n", trigger_tag.data(), node_order);
             for (NodeId node_id : node_ids) {
-                printf("Execute Node: %s\n", node_descriptions_[node_id].node_name.data());
                 executeNode(node_id);
             }
-            printf("~~~~~~~~~~~~~~~~~~~~ Parallel ↑↑↑↑↑ ~~~~~~~~~~~~~~~~~~~~\n\n");
             current_execute_order_ ++;
         }
     }
@@ -562,78 +413,119 @@ private:    // ^---- 私有定义 -----
         return message_id;
     }
 
-    ReducerComponent* lookUpOrCreateReducerNode(const MessageNameRef& message_name, const ReduceMethod& reduce_method, const MessageShape &shape) {
+    MessageName generateReducerNodeName(const MessageNameRef &message_name, ReduceMethod reduce_method) {
+        return std::string(message_name) + "." + reduce_method_to_string(reduce_method);
+    }
+
+    ReducerComponent* lookUpOrCreateReducerNode(
+        const NodeTagRef& sub_node_tag, const MessageNameRef& message_name,
+        const ReduceMethod& reduce_method, int history_offset, const MessageShape &shape
+    ) {
         // reducer 组件的命名规则为 messageName.reduceMethod
         // 新的消息id为 messageName.reduceMethod
-        NodeName reducer_name = ReducerComponent::generateNodeName(message_name, reduce_method);
-        ReducerComponent *p_com;
+        NodeName reducer_name = generateReducerNodeName(message_name, reduce_method);
+        ReducerComponent *p_com = nullptr;
 
         auto finder = node_id_map_.find(reducer_name);
         if (finder == node_id_map_.end()) {
-            auto new_component = std::make_unique<ReducerComponent>(message_name, reduce_method, shape);
+            auto new_component = std::make_unique<ReducerComponent>(
+                reducer_name,
+                std::string(sub_node_tag),
+                message_name,
+                reducer_name,               // 使用reducer_name作为消息发送名称
+                reduce_method,
+                history_offset,
+                shape);
             p_com = new_component.get();
             registerComponent(p_com);
-            reducers_.insert(std::move(new_component));
+            MessageNameRef reducer_output_message_name = p_com->getOutputMessageName();
+            reducers_.insert(std::make_pair(reducer_output_message_name, std::move(new_component)));
         } else {
-            p_com = static_cast<ReducerComponent*>(node_descriptions_[finder->second].component);
+            p_com = static_cast<ReducerComponent*>(node_descriptions_[ finder->second ].component);
         }
 
         return p_com;
     }
 
     void adjustMessageRoutes() {
-        std::unordered_map<MessageId, MessageRoute> newRoutes = message_routes_;
+        /// 处理多发布者发布同一个消息的情况，为ReduceMethod!=STACK的订阅者创建Reducer节点
 
-        // 遍历所有消息, 处理多发布者发布同一个一个消息的情况
-        for (auto& [message_id, routes] : message_routes_) {
+        // 由于需要修改message_routes_，因此使用原有的路由表进行遍历
+        auto origin_routes = message_routes_;
+
+        // 处理所有的ReuceMethod!=STACK的订阅者，向路由中增加Reducer节点
+        for (auto& [message_id, routes] : origin_routes) {
             auto& [pub_ids, sub_ids] = routes;
 
             for (auto sub_id : sub_ids) {
-                auto& sub = input_descriptions_[sub_id];
+                auto *sub = &input_descriptions_[sub_id];
 
                 // 仅有一个publisher时，统一将reduce_method设置为stack
                 if (pub_ids.size() == 1) {
-                    sub.stack_order.clear();
-                    sub.reduce_method = ReduceMethod::STACK;
+                    sub->stack_order.clear();
+                    sub->reduce_method = ReduceMethod::STACK;
                 }
 
                 // 如果不是STACK，则需要创建reducer组件
-                if (sub.reduce_method != ReduceMethod::STACK) {
-                    auto reducer = lookUpOrCreateReducerNode(sub.message_name, sub.reduce_method, sub.shape);
+                if (sub->reduce_method != ReduceMethod::STACK) {
+                    const NodeTagRef &node_tag = node_descriptions_.at(sub->node_id).node_tag;
+                    auto reducer = lookUpOrCreateReducerNode(
+                        node_tag,
+                        sub->message_name,
+                        sub->reduce_method,
+                        sub->history_offset,
+                        sub->shape);
+
+                    // ! 需要重新索引sub，否则会因为向input_descriptions_插入导致引用失效
+                    sub = &input_descriptions_[sub_id];
 
                     // 更改newRoute中的subscriber的接收消息id，为Reducer发布的消息ID
                     MessageNameRef reducer_pub_msg_name = reducer->getOutputMessageName();
-                    sub.message_name = reducer_pub_msg_name;
-                    sub.message_id = message_id_map_[reducer_pub_msg_name];
+                    sub->message_name = reducer_pub_msg_name;
+                    sub->message_id = message_id_map_.at(reducer_pub_msg_name);
+                    sub->reduce_method = ReduceMethod::STACK;       // reduce_method由reducer继承，重置reduce_method为STACK
+                    sub->history_offset = 0;                        // history_offset由reducer继承，重置history_offset为0
 
-                    newRoutes[message_id_map_[reducer_pub_msg_name]].second.insert(sub_id);
+                    message_routes_.at(message_id_map_.at(reducer_pub_msg_name)).second.insert(sub_id);
                     // 删除原有message到subscriber的消息路由
-                    newRoutes[message_id].second.erase(sub_id);
+                    message_routes_.at(message_id).second.erase(sub_id);
                 }
+            }
+        }
 
-                // 在最后只允许reduce_method==STACK
-                // 为空时，按照默认顺序填充stack_order
-                if (sub.stack_order.size() == 0) {
+        adjusted_message_routes_ = message_routes_;     // 此时的路由表添加了reducer节点，为新的路由表
+        message_routes_ = std::move(origin_routes);     // 回复原有的路由表
+
+        // &*------ 修改stack_order，使用新的路由表 -------
+        for (auto& [message_id, routes] : adjusted_message_routes_) {
+            auto& [pub_ids, sub_ids] = routes;
+
+            for (auto sub_id : sub_ids) {
+                auto *sub = &input_descriptions_[sub_id];
+
+                printf(FG_CYAN "stack_order size: %d" FG_DEFAULT LINE_ENDL, sub->stack_order.size());
+
+                if (sub->stack_order.size() == 0) {
                     for (auto pub_id : pub_ids) {
-                        sub.stack_order.push_back( output_descriptions_[pub_id].node_name );
+                        sub->stack_order.push_back( output_descriptions_[pub_id].node_name );
                     }
                 }
 
-                assert(sub.stack_order.size() == pub_ids.size());
+                assert(sub->stack_order.size() == pub_ids.size());
 
                 // 将stack_order转换为node_id
-                for (auto& stack_node : sub.stack_order) {
+                for (auto& stack_node : sub->stack_order) {
                     if (node_id_map_.find(stack_node) == node_id_map_.end()) {
                         throw std::runtime_error("Invalid stack order");
                     }
 
                     // NodeNameRef -> NodeId -> Node Description -> Publisher DescriptionId
-                    DescriptionId pub_id = node_descriptions_[ node_id_map_[stack_node] ].output_map[message_id];
-                    sub.stack_order_pub_id.push_back(pub_id);
+                    DescriptionId pub_id = node_descriptions_.at( node_id_map_.at(stack_node) ).output_map.at(message_id);
+                    sub->stack_order_pub_id.push_back(pub_id);
                 }
             }
         }
-        adjusted_message_routes_ = std::move(newRoutes);
+
     }
 
     void buildMessageGraph() {
@@ -667,13 +559,13 @@ private:    // ^---- 私有定义 -----
             for (const auto& sub_id : sub_ids) {   // 遍历所有订阅者
                 const auto& sub = input_descriptions_[sub_id];
                 if (pub_ids.empty()) {   // 没有发布者, 添加边到no_pub_vertex
-                    Vertex sub_vertex = vertex_map[sub.node_name];
+                    Vertex sub_vertex = vertex_map.at(sub.node_name);
                     boost::add_edge(no_pub_vertex, sub_vertex, {message_id, NOPUB_NODE_ID, sub_id}, message_graph_);
                 } else {
                     for (const auto& pub_id : pub_ids) {
                         const auto& pub = output_descriptions_[pub_id];
-                        Vertex pub_vertex = vertex_map[pub.node_name];
-                        Vertex sub_vertex = vertex_map[sub.node_name];
+                        Vertex pub_vertex = vertex_map.at(pub.node_name);
+                        Vertex sub_vertex = vertex_map.at(sub.node_name);
                         boost::add_edge(pub_vertex, sub_vertex, {message_id, pub_id, sub_id}, message_graph_);
                     }
                 }
@@ -682,7 +574,7 @@ private:    // ^---- 私有定义 -----
 
         // 删除no_pub的后续节点
         std::vector<Vertex> inactive_nodes;
-        boost::breadth_first_search(message_graph_, vertex_map["no_pub"],
+        boost::breadth_first_search(message_graph_, vertex_map.at("no_pub"),
             boost::visitor(VertexVisitor(inactive_nodes)));
 
         // // 删除出度为0的节点
@@ -731,7 +623,7 @@ private:    // ^---- 私有定义 -----
                 active_messages_routes_[message_id] = {{},{}};
             }
 
-            auto &[pub_ids, sub_ids] = active_messages_routes_[message_id];
+            auto &[pub_ids, sub_ids] = active_messages_routes_.at(message_id);
             pub_ids.insert(edge_properties.pub_des_id);
             sub_ids.insert(edge_properties.sub_des_id);
         }
@@ -744,13 +636,13 @@ private:    // ^---- 私有定义 -----
             for(std::tie(ei, eind) = boost::out_edges(*vi, active_graph_); ei!=eind; ei++) {
                 const EdgeProperties &edge_props = active_graph_[*ei];
                 MessageId message_id = edge_props.message_id;
-                const MessageNameRef& message_name = messages_[message_id].first;
+                const MessageNameRef& message_name = messages_.at(message_id).first;
                 OutputDescription &pub = output_descriptions_[ edge_props.pub_des_id ];
 
                 int max_mq_history_offset = 0;
 
                 // 遍历当前消息的所有接收者，得到最大历史长度
-                for(auto sub_id : active_messages_routes_[message_id].second) {
+                for(auto sub_id : active_messages_routes_.at(message_id).second) {
                     const auto &sub = input_descriptions_[sub_id];
 
                     if(pub.shape != sub.shape) {
@@ -776,10 +668,10 @@ private:    // ^---- 私有定义 -----
 
     void updateNodeDescription() {
         /// 更新节点描述信息，包括active_inputs, active_outputs, active_input_map, active_output_map
-        /// 这些信息将在执行时用于消息传递。
+        /// 这些信息将在执行时用于消息传递。特别注意，如果使用了Reducer节点，那么需要将Reducer节点的输入消息名作为标识符。
 
         for(auto [vi, vend] = boost::vertices(active_graph_); vi!=vend; vi++) {
-            NodeDescription &node_des = node_descriptions_[ active_graph_[*vi].node_id ];
+            NodeDescription &node_des = node_descriptions_.at( active_graph_[*vi].node_id );
 
             VertexInEdgeIterator ein_i, ein_ind;
             for(std::tie(ein_i, ein_ind) = boost::in_edges(*vi, active_graph_); ein_i!=ein_ind; ein_i++) {
@@ -805,7 +697,7 @@ private:    // ^---- 私有定义 -----
                 const MessageNameRef &message_name = input_descriptions_[sub_id].message_name;
                 InputDescription &sub = input_descriptions_[sub_id];
 
-                auto &active_pubs = active_messages_routes_[message_id].first;
+                auto &active_pubs = active_messages_routes_.at(message_id).first;
 
                 // 所有其他方法都由Reducer节点处理了
                 assert (sub.reduce_method == ReduceMethod::STACK);
@@ -818,7 +710,16 @@ private:    // ^---- 私有定义 -----
                     const auto &pub = output_descriptions_[pub_id];
                     mq_ids.push_back({pub.queue_id, sub.history_offset});
                 }
-                node_des.active_input_map[message_name] = mq_ids;
+
+                // 这里需要做一下特殊处理，如果是由Reducer节点发布的消息，需要将消息名的后缀.XXX去掉
+                auto finder = reducers_.find(message_name);
+                if (finder != reducers_.end()) {
+                    // 使用原消息名作为节点的输入
+                    node_des.active_input_map[finder->second->getMessageName()] = mq_ids;
+                } else {
+                    node_des.active_input_map[message_name] = mq_ids;
+                }
+
             }
 
         }
@@ -911,7 +812,7 @@ private:    // ^---- 私有定义 -----
     void executeNode(NodeId node) {
         /// 执行节点，将节点的输出写入消息队列
 
-        auto &node_des = node_descriptions_[node];
+        auto &node_des = node_descriptions_.at(node);
         auto &component = node_des.component;
 
         // 收集所有输入数据
@@ -1014,8 +915,8 @@ private:
     std::vector<NodeDescription> node_descriptions_;
     std::unordered_map<NodeNameRef, NodeId> node_id_map_;
 
-    // Reducer
-    std::unordered_set<std::unique_ptr<ReducerComponent>> reducers_;
+    // Reducer，由映射后的消息名到Reducer节点的映射
+    std::unordered_map<MessageNameRef, std::unique_ptr<ReducerComponent>> reducers_;
 
     std::unordered_map<NodeTagRef, TriggerDescription> triggers_;
 
