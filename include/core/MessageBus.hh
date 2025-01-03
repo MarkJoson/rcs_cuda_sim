@@ -27,6 +27,8 @@
 #include <boost/graph/depth_first_search.hpp>
 #include <boost/graph/visitors.hpp>
 
+#include <boost/format.hpp>
+
 #include "core_types.hh"
 #include "Component.hh"
 #include "storage/ITensor.hh"
@@ -145,11 +147,11 @@ private:
 
 
 // &---------------------------------------------- ReducerComponent -------------------------------------------------------
-class ReducerComponent : public ComponentBase {
+class ReducerComponent : public Component {
 
 public:
     ReducerComponent(const MessageNameRef &message_name, ReduceMethod reduce_method, MessageShape shape)
-        : ComponentBase(generateNodeName(message_name, reduce_method)), message_shape_(shape) {
+        : Component(generateNodeName(message_name, reduce_method)), message_shape_(shape) {
 
     }
 
@@ -195,7 +197,7 @@ class MessageBus
 public:
     MessageBus(SimulatorContext *context) : context_(context)  {};
 
-    void registerComponent(ComponentBase* component) {
+    void registerComponent(Component* component) {
         // std::lock_guard<std::mutex> lock(mutex_);
         // TODO.
 
@@ -206,7 +208,7 @@ public:
     }
 
     void registerInput(
-        ComponentBase* component,
+        Component* component,
         const MessageNameRef &message_name,
         const MessageShape &shape,
         int history_offset = 0,
@@ -250,7 +252,7 @@ public:
 
 
     void registerOutput(
-        ComponentBase* component,
+        Component* component,
         const MessageNameRef &message_name,
         const MessageShape &shape,
         std::optional<TensorHandle> history_padding_val = std::nullopt
@@ -302,9 +304,12 @@ public:
             throw std::runtime_error("Trigger already exists");
         }
 
+        MessageId trigger_msg_id = lookUpOrCreateMessageId(trigger_tag, {});
+
         triggers_[trigger_tag] = {
             0,
             trigger_tag,
+            trigger_msg_id,
             {}
         };
     }
@@ -320,22 +325,22 @@ public:
         buildMessageGraph();
         exportGraphVisualization(message_graph_, "MessageGraph", "message_graph.dot");
 
-        // 3. 构建活动图
-        pruneGraph();
-        exportGraphVisualization(active_graph_, "ActiveGraph", "active_graph.dot");
-
-        // 4. 检查循环依赖
+        // 3. 检查循环依赖
         checkActiveGraphLoop();
 
-        // 5. 创建消息队列
+        // 4. 创建消息队列
         createMessageQueues();
 
-        // 6. 更新Node的Input-MessageQueue映射
+        // 5. 更新Node的Input-MessageQueue映射
         updateNodeDescription();
+
+        // 6. 构建活动图
+        pruneGraphToOneStepIter();
+        exportGraphVisualization(active_graph_, "ActiveGraph", "active_graph.dot");
 
         // 7. 添加触发器到图中
         addTriggerToGraph();
-        exportGraphVisualization(trigger_graph_, "TriggerGraph", "trigger_graph.dot");
+        exportGraphVisualization(trigger_graph_, "TriggerGraph", "trigger_graph.dot", true);
     }
 
     void clearAll() {
@@ -380,9 +385,12 @@ public:
                 continue;
 
             // TODO. 下述节点可以并行执行
+            printf("~~~~~~~~~~ Trigger [%s] order %d Parallel ↓↓↓↓↓ ~~~~~~~~~~\n", trigger_tag.data(), node_order);
             for (NodeId node_id : node_ids) {
+                printf("Execute Node: %s\n", node_descriptions_[node_id].node_name.data());
                 executeNode(node_id);
             }
+            printf("~~~~~~~~~~~~~~~~~~~~ Parallel ↑↑↑↑↑ ~~~~~~~~~~~~~~~~~~~~\n\n");
             current_execute_order_ ++;
         }
     }
@@ -402,11 +410,18 @@ public:
 
 private:    // ^---- 私有定义 -----
 
+    enum class NodeType {
+        COMPONENT_NODE = 0,
+        TRIGGER_NODE = 1,
+        AUX_NOPUB_NODE = 2,
+    };
+
     // **---- 图 -----
     struct VertexProperties {
         NodeId node_id;
         NodeNameRef node_name;
         NodeTagRef node_tag;
+        NodeType node_type = NodeType::COMPONENT_NODE;
     };
     // using EdgeProperties = boost::property<boost::edge_index_t, MessageId>;
 
@@ -465,7 +480,7 @@ private:    // ^---- 私有定义 -----
         NodeId node_id;
         NodeNameRef node_name;
         NodeTagRef node_tag;
-        ComponentBase* component;
+        Component* component;
 
         std::unordered_map<MessageId, DescriptionId> input_map;
         std::unordered_map<MessageId, DescriptionId> output_map;
@@ -474,7 +489,7 @@ private:    // ^---- 私有定义 -----
         std::unordered_map<MessageId, DescriptionId> active_outputs_desc;
 
         std::unordered_map<MessageNameRef, std::vector<
-            std::pair<MessageQueueId, int>>> active_input_map;
+            std::pair<MessageQueueId, int>>> active_input_map;      // MessageQueue Id, history_offset
         std::unordered_map<MessageNameRef, MessageQueueId> active_output_map;
     };
 
@@ -485,6 +500,8 @@ private:    // ^---- 私有定义 -----
         boost::graph_traits<Graph>::vertex_descriptor trigger_vertex;
         // 触发标签
         NodeTagRef trigger_tag;
+        // 触发消息id
+        MessageId trigger_message_id;
         // 拓扑排序结果，用于并行执行
         std::vector<std::pair<int, std::unordered_set<NodeId>>> node_order;
     };
@@ -510,7 +527,7 @@ private:    // ^---- 私有定义 -----
         std::vector<Vertex>& inactive_nodes_;
     };
 
-    NodeId createNodeId(const NodeNameRef& node_name, const NodeTagRef& node_tag, ComponentBase* component) {
+    NodeId createNodeId(const NodeNameRef& node_name, const NodeTagRef& node_tag, Component* component) {
         if(node_id_map_.find(node_name) != node_id_map_.end()) {
             throw std::runtime_error("Node has been registered!");
         }
@@ -621,7 +638,7 @@ private:    // ^---- 私有定义 -----
 
     void buildMessageGraph() {
         /// 我们首先建立一个由Component作为节点，消息作为边的图。检查是否有仅订阅消息但没有发布消息的节点。
-        /// 如果有，我们将其连接到一个名为no_pub的辅助节点上。在pruneGraph()中，我们将删除no_pub节点及其后续节点。
+        /// 如果有，我们将其连接到一个名为no_pub的辅助节点上。之后，我们将删除no_pub节点及其后续节点。
 
         message_graph_.clear();
 
@@ -630,12 +647,17 @@ private:    // ^---- 私有定义 -----
             Vertex v = boost::add_vertex({
                 node_des.node_id,
                 node_des.node_name,
-                node_des.node_tag,}, message_graph_);
+                node_des.node_tag,
+                NodeType::COMPONENT_NODE}, message_graph_);
             vertex_map[node_des.node_name] = v;
         }
 
         // 添加辅助节点，用于表示无发布者的消息
-        Vertex no_pub_vertex = boost::add_vertex({NOPUB_NODE_ID, NOPUB_NODE_NAME, NOPUB_NODE_TAG}, message_graph_);
+        Vertex no_pub_vertex = boost::add_vertex({
+            NOPUB_NODE_ID,
+            NOPUB_NODE_NAME,
+            NOPUB_NODE_TAG,
+            NodeType::AUX_NOPUB_NODE}, message_graph_);
         vertex_map["no_pub"] = no_pub_vertex;
 
         // 建立消息依赖关系
@@ -657,19 +679,11 @@ private:    // ^---- 私有定义 -----
                 }
             }
         }
-    }
-
-    void pruneGraph() {
-        /// 我们首先删除所有没有发布者的消息（no_pub后续节点），然后删除所有没有出度的节点，因为这些节点不会贡献数据。
-        /// 最后，我们删除所有需要历史消息的边，因为我们将直接从消息队列中取出历史消息。
-
-        std::vector<Vertex> inactive_nodes;
 
         // 删除no_pub的后续节点
+        std::vector<Vertex> inactive_nodes;
         boost::breadth_first_search(message_graph_, vertex_map["no_pub"],
             boost::visitor(VertexVisitor(inactive_nodes)));
-
-        active_graph_ = message_graph_;
 
         // // 删除出度为0的节点
         // for (auto it = boost::vertices(active_graph_).first; it != boost::vertices(active_graph_).second; ++it) {
@@ -678,26 +692,16 @@ private:    // ^---- 私有定义 -----
         //     }
         // }
 
-        // // 删除no_pub节点
-        // inactive_nodes.push_back(vertex_map["no_pub"]);
-
-        // 打印所有会被删除的节点，用于调试
-        for (auto v : inactive_nodes) {
-            std::cout << "Inactive node: " << active_graph_[v].node_name << std::endl;
-        }
+        active_graph_ = message_graph_;
 
         // 修剪后的图作为活动图
         for (const Vertex& v : inactive_nodes) {
             boost::remove_vertex(v, active_graph_);
         }
 
-        // 删除所有需要历史消息的边
-        auto [ei, eind] = boost::edges(active_graph_);
-        while (ei != eind) {
-            auto current = ei++;
-            const auto &sub = input_descriptions_[ active_graph_[*current].sub_des_id ];
-            if (sub.history_offset > 0)
-                boost::remove_edge(*current, active_graph_);
+        // 打印所有会被删除的节点，用于调试
+        for (auto v : inactive_nodes) {
+            std::cout << "Inactive node: " << active_graph_[v].node_name << std::endl;
         }
     }
 
@@ -820,6 +824,17 @@ private:    // ^---- 私有定义 -----
         }
     }
 
+    void pruneGraphToOneStepIter() {
+        /// 我们将带有历史消息的边删除，用于后续建立依赖图和执行顺序
+        auto [ei, eind] = boost::edges(active_graph_);
+        while (ei != eind) {
+            auto current = ei++;
+            const auto &sub = input_descriptions_[ active_graph_[*current].sub_des_id ];
+            if (sub.history_offset > 0)
+                boost::remove_edge(*current, active_graph_);
+        }
+    }
+
     void addTriggerToGraph() {
         /// 为每个触发器创建一个顶点，连接所有具有相同tag的节点，计算所有节点的距离
 
@@ -830,18 +845,21 @@ private:    // ^---- 私有定义 -----
             Vertex trigger_vertex = boost::add_vertex({
                 TRIGGER_NODE_ID,
                 TRIGGER_NODE_NAME,
-                TRIGGER_NODE_TAG
-            }, trigger_graph_);
+                TRIGGER_NODE_TAG,
+                NodeType::TRIGGER_NODE}, trigger_graph_);
             trigger_desc.trigger_vertex = trigger_vertex;
 
             // 连接所有具有相同tag的节点
             typename boost::graph_traits<Graph>::vertex_iterator vi, vend;
             for (std::tie(vi, vend) = boost::vertices(trigger_graph_); vi != vend; ++vi) {
                 if (trigger_graph_[*vi].node_tag == trigger_tag) {
-                    boost::add_edge(trigger_vertex, *vi, {0, 0, 0}, active_graph_);
+                    boost::add_edge(trigger_vertex, *vi, {
+                        trigger_desc.trigger_message_id,
+                        INVALID_PUB_ID,
+                        INVALID_SUB_ID
+                    }, trigger_graph_);
                 }
             }
-            // trigger_desc.node_distances = distance_buckets;
         }
         // ---- 拓扑排序确定依赖 ----
 
@@ -879,7 +897,7 @@ private:    // ^---- 私有定义 -----
 
             // 第一个单元填充具体的order
             for(int i=0; i<=max_layer; i++) {
-                trigger_desc.node_order[i] = {i, {}};
+                trigger_desc.node_order[i] = {i-1, {}}; // 由于trigger节点是0，其他节点的order从1开始，所以减1，保证从0开始。
             }
             // 第二个单元填充并行执行的节点
             for (std::size_t i = 0; i < orders.size(); ++i) {
@@ -916,7 +934,7 @@ private:    // ^---- 私有定义 -----
         component->onExecute(context_, input_data, output_data);
     }
 
-    std::string generateGraphDot(const Graph& g, const std::string& graph_name) const {
+    std::string generateGraphDot(const Graph& g, const std::string& graph_name, bool with_order=false) const {
         std::stringstream ss;
         ss << "digraph " << graph_name << " {\n";
         ss << "  rankdir=LR;\n";  // 从左到右的布局
@@ -927,14 +945,16 @@ private:    // ^---- 私有定义 -----
         for (std::tie(vi, vend) = boost::vertices(g); vi != vend; ++vi) {
             const auto& props = g[*vi];
             std::string color = "white";
-            if (props.node_tag == TRIGGER_NODE_TAG) {
+            if (props.node_type == NodeType::TRIGGER_NODE) {
                 color = "lightblue";
-            } else if (props.node_tag == NOPUB_NODE_TAG) {
+            } else if (props.node_type == NodeType::AUX_NOPUB_NODE) {
                 color = "lightgray";
             }
 
             ss << "  \"" << props.node_name << "\" [style=filled,fillcolor=" << color
-               << ",label=\"" << props.node_name << "\\n(" << props.node_tag << ")\"];\n";
+               << ",label=\"" << props.node_name << "\\n(" << props.node_tag << ")" +
+                (with_order && props.node_id<node_order_.size() ? "\\norder=" + std::to_string(node_order_.at(props.node_id)) : "")
+                + "\"];\n";
         }
 
         // 添加边
@@ -964,8 +984,8 @@ private:    // ^---- 私有定义 -----
     }
 
     // 导出图的可视化
-    void exportGraphVisualization(const Graph& g, const std::string& name, const std::string& filename) const {
-        std::string dot_content = generateGraphDot(g, name);
+    void exportGraphVisualization(const Graph& g, const std::string& name, const std::string& filename, bool with_order=false) const {
+        std::string dot_content = generateGraphDot(g, name, with_order);
         saveGraphToDotFile(dot_content, filename);
     }
 
@@ -974,9 +994,16 @@ private:
     static constexpr const char* NOPUB_NODE_TAG = "default";
     static constexpr NodeId NOPUB_NODE_ID = 65536;
 
+
     static constexpr const char* TRIGGER_NODE_NAME = "trigger";
     static constexpr const char* TRIGGER_NODE_TAG = "$trigger";
     static constexpr NodeId TRIGGER_NODE_ID = 65537;
+
+
+    static constexpr NodeId INVALID_NODE_ID = std::numeric_limits<NodeId>::max();
+    static constexpr MessageId INVALID_MESSAGE_ID = std::numeric_limits<MessageId>::max();
+    static constexpr DescriptionId INVALID_PUB_ID = std::numeric_limits<DescriptionId>::max();
+    static constexpr DescriptionId INVALID_SUB_ID = std::numeric_limits<DescriptionId>::max();
 
     SimulatorContext *context_;
 

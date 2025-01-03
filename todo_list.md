@@ -1,4 +1,5 @@
 - 测试MessageBus的功能
+- 增加Reducer的功能
 - TensorRegistryManager的功能由SimulatorContext接管
 - 编写GeometryManager
 - 移植地图生成、Gridmap

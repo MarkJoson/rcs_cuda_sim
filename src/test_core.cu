@@ -9,9 +9,9 @@
 using namespace cuda_simulator::core;
 
 // Test components
-class SourceComponent : public ComponentBase {
+class SourceComponent : public CountableComponent<SourceComponent> {
 public:
-    SourceComponent() : ComponentBase("source") {}
+    SourceComponent() : CountableBase("source") {}
 
     void onRegister(SimulatorContext* context) override {
         auto* msg_bus = context->getMessageBus();
@@ -37,9 +37,9 @@ public:
     void onReset(TensorHandle, NodeExecStateType&) override {}
 };
 
-class ProcessComponent : public ComponentBase {
+class ProcessComponent : public CountableComponent<ProcessComponent> {
 public:
-    ProcessComponent() : ComponentBase("process") {}
+    ProcessComponent() : CountableBase("process") {}
     float received_value = 0;
 
     void onRegister(SimulatorContext* context) override {
@@ -69,9 +69,9 @@ public:
     void onReset(TensorHandle, NodeExecStateType&) override {}
 };
 
-class SinkComponent : public ComponentBase {
+class SinkComponent : public CountableComponent<SinkComponent> {
 public:
-    SinkComponent() : ComponentBase("sink") {}
+    SinkComponent() : CountableBase("sink") {}
     float received_value = 0;
 
     void onRegister(SimulatorContext* context) override {
@@ -130,9 +130,9 @@ void testBasicMessagePassing() {
 }
 
 // 测试带历史记录的消息传递
-class HistoryComponent : public ComponentBase {
+class HistoryComponent : public Component {
 public:
-    HistoryComponent() : ComponentBase("history_consumer") {}
+    HistoryComponent() : Component("history_consumer") {}
     std::vector<float> received_values;
 
     void onRegister(SimulatorContext* context) override {
@@ -183,9 +183,9 @@ void testMessageHistory() {
 }
 
 // 测试多输入融合
-class FusionComponent : public ComponentBase {
+class FusionComponent : public Component {
 public:
-    FusionComponent() : ComponentBase("fusion") {}
+    FusionComponent() : Component("fusion") {}
     ~FusionComponent() override = default;
     std::vector<float> received_values;
 
@@ -204,7 +204,7 @@ public:
         const NodeExecInputType& input,
         const NodeExecOutputType&) override {
         auto in_tensor = input.at("source_output");
-        for(size_t i = 0; i < in_tensor[0]->elemCount(); i++) {
+        for(size_t i = 0; i < in_tensor.size(); i++) {
             received_values.push_back(in_tensor[i]->item<float>());
         }
     }

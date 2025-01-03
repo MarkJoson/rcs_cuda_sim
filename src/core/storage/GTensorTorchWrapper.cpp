@@ -1,3 +1,4 @@
+#include <ATen/ops/zeros.h>
 #include <c10/core/Scalar.h>
 #include <cstdint>
 #include <memory>
@@ -78,7 +79,7 @@ namespace internal
         {
             return Scalar(s.toFloat());
         }
-        else if (s.isIntegral())
+        else
         {
             return Scalar(s.toInt());
         }
@@ -97,7 +98,7 @@ GTensorTorchWrapper::GTensorTorchWrapper(const std::vector<int64_t> &shape, Nume
     auto options = torch::TensorOptions()
                         .dtype(internal::TorchTensorImpl::getTorchDtype(dtype))
                         .device(torch::kCUDA);
-    impl_->tensor = torch::empty(shape, options);
+    impl_->tensor = torch::zeros(shape, options);
 }
 
 GTensorTorchWrapper::GTensorTorchWrapper(const Scalar &scalar)
