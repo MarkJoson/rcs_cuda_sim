@@ -4,7 +4,10 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
+
+#include "storage/GTensorConfig.hh"
 
 
 namespace cuda_simulator
@@ -33,6 +36,13 @@ using MessageId = std::uint32_t;
 using MessageName = std::string;
 using MessageNameRef = std::string_view;
 using MessageShape = std::vector<int64_t>;
+
+using TensorHandle = GTensor;
+
+using NodeExecInputType = std::unordered_map<MessageNameRef, std::vector<const GTensor *>>;
+using NodeExecOutputType = std::unordered_map<MessageNameRef, GTensor*>;
+using NodeExecStateType = std::unordered_map<MessageNameRef, GTensor*>;
+
 
 class MessageShapeRef {
 public:

@@ -4,10 +4,12 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "GTensor.hh"
-#include "ITensor.hh"
+#include "core/core_types.hh"
+
 
 namespace cuda_simulator {
 namespace core {
@@ -29,44 +31,45 @@ public:
     TensorRegistry(TensorRegistry&&) = delete;
     TensorRegistry& operator=(TensorRegistry&&) = delete;
 
-
-    // 创建张量的非模板接口
-    ITensor *createTensor(const std::string &uri, const std::vector<int64_t> &shape, TensorDataType dtype) {
-        auto tensor = std::make_unique<GTensorTorchWrapper>(shape, dtype);
-        auto *ptr = tensor.get();
-
-        tensors[uri] = std::move(tensor);
-        return ptr;
+    // 创建张量接口
+    TensorHandle createTensor(const std::string& uri, const std::vector<int64_t>& shape, TensorDataType dtype=TensorDataType::kFloat32) {
+        auto ref = TensorHandle(shape, dtype);
+        tensors.insert(std::make_pair(uri, ref));
+        return ref;
     }
 
-    // 创建张量的模板接口
-    template <typename T>
-    GTensor<T> *createTensor(const std::string &uri, const std::vector<int64_t> &shape) {
-        TensorDataType type = GTensorTorchWrapper::getTensorDataType<T>();
-        auto *tensor = static_cast<GTensor<T> *>(createTensor(uri, shape, type));
-        return tensor;
+    template<typename T>
+    TensorHandle createTensor(const std::string& uri, const std::vector<int64_t>& shape) {
+        auto dtype = TensorHandle::convertTypeToTensorType<T>();
+        return createTensor(uri, shape, dtype);
     }
 
     // 获取张量
-    ITensor *getTensor(const std::string &uri) {
+    TensorHandle& getTensor(const std::string& uri) {
         auto it = tensors.find(uri);
-        return it != tensors.end() ? it->second.get() : nullptr;
+        if (it == tensors.end()) {
+            throw std::runtime_error("Tensor not found: " + uri);
+        }
+        return it->second;
     }
 
-    template <typename T> GTensor<T> *getTensor(const std::string &uri) {
-        auto *tensor = getTensor(uri);
-        return static_cast<GTensor<T> *>(tensor);
+    const TensorHandle& getTensor(const std::string& uri) const {
+        auto it = tensors.find(uri);
+        if (it == tensors.end()) {
+            throw std::runtime_error("Tensor not found: " + uri);
+        }
+        return it->second;
     }
 
     // 移除张量
     void removeTensor(const std::string &uri) { tensors.erase(uri); }
 
     // 批量操作
-    std::vector<ITensor *> getTensorsByPrefix(const std::string &prefix) {
-        std::vector<ITensor *> result;
-        for (const auto &[uri, tensor] : tensors) {
+    std::vector<TensorHandle> getTensorsByPrefix(const std::string& prefix) {
+        std::vector<TensorHandle> result;
+        for (const auto& [uri, tensor] : tensors) {
             if (uri.substr(0, prefix.length()) == prefix) {
-                result.push_back(tensor.get());
+                result.push_back(tensor);
             }
         }
         return result;
@@ -103,7 +106,7 @@ private:
     ~TensorRegistry() = default;
 
 private:
-    std::unordered_map<std::string, std::unique_ptr<ITensor>> tensors;
+    std::unordered_map<std::string, TensorHandle> tensors;
 };
 
 } // namespace core

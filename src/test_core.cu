@@ -2,8 +2,9 @@
 #include <cassert>
 #include "core/MessageBus.hh"
 #include "core/SimulatorContext.hh"
+#include "core/core_types.hh"
 #include "core/storage/GTensor.hh"
-#include "core/storage/TensorRegistryManager.hh"
+#include "core/storage/TensorRegistry.hh"
 
 using namespace cuda_simulator::core;
 
@@ -23,14 +24,16 @@ public:
 
     void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<MessageNameRef, TensorHandle>& input,
-        const std::unordered_map<MessageNameRef, TensorHandle>& output) override {
-        auto* tensor = static_cast<GTensor<float>*>(output.at("source_output"));
-        printf("source_output: %lx\n", tensor->data());
-        tensor->data()[0] = 42.0f;
+        const NodeExecInputType& input,
+        const NodeExecOutputType& output) override {
+        auto& tensor = output.at("source_output");
+        std::cout << "source_output: " << tensor << std::endl;
+
+        // TODO: 设置tensor的值为42.0
+        // 需要实现相应的数据访问接口
     }
 
-    void onReset(TensorHandle, std::unordered_map<MessageNameRef, TensorHandle>&) override {}
+    void onReset(TensorHandle, NodeExecStateType&) override {}
 };
 
 class ProcessComponent : public ComponentBase {
@@ -50,16 +53,16 @@ public:
 
     void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<MessageNameRef, TensorHandle>& input,
-        const std::unordered_map<MessageNameRef, TensorHandle>& output) override {
-        auto* in_tensor = static_cast<GTensor<float>*>(input.at("source_output"));
-        received_value = in_tensor->data()[0];
+        const NodeExecInputType& input,
+        const NodeExecOutputType& output) override {
+        const auto& in_tensor = input.at("source_output");
+        auto& out_tensor = output.at("process_output");
 
-        auto* out_tensor = static_cast<GTensor<float>*>(output.at("process_output"));
-        out_tensor->data()[0] = received_value * 2;
+        // TODO: 将输入tensor的值乘以2并设置到输出tensor
+        // 需要实现相应的数据访问和运算接口
     }
 
-    void onReset(TensorHandle, std::unordered_map<MessageNameRef, TensorHandle>&) override {}
+    void onReset(TensorHandle, NodeExecStateType&) override {}
 };
 
 class SinkComponent : public ComponentBase {
@@ -78,13 +81,13 @@ public:
 
     void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<MessageNameRef, TensorHandle>& input,
-        const std::unordered_map<MessageNameRef, TensorHandle>&) override {
-        auto* in_tensor = static_cast<GTensor<float>*>(input.at("process_output"));
-        received_value = in_tensor->data()[0];
+        const NodeExecInputType& input,
+        const NodeExecOutputType&) override {
+        auto in_tensor = input.at("process_output");
+        received_value = in_tensor[0]->item<float>();
     }
 
-    void onReset(TensorHandle, std::unordered_map<MessageNameRef, TensorHandle>&) override {}
+    void onReset(TensorHandle, NodeExecStateType&) override {}
 };
 
 void testBasicMessagePassing() {
@@ -130,13 +133,13 @@ public:
 
     void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<MessageNameRef, TensorHandle>& input,
-        const std::unordered_map<MessageNameRef, TensorHandle>&) override {
-        auto* in_tensor = static_cast<GTensor<float>*>(input.at("source_output"));
-        received_values.push_back(in_tensor->data()[0]);
+        const NodeExecInputType& input,
+        const NodeExecOutputType&) override {
+        auto in_tensor = input.at("source_output");
+        received_values.push_back(in_tensor[0]->item<float>());
     }
 
-    void onReset(TensorHandle, std::unordered_map<MessageNameRef, TensorHandle>&) override {}
+    void onReset(TensorHandle, NodeExecStateType&) override {}
 };
 
 void testMessageHistory() {
@@ -184,15 +187,15 @@ public:
 
     void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<MessageNameRef, TensorHandle>& input,
-        const std::unordered_map<MessageNameRef, TensorHandle>&) override {
-        auto* in_tensor = static_cast<GTensor<float>*>(input.at("source_output"));
-        for(size_t i = 0; i < in_tensor->elemCount(); i++) {
-            received_values.push_back(in_tensor->data()[i]);
+        const NodeExecInputType& input,
+        const NodeExecOutputType&) override {
+        auto in_tensor = input.at("source_output");
+        for(size_t i = 0; i < in_tensor[0]->elemCount(); i++) {
+            received_values.push_back(in_tensor[i]->item<float>());
         }
     }
 
-    void onReset(TensorHandle, std::unordered_map<MessageNameRef, TensorHandle>&) override {}
+    void onReset(TensorHandle, NodeExecStateType&) override {}
 };
 
 void testMultiSourceFusion() {
@@ -224,15 +227,12 @@ void testMultiSourceFusion() {
 
 int main() {
     try {
-        // 初始化tensor系统
-        TensorRegistryManager::initialize();
+        // 使用TensorRegistry替代之前的初始化
+        auto& registry = TensorRegistry::getInstance();
 
         testBasicMessagePassing();
         testMessageHistory();
         testMultiSourceFusion();
-
-        // 清理tensor系统
-        TensorRegistryManager::shutdown();
 
         std::cout << "\nAll tests passed successfully!\n";
     }

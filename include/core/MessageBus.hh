@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <iostream>
 #include <mutex>
@@ -43,7 +44,7 @@ using DescriptionId = std::int32_t;
 class MessageQueue {
 public:
     explicit MessageQueue(NodeId pub_node_id, NodeNameRef pub_node_name, MessageId message_id, MessageNameRef message_name,
-        MessageShapeRef shape, size_t max_history_len, TensorHandle history_padding_val = nullptr)
+        MessageShapeRef shape, size_t max_history_len, std::optional<TensorHandle> history_padding_val = std::nullopt)
         : pub_node_id_(pub_node_id)
         , pub_node_name_(pub_node_name)
         , message_id_(message_id)
@@ -58,7 +59,15 @@ public:
 
     // 申请消息队列空间
     void allocate() {
-        history_.resize(max_history_len_);
+        for(size_t i = 0; i < max_history_len_; i++) {
+            std::string tensor_uri = generateTensorUri(i);
+            // 根据shape创建对应的tensor
+            history_[i] = createTensorByShape(tensor_uri, shape_);
+            if(history_padding_val_.has_value()) {
+                // 填充历史数据
+                history_[i] = *history_padding_val_;
+            }
+        }
 
         // 为每个历史槽位创建tensor
         for(size_t i = 0; i < max_history_len_; i++) {
@@ -69,21 +78,23 @@ public:
     }
 
     // 获取历史消息
-    TensorHandle getHistory(int offset) {
+    const TensorHandle* getHistoryTensorPtr(int offset) {
         if (offset >= max_history_len_) {
             throw std::runtime_error("Invalid history offset");
         }
 
         int index = (write_index_ - offset + max_history_len_) % max_history_len_;
-        return history_[index];
+        return &history_[index];
     }
 
     // 获取当前的写入Tensor
-    TensorHandle getWriteTensor() {
-        auto result = history_[write_index_];
+    TensorHandle* getWriteTensorPtr() {
+        auto &result = history_[write_index_];
         write_index_ = (write_index_ + 1) % max_history_len_;
-        return result;
+        return &result;
     }
+
+    // TODO. 增加一个添加外部WriteTensor的接口，当history_len=1时，可以直接使用外部的Tensor
 
     void resetEnvData(int env_group_id, int env_id) {
         // TODO.
@@ -123,7 +134,7 @@ private:
 
     MessageShapeRef shape_;
     size_t max_history_len_;
-    TensorHandle history_padding_val_;
+    std::optional<TensorHandle> history_padding_val_;
 
     size_t write_index_ = 0;
     size_t valid_count_ = 0;
@@ -160,15 +171,15 @@ public:
 
     void onExecute(
         SimulatorContext* context,
-        const std::unordered_map<MessageNameRef, TensorHandle> &input,
-        const std::unordered_map<MessageNameRef, TensorHandle> &output
+        const NodeExecInputType &input,
+        const NodeExecOutputType &output
     ) override {
 
     };
 
     void onReset(
         TensorHandle reset_flags,
-        std::unordered_map<MessageNameRef, TensorHandle> &state
+        NodeExecStateType &state
     ) override {
         // TODO. 处理MessageQueue
     }
@@ -243,7 +254,7 @@ public:
         ComponentBase* component,
         const MessageNameRef &message_name,
         const MessageShape &shape,
-        TensorHandle history_padding_val = nullptr
+        std::optional<TensorHandle> history_padding_val = std::nullopt
     ) {
         // std::lock_guard<std::mutex> lock(mutex_);
         // TODO.
@@ -441,7 +452,7 @@ private:    // ^---- 私有定义 -----
         // 消息形状
         MessageShape shape;
         // 无效历史数据的填充值
-        TensorHandle history_padding_val;
+        std::optional<TensorHandle> history_padding_val;
         // 消息队列ID
         MessageQueueId queue_id = INT_MAX;
     };
@@ -877,27 +888,19 @@ private:    // ^---- 私有定义 -----
         auto &component = node_des.component;
 
         // 收集所有输入数据
-        std::unordered_map<MessageNameRef, TensorHandle> input_data;
+        NodeExecInputType input_data;
 
         for (const auto& [message_name, sub_mq_ids] : node_des.active_input_map) {
-            // 如果只有一个消息发布者，简化操作
-            if (sub_mq_ids.size() == 1) {
-                auto [mq_id, hist_off] = sub_mq_ids[0];
-                input_data[message_name] = message_queues_[mq_id]->getHistory(hist_off);
-            } else {
-                std::vector<TensorHandle> stack_data;
-
-                for (auto [mq_id, hist_off] : sub_mq_ids) {
-                    stack_data.push_back(message_queues_[mq_id]->getHistory(hist_off));
-                }
-                // TODO. 调用Tensor管理器进行STACK
+            input_data[message_name] = {};
+            for (auto [mq_id, hist_off] : sub_mq_ids) {
+                input_data[message_name].push_back(message_queues_[mq_id]->getHistoryTensorPtr(hist_off));
             }
         }
 
-        std::unordered_map<MessageNameRef, TensorHandle> output_data;
+        NodeExecOutputType output_data;
 
         for (const auto& [message_name, mq_id] : node_des.active_output_map) {
-            output_data[message_name] = message_queues_[mq_id]->getWriteTensor();
+            output_data.insert(std::make_pair(message_name, message_queues_[mq_id]->getWriteTensorPtr()));
         }
 
         // 所有输入就绪时执行组件

@@ -1,0 +1,5 @@
+- 测试MessageBus的功能
+- TensorRegistryManager的功能由SimulatorContext接管
+- 编写GeometryManager
+- 移植地图生成、Gridmap
+- 移植并测试激光雷达
