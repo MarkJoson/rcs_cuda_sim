@@ -30,7 +30,8 @@ public:
         std::cout << "source_output: " << tensor << std::endl;
 
         // TODO: 设置tensor的值为42.0
-        // 需要实现相应的数据访问接口
+        *tensor = 42.0f;
+        // tensor.fill
     }
 
     void onReset(TensorHandle, NodeExecStateType&) override {}
@@ -55,11 +56,14 @@ public:
         SimulatorContext* context,
         const NodeExecInputType& input,
         const NodeExecOutputType& output) override {
-        const auto& in_tensor = input.at("source_output");
+        const auto& in_tensor = input.at("source_output").at(0);
         auto& out_tensor = output.at("process_output");
 
-        // TODO: 将输入tensor的值乘以2并设置到输出tensor
-        // 需要实现相应的数据访问和运算接口
+        std::cout << "Process Component Executing...\n";
+        std::cout << "Received value: " << in_tensor << std::endl;
+
+        received_value = in_tensor->item<float>();
+        out_tensor->copyFrom(*in_tensor);
     }
 
     void onReset(TensorHandle, NodeExecStateType&) override {}
@@ -83,8 +87,18 @@ public:
         SimulatorContext* context,
         const NodeExecInputType& input,
         const NodeExecOutputType&) override {
-        auto in_tensor = input.at("process_output");
-        received_value = in_tensor[0]->item<float>();
+        auto in_tensor = input.at("process_output")[0];
+        received_value = in_tensor->item<float>();
+
+        std::cout << "Sink Component Executing...\n";
+
+        std::cout << "Received value: " << received_value << std::endl;
+
+        // 乘以2
+        received_value = in_tensor->item<float>() * 2;
+
+        std::cout << "Output value: " << in_tensor->item<float>() << std::endl;
+
     }
 
     void onReset(TensorHandle, NodeExecStateType&) override {}
@@ -226,19 +240,26 @@ void testMultiSourceFusion() {
 }
 
 int main() {
-    try {
-        // 使用TensorRegistry替代之前的初始化
-        auto& registry = TensorRegistry::getInstance();
+    auto& registry = TensorRegistry::getInstance();
 
-        testBasicMessagePassing();
-        testMessageHistory();
-        testMultiSourceFusion();
+    testBasicMessagePassing();
+    testMessageHistory();
+    testMultiSourceFusion();
 
-        std::cout << "\nAll tests passed successfully!\n";
-    }
-    catch(const std::exception& e) {
-        std::cerr << "Test failed with error: " << e.what() << std::endl;
-        return 1;
-    }
+    std::cout << "\nAll tests passed successfully!\n";
+    // try {
+    //     // 使用TensorRegistry替代之前的初始化
+    //     auto& registry = TensorRegistry::getInstance();
+
+    //     testBasicMessagePassing();
+    //     testMessageHistory();
+    //     testMultiSourceFusion();
+
+    //     std::cout << "\nAll tests passed successfully!\n";
+    // }
+    // catch(const std::exception& e) {
+    //     std::cerr << "Test failed with error: " << e.what() << std::endl;
+    //     return 1;
+    // }
     return 0;
 }

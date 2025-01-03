@@ -3,6 +3,7 @@
 
 #include <memory>
 #include "ITensor.hh"
+#include "core/storage/Scalar.hh"
 
 namespace cuda_simulator
 {
@@ -24,7 +25,8 @@ class GTensorTorchWrapper : public ITensor<GTensorTorchWrapper> {
     friend class ITensor<GTensorTorchWrapper>;
 public:
     // explicit GTensorTorchWrapper();
-    explicit GTensorTorchWrapper(const std::vector<int64_t>& shape, TensorDataType dtype);
+    explicit GTensorTorchWrapper(const std::vector<int64_t>& shape, NumericalDataType dtype);
+    explicit GTensorTorchWrapper(const Scalar& scalar);
 
     GTensorTorchWrapper(const GTensorTorchWrapper& other)
         : impl_(internal::shareTorchTensorImpl(other.impl_)), dtype_(other.dtype_) {}
@@ -48,13 +50,19 @@ public:
         return *this;
     }
 
+    // 被Scalar赋值时，填充整个Tensor
+    GTensorTorchWrapper& operator=(const Scalar& scalar) {
+        fill(scalar);
+        return *this;
+    }
+
     ~GTensorTorchWrapper();
 
     std::vector<int64_t> shape() const override;
     size_t elemCount() const override;
     size_t elemSize() const override;
     size_t dim() const override;
-    TensorDataType dtype() const override;
+    NumericalDataType dtype() const override;
 
     void* data() override;
     const void* data() const override;
@@ -63,9 +71,16 @@ public:
     std::string toString() const override;
 
     virtual void zero() override;
+    void fill(Scalar value) override;
+    void copyFrom(const GTensorTorchWrapper& other) override;
+    void copyTo(GTensorTorchWrapper& other) const override;
 
     GTensorTorchWrapper clone() const override;
     GTensorTorchWrapper move() override;
+
+    // Scalar方法实现
+    Scalar toScalar() const override;
+    GTensorTorchWrapper& fromScalar(const Scalar& scalar) override;
 
 protected:
     // 具体实现方法
@@ -87,6 +102,17 @@ protected:
     GTensorTorchWrapper& bitwise_and_inplace_impl(const GTensorTorchWrapper& other);
     GTensorTorchWrapper& bitwise_or_inplace_impl(const GTensorTorchWrapper& other);
     GTensorTorchWrapper& bitwise_xor_inplace_impl(const GTensorTorchWrapper& other);
+
+    // Scalar操作的具体实现
+    GTensorTorchWrapper add_scalar_impl(const Scalar& scalar) const;
+    GTensorTorchWrapper sub_scalar_impl(const Scalar& scalar) const;
+    GTensorTorchWrapper mul_scalar_impl(const Scalar& scalar) const;
+    GTensorTorchWrapper div_scalar_impl(const Scalar& scalar) const;
+
+    GTensorTorchWrapper& add_inplace_scalar_impl(const Scalar& scalar);
+    GTensorTorchWrapper& sub_inplace_scalar_impl(const Scalar& scalar);
+    GTensorTorchWrapper& mul_inplace_scalar_impl(const Scalar& scalar);
+    GTensorTorchWrapper& div_inplace_scalar_impl(const Scalar& scalar);
 
     template<typename T>
     T item_impl() const {
@@ -110,7 +136,7 @@ protected:
     int32_t item_int32_impl() const;
 
     std::shared_ptr<internal::TorchTensorImpl> impl_;
-    TensorDataType dtype_;
+    NumericalDataType dtype_;
 };
 
 

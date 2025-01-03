@@ -4,21 +4,12 @@
 #include <ostream>
 #include <vector>
 #include <iostream>
+#include "Scalar.hh"
 
 namespace cuda_simulator
 {
 namespace core
 {
-
-enum class TensorDataType
-{
-    kFloat32,
-    kFloat64,
-    kInt32,
-    kInt64,
-    kUInt8
-};
-
 
 template<typename Derived>
 class ITensor {
@@ -37,7 +28,7 @@ public:
     virtual size_t elemCount() const = 0;
     virtual size_t elemSize() const = 0;
     virtual size_t dim() const = 0;
-    virtual TensorDataType dtype() const = 0;
+    virtual NumericalDataType dtype() const = 0;
 
     // raw data access
     virtual void* data() = 0;
@@ -49,11 +40,12 @@ public:
 
     //
     virtual void zero() = 0;
+    virtual void fill(Scalar value) = 0;
+    virtual void copyFrom(const Derived& other) = 0;
+    virtual void copyTo(Derived& other) const = 0;
 
-    // template<typename T>
-    // T item() const { return derived().template item_impl<T>(); }
     template<typename T>
-    float item() const { return derived().item_float_impl(); }
+    T item() const { return derived().template item_impl<T>(); }
 
 
     // 返回新Tensor的操作
@@ -62,23 +54,39 @@ public:
     Derived mul(const Derived& other) const { return derived().mul_impl(other); }
     Derived div(const Derived& other) const { return derived().div_impl(other); }
 
+    // Scalar operators
+    Derived add(const Scalar& scalar) const { return derived().add_scalar_impl(scalar); }
+    Derived sub(const Scalar& scalar) const { return derived().sub_scalar_impl(scalar); }
+    Derived mul(const Scalar& scalar) const { return derived().mul_scalar_impl(scalar); }
+    Derived div(const Scalar& scalar) const { return derived().div_scalar_impl(scalar); }
+
     // 运算符重载
     Derived operator+(const Derived& other) const { return add(other); }
     Derived operator-(const Derived& other) const { return sub(other); }
     Derived operator*(const Derived& other) const { return mul(other); }
     Derived operator/(const Derived& other) const { return div(other); }
 
+    Derived operator+(const Scalar& scalar) const { return add(scalar); }
+    Derived operator-(const Scalar& scalar) const { return sub(scalar); }
+    Derived operator*(const Scalar& scalar) const { return mul(scalar); }
+    Derived operator/(const Scalar& scalar) const { return div(scalar); }
+
     // 复合赋值操作符
-    Derived& operator+=(const Derived& other) { return derived()->add_inplace_impl(other); }
-    Derived& operator-=(const Derived& other) { return derived()->sub_inplace_impl(other); }
-    Derived& operator*=(const Derived& other) { return derived()->mul_inplace_impl(other); }
-    Derived& operator/=(const Derived& other) { return derived()->div_inplace_impl(other); }
+    Derived& operator+=(const Derived& other) { return derived().add_inplace_impl(other); }
+    Derived& operator-=(const Derived& other) { return derived().sub_inplace_impl(other); }
+    Derived& operator*=(const Derived& other) { return derived().mul_inplace_impl(other); }
+    Derived& operator/=(const Derived& other) { return derived().div_inplace_impl(other); }
+
+    Derived& operator+=(const Scalar& scalar) { return derived().add_inplace_scalar_impl(scalar); }
+    Derived& operator-=(const Scalar& scalar) { return derived().sub_inplace_scalar_impl(scalar); }
+    Derived& operator*=(const Scalar& scalar) { return derived().mul_inplace_scalar_impl(scalar); }
+    Derived& operator/=(const Scalar& scalar) { return derived().div_inplace_scalar_impl(scalar); }
 
     // 位运算操作符
     Derived operator~() const { return static_cast<const Derived*>(this)->bitwise_not_impl(); }
     Derived operator-() const { return static_cast<const Derived*>(this)->neg_impl(); }
-    Derived& operator&=(const Derived& other) { return derived()->bitwise_and_inplace_impl(other); }
-    Derived& operator|=(const Derived& other) { return derived()->bitwise_or_inplace_impl(other); }
+    Derived& operator&=(const Derived& other) { return derived().bitwise_and_inplace_impl(other); }
+    Derived& operator|=(const Derived& other) { return derived().bitwise_or_inplace_impl(other); }
 
     // 索引操作
     Derived slice(int64_t dim, int64_t start, int64_t end) const { return derived().slice_impl(dim, start, end); }
@@ -94,13 +102,17 @@ public:
 
     // 工具方法
     template<typename U>
-    static constexpr TensorDataType convertTypeToTensorType() {
-        if constexpr (std::is_same_v<U, float>) return TensorDataType::kFloat32;
-        if constexpr (std::is_same_v<U, double>) return TensorDataType::kFloat64;
-        if constexpr (std::is_same_v<U, int32_t>) return TensorDataType::kInt32;
-        if constexpr (std::is_same_v<U, int64_t>) return TensorDataType::kInt64;
-        return TensorDataType::kUInt8;
+    static constexpr NumericalDataType convertTypeToTensorType() {
+        if constexpr (std::is_same_v<U, float>) return NumericalDataType::kFloat32;
+        if constexpr (std::is_same_v<U, double>) return NumericalDataType::kFloat64;
+        if constexpr (std::is_same_v<U, int32_t>) return NumericalDataType::kInt32;
+        if constexpr (std::is_same_v<U, int64_t>) return NumericalDataType::kInt64;
+        return NumericalDataType::kUInt8;
     }
+
+    // Scalar conversion methods
+    virtual Scalar toScalar() const = 0;
+    virtual Derived& fromScalar(const Scalar& scalar) = 0;
 
 protected:
     ~ITensor() = default;  // 保护析构函数防止直接删除基类指针

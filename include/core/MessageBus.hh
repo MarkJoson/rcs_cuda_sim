@@ -14,6 +14,9 @@
 #include <unordered_set>
 #include <utility>
 
+#include <fstream>
+#include <sstream>
+
 #include <boost/utility.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/topological_sort.hpp>
@@ -53,32 +56,29 @@ public:
         , max_history_len_(max_history_len)
         , history_padding_val_(history_padding_val)
         , write_index_(0)
-        , valid_count_(0) {
+        , valid_count_(0)
+        , history_() {
             allocate();
         }
 
     // 申请消息队列空间
     void allocate() {
+        history_.clear();
+
         for(size_t i = 0; i < max_history_len_; i++) {
             std::string tensor_uri = generateTensorUri(i);
             // 根据shape创建对应的tensor
-            history_[i] = createTensorByShape(tensor_uri, shape_);
+            history_.push_back(createTensorByShape(tensor_uri, shape_));
+
             if(history_padding_val_.has_value()) {
                 // 填充历史数据
                 history_[i] = *history_padding_val_;
             }
         }
-
-        // 为每个历史槽位创建tensor
-        for(size_t i = 0; i < max_history_len_; i++) {
-            std::string tensor_uri = generateTensorUri(i);
-            // 根据shape创建对应的tensor
-            history_[i] = createTensorByShape(tensor_uri, shape_);
-        }
     }
 
     // 获取历史消息
-    const TensorHandle* getHistoryTensorPtr(int offset) {
+    const TensorHandle* getHistoryTensorPtr(size_t offset) {
         if (offset >= max_history_len_) {
             throw std::runtime_error("Invalid history offset");
         }
@@ -119,7 +119,6 @@ private:
         for(int64_t i = 0; i < shape.size(); i++) {
             tensor_shape.push_back(shape[i]);
         }
-
         // 创建float类型的tensor
         // 注意：这里假设所有tensor都是float类型，如果需要支持其他类型，需要添加类型参数
         return TensorRegistry::getInstance().createTensor<float>(uri, tensor_shape);
@@ -319,9 +318,11 @@ public:
 
         // 2. 建立消息发送图
         buildMessageGraph();
+        exportGraphVisualization(message_graph_, "MessageGraph", "message_graph.dot");
 
         // 3. 构建活动图
         pruneGraph();
+        exportGraphVisualization(active_graph_, "ActiveGraph", "active_graph.dot");
 
         // 4. 检查循环依赖
         checkActiveGraphLoop();
@@ -334,6 +335,7 @@ public:
 
         // 7. 添加触发器到图中
         addTriggerToGraph();
+        exportGraphVisualization(trigger_graph_, "TriggerGraph", "trigger_graph.dot");
     }
 
     void clearAll() {
@@ -421,6 +423,8 @@ private:    // ^---- 私有定义 -----
     using Vertex = boost::graph_traits<Graph>::vertex_descriptor;
     using VertexIterator = boost::graph_traits<Graph>::vertex_iterator;
     using EdgeIterator = boost::graph_traits<Graph>::edge_iterator;
+
+    using VertexInEdgeIterator = boost::graph_traits<Graph>::in_edge_iterator;
     using VertexOutEdgeIterator = boost::graph_traits<Graph>::out_edge_iterator;
 
     // **---- Descriptions -----
@@ -773,11 +777,16 @@ private:    // ^---- 私有定义 -----
         for(auto [vi, vend] = boost::vertices(active_graph_); vi!=vend; vi++) {
             NodeDescription &node_des = node_descriptions_[ active_graph_[*vi].node_id ];
 
-            // 填充active_input, active_output
-            VertexOutEdgeIterator ei, eind;
-            for(std::tie(ei, eind) = boost::out_edges(*vi, active_graph_); ei!=eind; ei++) {
-                const EdgeProperties &edge_props = active_graph_[*ei];
+            VertexInEdgeIterator ein_i, ein_ind;
+            for(std::tie(ein_i, ein_ind) = boost::in_edges(*vi, active_graph_); ein_i!=ein_ind; ein_i++) {
+                const EdgeProperties &edge_props = active_graph_[*ein_i];
                 node_des.active_input_desc.insert({edge_props.message_id, edge_props.sub_des_id});
+            }
+
+            // 填充active_input, active_output
+            VertexOutEdgeIterator eout_i, eout_ind;
+            for(std::tie(eout_i, eout_ind) = boost::out_edges(*vi, active_graph_); eout_i!=eout_ind; eout_i++) {
+                const EdgeProperties &edge_props = active_graph_[*eout_i];
                 node_des.active_outputs_desc.insert({edge_props.message_id, edge_props.pub_des_id});
             }
 
@@ -905,6 +914,59 @@ private:    // ^---- 私有定义 -----
 
         // 所有输入就绪时执行组件
         component->onExecute(context_, input_data, output_data);
+    }
+
+    std::string generateGraphDot(const Graph& g, const std::string& graph_name) const {
+        std::stringstream ss;
+        ss << "digraph " << graph_name << " {\n";
+        ss << "  rankdir=LR;\n";  // 从左到右的布局
+        ss << "  node [shape=box];\n";  // 节点样式
+
+        // 添加节点
+        typename boost::graph_traits<Graph>::vertex_iterator vi, vend;
+        for (std::tie(vi, vend) = boost::vertices(g); vi != vend; ++vi) {
+            const auto& props = g[*vi];
+            std::string color = "white";
+            if (props.node_tag == TRIGGER_NODE_TAG) {
+                color = "lightblue";
+            } else if (props.node_tag == NOPUB_NODE_TAG) {
+                color = "lightgray";
+            }
+
+            ss << "  \"" << props.node_name << "\" [style=filled,fillcolor=" << color
+               << ",label=\"" << props.node_name << "\\n(" << props.node_tag << ")\"];\n";
+        }
+
+        // 添加边
+        typename boost::graph_traits<Graph>::edge_iterator ei, eend;
+        for (std::tie(ei, eend) = boost::edges(g); ei != eend; ++ei) {
+            const auto& src = g[boost::source(*ei, g)];
+            const auto& dst = g[boost::target(*ei, g)];
+            const auto& edge = g[*ei];
+
+            ss << "  \"" << src.node_name << "\" -> \"" << dst.node_name
+               << "\" [label=\"" << messages_[edge.message_id].first << "\"];\n";
+        }
+
+        ss << "}\n";
+        return ss.str();
+    }
+
+    // 将DOT内容写入文件
+    void saveGraphToDotFile(const std::string& dot_content, const std::string& filename) const {
+        std::ofstream file(filename);
+        if (file.is_open()) {
+            file << dot_content;
+            file.close();
+        } else {
+            std::cerr << "Failed to open file: " << filename << std::endl;
+        }
+    }
+
+    // 导出图的可视化
+    void exportGraphVisualization(const Graph& g, const std::string& name, const std::string& filename) const {
+        std::string dot_content = generateGraphDot(g, name);
+        saveGraphToDotFile(dot_content, filename);
     }
 
 private:

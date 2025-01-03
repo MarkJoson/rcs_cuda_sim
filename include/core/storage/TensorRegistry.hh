@@ -32,10 +32,10 @@ public:
     TensorRegistry& operator=(TensorRegistry&&) = delete;
 
     // 创建张量接口
-    TensorHandle createTensor(const std::string& uri, const std::vector<int64_t>& shape, TensorDataType dtype=TensorDataType::kFloat32) {
-        auto ref = TensorHandle(shape, dtype);
-        tensors.insert(std::make_pair(uri, ref));
-        return ref;
+    TensorHandle createTensor(const std::string& uri, const std::vector<int64_t>& shape, NumericalDataType dtype=NumericalDataType::kFloat32) {
+        // tensors.insert(std::make_pair(uri, TensorHandle(shape, dtype)));
+        // return tensors.at(uri);
+        return TensorHandle(shape, dtype);
     }
 
     template<typename T>
