@@ -1,9 +1,11 @@
-#pragma once
-#include <core/types.hpp>
-#include <Eigen/Dense>
-#include <variant>
+#ifndef CUDA_SIMULATOR_GEOMETRY_TYPES_HPP
+#define CUDA_SIMULATOR_GEOMETRY_TYPES_HPP
 
-namespace physics {
+#pragma once
+#include <Eigen/Dense>
+
+namespace cuda_simulator {
+namespace geometry {
 
 enum class ShapeType {
     Circle,
@@ -21,4 +23,7 @@ enum class ObjectType {
 using Vector2 = Eigen::Vector2d;
 using Matrix2 = Eigen::Matrix2d;
 
-} // namespace physics
+} // namespace geometry
+} // namespace cuda_simulator
+
+#endif // CUDA_SIMULATOR_GEOMETRY_TYPES_HPP

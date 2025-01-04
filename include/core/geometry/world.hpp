@@ -1,10 +1,16 @@
+#ifndef CUDASIM_GEOMETRY_WORLD_HPP
+#define CUDASIM_GEOMETRY_WORLD_HPP
+
 #pragma once
-#include "transform.hpp"
-#include "shapes.hpp"
 #include <unordered_set>
 #include <memory>
 
-namespace physics {
+#include "transform.hpp"
+#include "shapes.hpp"
+
+
+namespace cuda_simulator {
+namespace geometry {
 
 class Object2D {
 public:
@@ -74,4 +80,7 @@ private:
     std::unordered_set<int> dynamicObjectSet_;
 };
 
-} // namespace physics
+} // namespace geometry
+} // namespace cuda_simulator
+
+#endif // CUDASIM_GEOMETRY_WORLD_HPP

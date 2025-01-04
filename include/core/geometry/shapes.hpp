@@ -1,9 +1,13 @@
+#ifndef CUDASIM_GEOMETRY_SHAPES_HPP
+#define CUDASIM_GEOMETRY_SHAPES_HPP
+
 #pragma once
-#include "types.hpp"
 #include <vector>
 #include <memory>
+#include "types.hpp"
 
-namespace physics {
+namespace cuda_simulator {
+namespace geometry {
 
 // 基础形状定义
 class ShapeDef {
@@ -96,4 +100,7 @@ private:
     Vector2 ghostHead_;
 };
 
-} // namespace physics
+} // namespace geometry
+} // namespace cuda_simulator
+
+#endif // CUDASIM_GEOMETRY_SHAPES_HPP

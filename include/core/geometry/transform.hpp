@@ -1,8 +1,12 @@
-#pragma once
-#include "types.hpp"
-#include <cmath>
+#ifndef CUDASIM_GEOMETRY_TRANSFORM_HPP
+#define CUDASIM_GEOMETRY_TRANSFORM_HPP
 
-namespace physics {
+#pragma once
+#include <cmath>
+#include "types.hpp"
+
+namespace cuda_simulator {
+namespace geometry {
 
 class Rotation2D {
 public:
@@ -70,4 +74,7 @@ private:
     Rotation2D rotation_;
 };
 
-} // namespace physics
+} // namespace geometry
+} // namespace cuda_simulator
+
+#endif // CUDASIM_GEOMETRY_TRANSFORM_HPP
