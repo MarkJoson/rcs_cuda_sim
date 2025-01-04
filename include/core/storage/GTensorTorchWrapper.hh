@@ -3,7 +3,7 @@
 
 #include <memory>
 #include "ITensor.hh"
-#include "core/storage/Scalar.hh"
+#include "Scalar.hh"
 
 namespace cuda_simulator
 {

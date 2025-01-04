@@ -7,17 +7,13 @@
 #include <utility>
 #include <vector>
 
-#include "GTensor.hh"
-#include "core/core_types.hh"
+#include "GTensorConfig.hh"
 
 
 namespace cuda_simulator {
 namespace core {
 
-
-class TensorRegistry;
-class TensorRegistryManager;
-
+// 单例模式
 class TensorRegistry {
 public:
     static TensorRegistry& getInstance() {

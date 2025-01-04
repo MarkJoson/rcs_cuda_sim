@@ -1,3 +1,2 @@
-#include "storage/GTensor.h"
-#include "storage/TensorRegistry.h"
-#include "storage/TensorRegistryManager.h"
+#include "core/storage/GTensorConfig.hh"
+#include "core/storage/TensorRegistry.hh"

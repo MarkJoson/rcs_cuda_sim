@@ -36,8 +36,6 @@ inline std::string reduce_method_to_string(ReduceMethod method) {
     }
 }
 
-
-
 using NodeId = std::uint32_t;
 using NodeName = std::string;
 using NodeNameRef = std::string_view;
@@ -49,11 +47,9 @@ using MessageName = std::string;
 using MessageNameRef = std::string_view;
 using MessageShape = std::vector<int64_t>;
 
-using TensorHandle = GTensor;
-
-using NodeExecInputType = std::unordered_map<MessageNameRef, std::vector<const GTensor *>>;
-using NodeExecOutputType = std::unordered_map<MessageNameRef, GTensor*>;
-using NodeExecStateType = std::unordered_map<MessageNameRef, GTensor*>;
+using NodeExecInputType = std::unordered_map<MessageNameRef, std::vector<const TensorHandle *>>;
+using NodeExecOutputType = std::unordered_map<MessageNameRef, TensorHandle*>;
+using NodeExecStateType = std::unordered_map<MessageNameRef, TensorHandle*>;
 
 
 class MessageShapeRef {

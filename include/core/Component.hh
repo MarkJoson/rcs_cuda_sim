@@ -3,7 +3,7 @@
 
 #include <string>
 #include "core_types.hh"
-#include "storage/GTensor.hh"
+#include "storage/GTensorConfig.hh"
 #include "ExecuteNode.hh"
 
 namespace cuda_simulator {

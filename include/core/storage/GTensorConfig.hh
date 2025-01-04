@@ -1,7 +1,7 @@
 #ifndef CUDASIM_TESNOR_CONFIG_HH
 #define CUDASIM_TESNOR_CONFIG_HH
 
-// #include "GTensorTorchWrapper.hh"
+#include "GTensorTorchWrapper.hh"
 
 namespace cuda_simulator {
 namespace core {
@@ -9,6 +9,8 @@ namespace core {
 class GTensorTorchWrapper;
 
 using GTensor = GTensorTorchWrapper;
+
+using TensorHandle = GTensor;
 
 } // namespace core
 } // namespace cuda_simulator

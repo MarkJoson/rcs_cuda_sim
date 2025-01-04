@@ -3,7 +3,7 @@
 #include "core/MessageBus.hh"
 #include "core/SimulatorContext.hh"
 #include "core/core_types.hh"
-#include "core/storage/GTensor.hh"
+#include "core/storage/GTensorConfig.hh"
 #include "core/storage/TensorRegistry.hh"
 
 #include "core/console_style.h"
