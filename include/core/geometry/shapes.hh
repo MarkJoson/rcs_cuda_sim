@@ -1,10 +1,10 @@
-#ifndef CUDASIM_GEOMETRY_SHAPES_HPP
-#define CUDASIM_GEOMETRY_SHAPES_HPP
+#ifndef CUDASIM_GEOMETRY_SHAPES_HH
+#define CUDASIM_GEOMETRY_SHAPES_HH
 
 #pragma once
 #include <vector>
 #include <memory>
-#include "types.hpp"
+#include "types.hh"
 
 namespace cuda_simulator {
 namespace geometry {
@@ -103,4 +103,4 @@ private:
 } // namespace geometry
 } // namespace cuda_simulator
 
-#endif // CUDASIM_GEOMETRY_SHAPES_HPP
+#endif // CUDASIM_GEOMETRY_SHAPES_HH

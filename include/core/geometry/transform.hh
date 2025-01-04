@@ -1,9 +1,9 @@
-#ifndef CUDASIM_GEOMETRY_TRANSFORM_HPP
-#define CUDASIM_GEOMETRY_TRANSFORM_HPP
+#ifndef CUDASIM_GEOMETRY_TRANSFORM_HH
+#define CUDASIM_GEOMETRY_TRANSFORM_HH
 
 #pragma once
 #include <cmath>
-#include "types.hpp"
+#include "types.hh"
 
 namespace cuda_simulator {
 namespace geometry {
@@ -77,4 +77,4 @@ private:
 } // namespace geometry
 } // namespace cuda_simulator
 
-#endif // CUDASIM_GEOMETRY_TRANSFORM_HPP
+#endif // CUDASIM_GEOMETRY_TRANSFORM_HH

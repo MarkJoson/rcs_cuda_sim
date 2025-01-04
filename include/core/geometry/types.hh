@@ -1,5 +1,5 @@
-#ifndef CUDA_SIMULATOR_GEOMETRY_TYPES_HPP
-#define CUDA_SIMULATOR_GEOMETRY_TYPES_HPP
+#ifndef CUDA_SIMULATOR_GEOMETRY_TYPES_HH
+#define CUDA_SIMULATOR_GEOMETRY_TYPES_HH
 
 #pragma once
 #include <Eigen/Dense>
@@ -26,4 +26,4 @@ using Matrix2 = Eigen::Matrix2d;
 } // namespace geometry
 } // namespace cuda_simulator
 
-#endif // CUDA_SIMULATOR_GEOMETRY_TYPES_HPP
+#endif // CUDA_SIMULATOR_GEOMETRY_TYPES_HH

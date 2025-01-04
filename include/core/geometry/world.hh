@@ -1,12 +1,12 @@
-#ifndef CUDASIM_GEOMETRY_WORLD_HPP
-#define CUDASIM_GEOMETRY_WORLD_HPP
+#ifndef CUDASIM_GEOMETRY_WORLD_HH
+#define CUDASIM_GEOMETRY_WORLD_HH
 
 #pragma once
 #include <unordered_set>
 #include <memory>
 
-#include "transform.hpp"
-#include "shapes.hpp"
+#include "transform.hh"
+#include "shapes.hh"
 
 
 namespace cuda_simulator {
@@ -83,4 +83,4 @@ private:
 } // namespace geometry
 } // namespace cuda_simulator
 
-#endif // CUDASIM_GEOMETRY_WORLD_HPP
+#endif // CUDASIM_GEOMETRY_WORLD_HH
