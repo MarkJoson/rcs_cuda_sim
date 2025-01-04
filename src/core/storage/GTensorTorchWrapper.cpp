@@ -1,4 +1,5 @@
 #include <ATen/ops/zeros.h>
+#include <c10/core/DefaultDtype.h>
 #include <c10/core/Scalar.h>
 #include <cstdint>
 #include <memory>
@@ -87,17 +88,14 @@ namespace internal
     }
 }
 
-// GTensorTorchWrapper::GTensorTorchWrapper()
-//     : impl_(std::make_shared<internal::TorchTensorImpl>()), dtype_(TensorDataType::kFloat32)
-// {
-// }
+static torch::DeviceType g_device_type = torch::kCUDA;
 
 GTensorTorchWrapper::GTensorTorchWrapper(const std::vector<int64_t> &shape, NumericalDataType dtype)
     : impl_(std::make_shared<internal::TorchTensorImpl>()), dtype_(dtype)
 {
     auto options = torch::TensorOptions()
                         .dtype(internal::TorchTensorImpl::getTorchDtype(dtype))
-                        .device(torch::kCUDA);
+                        .device(g_device_type);
     impl_->tensor = torch::zeros(shape, options);
 }
 
@@ -106,7 +104,7 @@ GTensorTorchWrapper::GTensorTorchWrapper(const Scalar &scalar)
 {
     auto options = torch::TensorOptions()
                         .dtype(internal::TorchTensorImpl::getTorchDtype(scalar.type()))
-                        .device(torch::kCUDA);
+                        .device(g_device_type);
     impl_->tensor = torch::full({}, internal::toTorchScalar(scalar), options);
 }
 
@@ -324,7 +322,7 @@ GTensorTorchWrapper& GTensorTorchWrapper::fromScalar(const Scalar& scalar) {
     impl_->tensor = torch::scalar_tensor(
         internal::toTorchScalar(scalar),
         torch::TensorOptions().dtype(internal::TorchTensorImpl::getTorchDtype(dtype_))
-                             .device(torch::kCUDA));
+                             .device(g_device_type));
     return *this;
 }
 
@@ -372,7 +370,7 @@ GTensorTorchWrapper& GTensorTorchWrapper::div_inplace_scalar_impl(const Scalar& 
     return *this;
 }
 
-void GTensorTorchWrapper::gather_sum(const std::vector<const GTensorTorchWrapper*> src) {
+void GTensorTorchWrapper::gatherSum(const std::vector<const GTensorTorchWrapper*> src) {
     std::vector<torch::Tensor> tensors;
     tensors.reserve(src.size());
 
@@ -386,7 +384,7 @@ void GTensorTorchWrapper::gather_sum(const std::vector<const GTensorTorchWrapper
     impl_->tensor = torch::sum(stacked, 0);
 }
 
-void GTensorTorchWrapper::gather_mean(const std::vector<const GTensorTorchWrapper*> src) {
+void GTensorTorchWrapper::gatherMean(const std::vector<const GTensorTorchWrapper*> src) {
     std::vector<torch::Tensor> tensors;
     tensors.reserve(src.size());
 
@@ -398,7 +396,7 @@ void GTensorTorchWrapper::gather_mean(const std::vector<const GTensorTorchWrappe
     impl_->tensor = torch::mean(stacked, 0);
 }
 
-void GTensorTorchWrapper::gather_max(const std::vector<const GTensorTorchWrapper*> src) {
+void GTensorTorchWrapper::gatherMax(const std::vector<const GTensorTorchWrapper*> src) {
     std::vector<torch::Tensor> tensors;
     tensors.reserve(src.size());
 
@@ -412,7 +410,7 @@ void GTensorTorchWrapper::gather_max(const std::vector<const GTensorTorchWrapper
     impl_->tensor = values;
 }
 
-void GTensorTorchWrapper::gather_min(const std::vector<const GTensorTorchWrapper*> src) {
+void GTensorTorchWrapper::gatherMin(const std::vector<const GTensorTorchWrapper*> src) {
     std::vector<torch::Tensor> tensors;
     tensors.reserve(src.size());
 
@@ -425,6 +423,25 @@ void GTensorTorchWrapper::gather_min(const std::vector<const GTensorTorchWrapper
     auto [values, indices] = torch::min(stacked, 0);
     impl_->tensor = values;
 }
+
+void GTensorTorchWrapper::setTensorDefaultDeviceImpl(const std::string &device_name) {
+    // convert device name to torch device type
+    if (device_name == "cuda") {
+        g_device_type = torch::kCUDA;
+    } else if (device_name == "cpu") {
+        g_device_type = torch::kCPU;
+    } else {
+        throw std::runtime_error("Unsupported device type");
+    }
+}
+
+void GTensorTorchWrapper::setSeedImpl(uint64_t seed) {
+    torch::manual_seed(seed);
+    if (torch::cuda::is_available()) {
+        torch::cuda::manual_seed_all(seed);
+    }
+}
+
 
 } // namespace core
 } // namespace cuda_simulator

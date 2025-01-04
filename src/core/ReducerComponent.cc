@@ -19,16 +19,16 @@ void ReducerComponent::onExecute( SimulatorContext* context, const NodeExecInput
             throw std::runtime_error("STACK method not supported in ReducerComponent");
             break;
         case ReduceMethod::SUM:
-            output.begin()->second->gather_sum(input.begin()->second);
+            output.begin()->second->gatherSum(input.begin()->second);
             break;
         case ReduceMethod::MAX:
-            output.begin()->second->gather_max(input.begin()->second);
+            output.begin()->second->gatherMax(input.begin()->second);
             break;
         case ReduceMethod::MIN:
-            output.begin()->second->gather_min(input.begin()->second);
+            output.begin()->second->gatherMin(input.begin()->second);
             break;
         case ReduceMethod::AVERAGE:
-            output.begin()->second->gather_mean(input.begin()->second);
+            output.begin()->second->gatherMean(input.begin()->second);
             break;
         default:
             throw std::runtime_error("Invalid reduce method");

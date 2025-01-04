@@ -20,32 +20,21 @@ public:
     virtual ~SimulatorContext() {}
 
     void registerComponent() {}
+
     MessageBus* getMessageBus() {
         return message_bus.get();
     }
 
-
-    // 中介转发
-    void registerInput(
-        Component* component,
-        const MessageNameRef &message_name,
-        const MessageShape &shape,
-        int history_offset = 0,
-        ReduceMethod reduce_method = ReduceMethod::STACK
-    ) {
-        message_bus->registerInput(component, message_name, shape, history_offset, reduce_method);
+    void setDefaultDevice(const std::string &device_name ) {
+        GTensor::setTensorDefaultDevice(device_name);
     }
 
-
-    void registerOutput(
-        Component* component,
-        const MessageNameRef &message_name,
-        const MessageShape &shape,
-        std::optional<TensorHandle> history_padding_val = std::nullopt
-    ) {
-        message_bus->registerOutput(component, message_name, shape, history_padding_val);
+    void setSeed(uint64_t seed) {
+        GTensor::setSeed(seed);
     }
 
+    void initialize() {
+    }
 
     void getEnvironGroupManager() {}
 

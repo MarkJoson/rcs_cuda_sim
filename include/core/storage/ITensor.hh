@@ -45,66 +45,75 @@ public:
     virtual void copyTo(Derived& other) const = 0;
 
     // Gather方法
-    virtual void gather_sum(const std::vector<const Derived*> src) = 0;
-    virtual void gather_mean(const std::vector<const Derived*> src) = 0;
-    virtual void gather_max(const std::vector<const Derived*> src) = 0;
-    virtual void gather_min(const std::vector<const Derived*> src) = 0;
+    virtual void gatherSum(const std::vector<const Derived*> src) = 0;
+    virtual void gatherMean(const std::vector<const Derived*> src) = 0;
+    virtual void gatherMax(const std::vector<const Derived*> src) = 0;
+    virtual void gatherMin(const std::vector<const Derived*> src) = 0;
 
     template<typename T>
-    T item() const { return derived().template item_impl<T>(); }
+    inline T item() const { return derived().template item_impl<T>(); }
+
+
+    static inline void setTensorDefaultDevice(const std::string &device_name) {
+        Derived::setTensorDefaultDeviceImpl(device_name);
+    }
+
+    static inline void setSeed(uint64_t seed) {
+        Derived::setSeedImpl(seed);
+    }
 
 
     // 返回新Tensor的操作
-    Derived add(const Derived& other) const { return derived().add_impl(other); }
-    Derived sub(const Derived& other) const { return derived().sub_impl(other); }
-    Derived mul(const Derived& other) const { return derived().mul_impl(other); }
-    Derived div(const Derived& other) const { return derived().div_impl(other); }
+    inline Derived add(const Derived& other) const { return derived().add_impl(other); }
+    inline Derived sub(const Derived& other) const { return derived().sub_impl(other); }
+    inline Derived mul(const Derived& other) const { return derived().mul_impl(other); }
+    inline Derived div(const Derived& other) const { return derived().div_impl(other); }
 
     // Scalar operators
-    Derived add(const Scalar& scalar) const { return derived().add_scalar_impl(scalar); }
-    Derived sub(const Scalar& scalar) const { return derived().sub_scalar_impl(scalar); }
-    Derived mul(const Scalar& scalar) const { return derived().mul_scalar_impl(scalar); }
-    Derived div(const Scalar& scalar) const { return derived().div_scalar_impl(scalar); }
+    inline Derived add(const Scalar& scalar) const { return derived().add_scalar_impl(scalar); }
+    inline Derived sub(const Scalar& scalar) const { return derived().sub_scalar_impl(scalar); }
+    inline Derived mul(const Scalar& scalar) const { return derived().mul_scalar_impl(scalar); }
+    inline Derived div(const Scalar& scalar) const { return derived().div_scalar_impl(scalar); }
 
     // 运算符重载
-    Derived operator+(const Derived& other) const { return add(other); }
-    Derived operator-(const Derived& other) const { return sub(other); }
-    Derived operator*(const Derived& other) const { return mul(other); }
-    Derived operator/(const Derived& other) const { return div(other); }
+    inline Derived operator+(const Derived& other) const { return add(other); }
+    inline Derived operator-(const Derived& other) const { return sub(other); }
+    inline Derived operator*(const Derived& other) const { return mul(other); }
+    inline Derived operator/(const Derived& other) const { return div(other); }
 
-    Derived operator+(const Scalar& scalar) const { return add(scalar); }
-    Derived operator-(const Scalar& scalar) const { return sub(scalar); }
-    Derived operator*(const Scalar& scalar) const { return mul(scalar); }
-    Derived operator/(const Scalar& scalar) const { return div(scalar); }
+    inline Derived operator+(const Scalar& scalar) const { return add(scalar); }
+    inline Derived operator-(const Scalar& scalar) const { return sub(scalar); }
+    inline Derived operator*(const Scalar& scalar) const { return mul(scalar); }
+    inline Derived operator/(const Scalar& scalar) const { return div(scalar); }
 
     // 复合赋值操作符
-    Derived& operator+=(const Derived& other) { return derived().add_inplace_impl(other); }
-    Derived& operator-=(const Derived& other) { return derived().sub_inplace_impl(other); }
-    Derived& operator*=(const Derived& other) { return derived().mul_inplace_impl(other); }
-    Derived& operator/=(const Derived& other) { return derived().div_inplace_impl(other); }
+    inline Derived& operator+=(const Derived& other) { return derived().add_inplace_impl(other); }
+    inline Derived& operator-=(const Derived& other) { return derived().sub_inplace_impl(other); }
+    inline Derived& operator*=(const Derived& other) { return derived().mul_inplace_impl(other); }
+    inline Derived& operator/=(const Derived& other) { return derived().div_inplace_impl(other); }
 
-    Derived& operator+=(const Scalar& scalar) { return derived().add_inplace_scalar_impl(scalar); }
-    Derived& operator-=(const Scalar& scalar) { return derived().sub_inplace_scalar_impl(scalar); }
-    Derived& operator*=(const Scalar& scalar) { return derived().mul_inplace_scalar_impl(scalar); }
-    Derived& operator/=(const Scalar& scalar) { return derived().div_inplace_scalar_impl(scalar); }
+    inline Derived& operator+=(const Scalar& scalar) { return derived().add_inplace_scalar_impl(scalar); }
+    inline Derived& operator-=(const Scalar& scalar) { return derived().sub_inplace_scalar_impl(scalar); }
+    inline Derived& operator*=(const Scalar& scalar) { return derived().mul_inplace_scalar_impl(scalar); }
+    inline Derived& operator/=(const Scalar& scalar) { return derived().div_inplace_scalar_impl(scalar); }
 
     // 位运算操作符
-    Derived operator~() const { return static_cast<const Derived*>(this)->bitwise_not_impl(); }
-    Derived operator-() const { return static_cast<const Derived*>(this)->neg_impl(); }
-    Derived& operator&=(const Derived& other) { return derived().bitwise_and_inplace_impl(other); }
-    Derived& operator|=(const Derived& other) { return derived().bitwise_or_inplace_impl(other); }
+    inline Derived operator~() const { return static_cast<const Derived*>(this)->bitwise_not_impl(); }
+    inline Derived operator-() const { return static_cast<const Derived*>(this)->neg_impl(); }
+    inline Derived& operator&=(const Derived& other) { return derived().bitwise_and_inplace_impl(other); }
+    inline Derived& operator|=(const Derived& other) { return derived().bitwise_or_inplace_impl(other); }
 
     // 索引操作
-    Derived slice(int64_t dim, int64_t start, int64_t end) const { return derived().slice_impl(dim, start, end); }
-    Derived operator[](int64_t index) const { return derived().index_impl(index); }
-    Derived operator[](const std::vector<int64_t>& indices) const { return derived().index_impl(indices); }
+    inline Derived slice(int64_t dim, int64_t start, int64_t end) const { return derived().slice_impl(dim, start, end); }
+    inline Derived operator[](int64_t index) const { return derived().index_impl(index); }
+    inline Derived operator[](const std::vector<int64_t>& indices) const { return derived().index_impl(indices); }
 
 
     template<typename T>
-    T* typed_data() { return static_cast<T*>(this->data()); }
+    inline T* typed_data() { return static_cast<T*>(this->data()); }
 
     template<typename T>
-    const T* typed_data() const { return static_cast<const T*>(this->data()); }
+    inline const T* typed_data() const { return static_cast<const T*>(this->data()); }
 
     // 工具方法
     template<typename U>

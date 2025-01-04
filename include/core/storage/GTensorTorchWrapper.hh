@@ -83,10 +83,10 @@ public:
     Scalar toScalar() const override;
     GTensorTorchWrapper& fromScalar(const Scalar& scalar) override;
 
-    void gather_sum(const std::vector<const GTensorTorchWrapper*> src) override;
-    void gather_mean(const std::vector<const GTensorTorchWrapper*> src) override;
-    void gather_max(const std::vector<const GTensorTorchWrapper*> src) override;
-    void gather_min(const std::vector<const GTensorTorchWrapper*> src) override;
+    void gatherSum(const std::vector<const GTensorTorchWrapper*> src) override;
+    void gatherMean(const std::vector<const GTensorTorchWrapper*> src) override;
+    void gatherMax(const std::vector<const GTensorTorchWrapper*> src) override;
+    void gatherMin(const std::vector<const GTensorTorchWrapper*> src) override;
 
 protected:
     // 具体实现方法
@@ -114,14 +114,14 @@ protected:
     GTensorTorchWrapper sub_scalar_impl(const Scalar& scalar) const;
     GTensorTorchWrapper mul_scalar_impl(const Scalar& scalar) const;
     GTensorTorchWrapper div_scalar_impl(const Scalar& scalar) const;
-
     GTensorTorchWrapper& add_inplace_scalar_impl(const Scalar& scalar);
     GTensorTorchWrapper& sub_inplace_scalar_impl(const Scalar& scalar);
     GTensorTorchWrapper& mul_inplace_scalar_impl(const Scalar& scalar);
     GTensorTorchWrapper& div_inplace_scalar_impl(const Scalar& scalar);
 
+    // 取scalar的item方法
     template<typename T>
-    T item_impl() const {
+    inline T item_impl() const {
         if constexpr (std::is_same_v<T, float>) {
             return item_float_impl();
         } else if constexpr (std::is_same_v<T, double>) {
@@ -135,12 +135,16 @@ protected:
             static_assert(always_false_v<T>, "Unsupported item type");
         }
     }
-
     float item_float_impl() const;
     double item_double_impl() const;
     int64_t item_int64_impl() const;
     int32_t item_int32_impl() const;
 
+    // 类的Static声明
+    static void setTensorDefaultDeviceImpl(const std::string &device_name);
+    static void setSeedImpl(uint64_t seed);
+
+private:
     std::shared_ptr<internal::TorchTensorImpl> impl_;
     NumericalDataType dtype_;
 };
