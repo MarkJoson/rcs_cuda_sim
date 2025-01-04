@@ -31,6 +31,7 @@
 
 #include "console_style.h"
 #include "core_types.hh"
+#include "ExecuteNode.hh"
 #include "Component.hh"
 #include "MessageQueue.hh"
 #include "ReducerComponent.hh"
@@ -51,14 +52,14 @@ class MessageBus
 public:
     MessageBus(SimulatorContext *context) : context_(context)  {};
 
-    void registerComponent(Component* component) {
+    void registerComponent(ExecuteNode* node) {    // 改为接收ExecuteNode
         // std::lock_guard<std::mutex> lock(mutex_);
         // TODO.
 
-        createNodeId(component->getName(), component->getTag(), component);
+        createNodeId(node->getName(), node->getTag(), node);
 
         // 调用注册回调函数，初始化输入输出
-        component->onRegister(context_);
+        node->onRegister(context_);
     }
 
     void registerInput(
@@ -331,7 +332,7 @@ private:    // ^---- 私有定义 -----
         NodeId node_id;
         NodeNameRef node_name;
         NodeTagRef node_tag;
-        Component* component;
+        ExecuteNode* node;      // 改为ExecuteNode*
 
         std::unordered_map<MessageId, DescriptionId> input_map;
         std::unordered_map<MessageId, DescriptionId> output_map;
@@ -378,7 +379,7 @@ private:    // ^---- 私有定义 -----
         std::vector<Vertex>& inactive_nodes_;
     };
 
-    NodeId createNodeId(const NodeNameRef& node_name, const NodeTagRef& node_tag, Component* component) {
+    NodeId createNodeId(const NodeNameRef& node_name, const NodeTagRef& node_tag, ExecuteNode* node) {
         if(node_id_map_.find(node_name) != node_id_map_.end()) {
             throw std::runtime_error("Node has been registered!");
         }
@@ -389,7 +390,7 @@ private:    // ^---- 私有定义 -----
             node_id,
             node_name,
             node_tag,
-            component,
+            node,
             {},{},
             {}, {},
             {}, {}
@@ -441,7 +442,7 @@ private:    // ^---- 私有定义 -----
             MessageNameRef reducer_output_message_name = p_com->getOutputMessageName();
             reducers_.insert(std::make_pair(reducer_output_message_name, std::move(new_component)));
         } else {
-            p_com = static_cast<ReducerComponent*>(node_descriptions_[ finder->second ].component);
+            p_com = static_cast<ReducerComponent*>(node_descriptions_[ finder->second ].node);
         }
 
         return p_com;
@@ -813,7 +814,7 @@ private:    // ^---- 私有定义 -----
         /// 执行节点，将节点的输出写入消息队列
 
         auto &node_des = node_descriptions_.at(node);
-        auto &component = node_des.component;
+        auto &node_ptr = node_des.node;
 
         // 收集所有输入数据
         NodeExecInputType input_data;
@@ -832,7 +833,7 @@ private:    // ^---- 私有定义 -----
         }
 
         // 所有输入就绪时执行组件
-        component->onExecute(context_, input_data, output_data);
+        node_ptr->onExecute(context_, input_data, output_data);
     }
 
     std::string generateGraphDot(const Graph& g, const std::string& graph_name, bool with_order=false) const {

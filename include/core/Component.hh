@@ -4,43 +4,25 @@
 #include <string>
 #include "core_types.hh"
 #include "storage/GTensor.hh"
+#include "ExecuteNode.hh"
 
-namespace cuda_simulator
-{
-namespace core
-{
+namespace cuda_simulator {
+namespace core {
 
 class SimulatorContext;
 
-class Component
-{
+class Component : public ExecuteNode {
 public:
     Component(const NodeName &name, const NodeTag &tag = "default")
-        : name_(name), tag_(tag) { }
-    virtual ~Component() {}
+        : ExecuteNode(name, tag) {}
+    virtual ~Component() = default;
 
-    virtual void onRegister(SimulatorContext* context) = 0;
-
+    // Component特有的接口
     virtual void onEnvironGroupInit(SimulatorContext* context) = 0;
-
-    virtual void onExecute(
-        SimulatorContext* context,
-        const NodeExecInputType &input,
-        const NodeExecOutputType &output) = 0;
-
     virtual void onReset(
         TensorHandle reset_flags,
-        NodeExecStateType &state) = 0; //
-
-    const NodeName& getName() const { return name_; }
-    const NodeTag& getTag() const { return tag_; }
-
-
-protected:
-    NodeName name_;
-    NodeTag tag_;
+        NodeExecStateType &state) = 0;
 };
-
 
 template<typename Derived>
 class CountableComponent : public Component {
@@ -50,7 +32,7 @@ public:
 
     CountableComponent(const NodeName &name, const NodeTag &tag = "default")
         : Base("#TBD", tag), inst_id_(componentInstCntInc()) {
-            name_ = name + "_" + std::to_string(inst_id_);  // 修改Component的name，增加实例id
+            name_ = name + "_" + std::to_string(inst_id_);
         }
 
     static int componentInstCntInc() {
@@ -66,6 +48,5 @@ protected:
 
 } // namespace core
 } // namespace cuda_simulator
-
 
 #endif // CUDASIM_COMPONENT_HH
