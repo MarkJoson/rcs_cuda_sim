@@ -12,7 +12,8 @@ enum class NumericalDataType
     kFloat64,
     kInt32,
     kInt64,
-    kUInt8
+    kUInt8,
+    kUInt32
 };
 
 class Scalar {
@@ -26,6 +27,8 @@ public:
     Scalar(double v) : type_(Type::kFloat64), double_value_(v) {}
     Scalar(int32_t v) : type_(Type::kInt32), int32_value_(v) {}
     Scalar(int64_t v) : type_(Type::kInt64), int64_value_(v) {}
+    Scalar(uint8_t v) : type_(Type::kUInt8), uint8_value_(v) {}
+    Scalar(uint32_t v) : type_(Type::kUInt32), uint32_value_(v) {}
 
     // NumericalDataType checking
     bool isFloatingPoint() const {
@@ -44,6 +47,7 @@ public:
             case Type::kInt32: return static_cast<float>(int32_value_);
             case Type::kInt64: return static_cast<float>(int64_value_);
             case Type::kUInt8: return static_cast<uint8_t>(uint8_value_);
+            case Type::kUInt32: return static_cast<uint32_t>(uint32_value_);
         }
         return 0.0f;
     }
@@ -55,6 +59,7 @@ public:
             case Type::kInt32: return static_cast<double>(int32_value_);
             case Type::kInt64: return static_cast<double>(int64_value_);
             case Type::kUInt8: return static_cast<uint8_t>(uint8_value_);
+            case Type::kUInt32: return static_cast<uint32_t>(uint32_value_);
         }
         return 0.0;
     }
@@ -66,6 +71,7 @@ public:
             case Type::kInt32: return int32_value_;
             case Type::kInt64: return static_cast<int32_t>(int64_value_);
             case Type::kUInt8: return static_cast<uint8_t>(uint8_value_);
+            case Type::kUInt32: return static_cast<uint32_t>(uint32_value_);
         }
         return 0;
     }
@@ -77,6 +83,7 @@ public:
             case Type::kInt32: return static_cast<int64_t>(int32_value_);
             case Type::kInt64: return int64_value_;
             case Type::kUInt8: return static_cast<uint8_t>(uint8_value_);
+            case Type::kUInt32: return static_cast<uint32_t>(uint32_value_);
         }
         return 0;
     }
@@ -88,6 +95,19 @@ public:
             case Type::kInt32: return static_cast<uint8_t>(int32_value_);
             case Type::kInt64: return static_cast<uint8_t>(int64_value_);
             case Type::kUInt8: return uint8_value_;
+            case Type::kUInt32: return static_cast<uint8_t>(uint32_value_);
+        }
+        return 0;
+    }
+
+    uint32_t toUInt32() const {
+        switch (type_) {
+            case Type::kFloat32: return static_cast<uint32_t>(float_value_);
+            case Type::kFloat64: return static_cast<uint32_t>(double_value_);
+            case Type::kInt32: return static_cast<uint32_t>(int32_value_);
+            case Type::kInt64: return static_cast<uint32_t>(int64_value_);
+            case Type::kUInt8: return static_cast<uint32_t>(uint8_value_);
+            case Type::kUInt32: return uint32_value_;
         }
         return 0;
     }
@@ -104,6 +124,7 @@ private:
         int32_t int32_value_;
         int64_t int64_value_;
         uint8_t uint8_value_;
+        uint32_t uint32_value_;
     };
 };
 

@@ -17,16 +17,13 @@ namespace internal
     std::shared_ptr<TorchTensorImpl> shareTorchTensorImpl(const std::shared_ptr<TorchTensorImpl> &impl);
 }
 
-template<typename T>
-inline constexpr bool always_false_v = false;
-
 // PyTorch后端的基类实现
 class GTensorTorchWrapper final : public ITensor<GTensorTorchWrapper> {
     friend class ITensor<GTensorTorchWrapper>;
 public:
     // explicit GTensorTorchWrapper();
-    explicit GTensorTorchWrapper(const std::vector<int64_t>& shape, NumericalDataType dtype);
-    explicit GTensorTorchWrapper(const Scalar& scalar);
+    explicit GTensorTorchWrapper(const std::vector<int64_t>& shape, NumericalDataType dtype, DeviceType deviceType=DeviceType::kCUDA);
+    explicit GTensorTorchWrapper(const Scalar& scalar, DeviceType deviceType=DeviceType::kCUDA);
 
     virtual ~GTensorTorchWrapper() final = default;
 
@@ -141,12 +138,13 @@ protected:
     int32_t item_int32_impl() const;
 
     // 类的Static声明
-    static void setTensorDefaultDeviceImpl(const std::string &device_name);
+    static void setTensorDefaultDeviceIdImpl(int device_id);
     static void setSeedImpl(uint64_t seed);
 
 private:
     std::shared_ptr<internal::TorchTensorImpl> impl_;
     NumericalDataType dtype_;
+    DeviceType device_type_;
 };
 
 

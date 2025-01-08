@@ -23,9 +23,9 @@ public:
         );
     }
 
-    float getAngle() const { return angle_; }
-    float getSin() const { return s_; }
-    float getCos() const { return c_; }
+    float angle() const { return angle_; }
+    float sin() const { return s_; }
+    float cos() const { return c_; }
 
 private:
     Rotation2D(float angle, float s, float c)
@@ -45,8 +45,8 @@ public:
 
     Vector2 localPointTransform(const Vector2& point) const {
         Vector2 result;
-        result.x() = point.x() * rotation_.getCos() - point.y() * rotation_.getSin();
-        result.y() = point.x() * rotation_.getSin() + point.y() * rotation_.getCos();
+        result.x() = point.x() * rotation_.cos() - point.y() * rotation_.sin();
+        result.y() = point.x() * rotation_.sin() + point.y() * rotation_.cos();
         result += position_;
         return result;
     }
@@ -54,8 +54,8 @@ public:
     Vector2 inverseTransformPoint(const Vector2& point) const {
         Vector2 centered = point - position_;
         Vector2 result;
-        result.x() = centered.x() * rotation_.getCos() + centered.y() * rotation_.getSin();
-        result.y() = -centered.x() * rotation_.getSin() + centered.y() * rotation_.getCos();
+        result.x() = centered.x() * rotation_.cos() + centered.y() * rotation_.sin();
+        result.y() = -centered.x() * rotation_.sin() + centered.y() * rotation_.cos();
         return result;
     }
 
@@ -66,8 +66,8 @@ public:
         );
     }
 
-    const Vector2& getPosition() const { return position_; }
-    const Rotation2D& getRotation() const { return rotation_; }
+    const Vector2& pos() const { return position_; }
+    const Rotation2D& rot() const { return rotation_; }
 
 private:
     Vector2 position_;

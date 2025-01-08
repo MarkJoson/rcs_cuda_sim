@@ -28,32 +28,32 @@ public:
     TensorRegistry& operator=(TensorRegistry&&) = delete;
 
     // 创建张量接口
-    TensorHandle& createTensor(const std::string& uri, const std::vector<int64_t>& shape, NumericalDataType dtype=NumericalDataType::kFloat32) {
-        tensors.insert(std::make_pair(uri, TensorHandle(shape, dtype)));
-        return tensors.at(uri);
+    TensorHandle* createTensor(const std::string& uri, const std::vector<int64_t>& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
+        tensors.insert(std::make_pair(uri, TensorHandle(shape, dtype, device_type)));
+        return &tensors.at(uri);
     }
 
     template<typename T>
-    TensorHandle& createTensor(const std::string& uri, const std::vector<int64_t>& shape) {
+    TensorHandle* createTensor(const std::string& uri, const std::vector<int64_t>& shape, DeviceType device_type=DeviceType::kCUDA) {
         auto dtype = TensorHandle::convertTypeToTensorType<T>();
-        return createTensor(uri, shape, dtype);
+        return createTensor(uri, shape, dtype, device_type);
     }
 
     // 获取张量
-    TensorHandle& getTensor(const std::string& uri) {
+    TensorHandle* getTensor(const std::string& uri) {
         auto it = tensors.find(uri);
         if (it == tensors.end()) {
             throw std::runtime_error("Tensor not found: " + uri);
         }
-        return it->second;
+        return &it->second;
     }
 
-    const TensorHandle& getTensor(const std::string& uri) const {
+    const TensorHandle* getTensor(const std::string& uri) const {
         auto it = tensors.find(uri);
         if (it == tensors.end()) {
             throw std::runtime_error("Tensor not found: " + uri);
         }
-        return it->second;
+        return &it->second;
     }
 
     // 移除张量

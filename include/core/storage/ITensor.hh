@@ -11,6 +11,17 @@ namespace cuda_simulator
 namespace core
 {
 
+template<typename T>
+inline constexpr bool always_false_v = false;
+
+enum class DeviceType {
+    kCUDA,
+    kCPU,
+    kNumDevices
+};
+
+using TensorShape = std::vector<int64_t>;
+
 template<typename Derived>
 class ITensor {
 public:
@@ -54,8 +65,8 @@ public:
     inline T item() const { return derived().template item_impl<T>(); }
 
 
-    static inline void setTensorDefaultDevice(const std::string &device_name) {
-        Derived::setTensorDefaultDeviceImpl(device_name);
+    static inline void setTensorDefaultDeviceId(int device_id) {
+        Derived::setTensorDefaultDeviceIdImpl(device_id);
     }
 
     static inline void setSeed(uint64_t seed) {
@@ -118,11 +129,21 @@ public:
     // 工具方法
     template<typename U>
     static constexpr NumericalDataType convertTypeToTensorType() {
-        if constexpr (std::is_same_v<U, float>) return NumericalDataType::kFloat32;
-        if constexpr (std::is_same_v<U, double>) return NumericalDataType::kFloat64;
-        if constexpr (std::is_same_v<U, int32_t>) return NumericalDataType::kInt32;
-        if constexpr (std::is_same_v<U, int64_t>) return NumericalDataType::kInt64;
-        return NumericalDataType::kUInt8;
+        if constexpr (std::is_same_v<U, float>) {
+            return NumericalDataType::kFloat32;
+        } else if constexpr (std::is_same_v<U, double>) {
+            return NumericalDataType::kFloat64;
+        } else if constexpr (std::is_same_v<U, int32_t>) {
+            return NumericalDataType::kInt32;
+        } else if constexpr (std::is_same_v<U, int64_t>) {
+            return NumericalDataType::kInt64;
+        } else if constexpr (std::is_same_v<U, uint8_t>) {
+            return NumericalDataType::kUInt8;
+        } else if constexpr (std::is_same_v<U, uint32_t>) {
+            return NumericalDataType::kUInt32;
+        } else {
+            static_assert(always_false_v<U>, "Unsupported data type");
+        }
     }
 
     // Scalar conversion methods

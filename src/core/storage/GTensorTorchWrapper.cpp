@@ -1,6 +1,5 @@
-#include <ATen/ops/zeros.h>
-#include <c10/core/DefaultDtype.h>
-#include <c10/core/Scalar.h>
+#include <c10/core/DeviceType.h>
+#include <c10/core/TensorOptions.h>
 #include <cstdint>
 #include <memory>
 #include <torch/torch.h>
@@ -19,8 +18,7 @@ namespace internal
     public:
         torch::Tensor tensor;
 
-        static torch::Dtype getTorchDtype(NumericalDataType dtype)
-        {
+        static torch::Dtype getTorchDtype(NumericalDataType dtype) {
             switch (dtype)
             {
             case NumericalDataType::kFloat32:
@@ -31,13 +29,16 @@ namespace internal
                 return torch::kInt32;
             case NumericalDataType::kInt64:
                 return torch::kInt64;
+            case NumericalDataType::kUInt8:
+                return torch::kUInt8;
+            case NumericalDataType::kUInt32:
+                return torch::kUInt32;
             default:
                 throw std::runtime_error("Unsupported data type");
             }
         }
 
-        static NumericalDataType getDataType(torch::Dtype dtype)
-        {
+        static NumericalDataType getDataType(torch::Dtype dtype) {
             if (dtype == torch::kFloat32)
                 return NumericalDataType::kFloat32;
             if (dtype == torch::kFloat64)
@@ -46,7 +47,29 @@ namespace internal
                 return NumericalDataType::kInt32;
             if (dtype == torch::kInt64)
                 return NumericalDataType::kInt64;
+            if (dtype == torch::kUInt8)
+                return NumericalDataType::kUInt8;
+            if (dtype == torch::kUInt32)
+                return NumericalDataType::kUInt32;
             throw std::runtime_error("Unsupported torch dtype");
+        }
+
+        static DeviceType getDeviceType(const torch::Device &device) {
+            if (device.is_cuda())
+                return DeviceType::kCUDA;
+            else if (device.is_cpu())
+                return DeviceType::kCPU;
+            else
+                throw std::runtime_error("Unsupported device type");
+        }
+
+        static torch::DeviceType getTorchDevice(DeviceType device_type) {
+            if (device_type == DeviceType::kCPU)
+                return torch::kCPU;
+            else if (device_type == DeviceType::kCUDA)
+                return torch::kCUDA;
+            else
+                throw std::runtime_error("Unsupported device type");
         }
     };
 
@@ -88,23 +111,27 @@ namespace internal
     }
 }
 
-static torch::DeviceType g_device_type = torch::kCUDA;
+static int8_t g_default_cuda_id = -1;      // -1 means current cuda device
 
-GTensorTorchWrapper::GTensorTorchWrapper(const std::vector<int64_t> &shape, NumericalDataType dtype)
-    : impl_(std::make_shared<internal::TorchTensorImpl>()), dtype_(dtype)
+GTensorTorchWrapper::GTensorTorchWrapper(const std::vector<int64_t> &shape, NumericalDataType dtype, DeviceType device_type)
+    : impl_(std::make_shared<internal::TorchTensorImpl>()), dtype_(dtype), device_type_(device_type)
 {
+    int8_t device_id = (device_type == DeviceType::kCPU) ? 0 : g_default_cuda_id;  // CPU设备ID为0，CUDA设备ID为g_default_cuda_id
+
     auto options = torch::TensorOptions()
                         .dtype(internal::TorchTensorImpl::getTorchDtype(dtype))
-                        .device(g_device_type);
+                        .device(internal::TorchTensorImpl::getTorchDevice(device_type_), device_id);
     impl_->tensor = torch::zeros(shape, options);
 }
 
-GTensorTorchWrapper::GTensorTorchWrapper(const Scalar &scalar)
-    : impl_(std::make_shared<internal::TorchTensorImpl>()), dtype_(scalar.type())
+GTensorTorchWrapper::GTensorTorchWrapper(const Scalar &scalar, DeviceType device_type)
+    : impl_(std::make_shared<internal::TorchTensorImpl>()), dtype_(scalar.type()), device_type_(device_type)
 {
+    int8_t device_id = (device_type == DeviceType::kCPU) ? 0 : g_default_cuda_id;  // CPU设备ID为0，CUDA设备ID为g_default_cuda_id
+
     auto options = torch::TensorOptions()
                         .dtype(internal::TorchTensorImpl::getTorchDtype(scalar.type()))
-                        .device(g_device_type);
+                        .device(internal::TorchTensorImpl::getTorchDevice(device_type_), device_id);
     impl_->tensor = torch::full({}, internal::toTorchScalar(scalar), options);
 }
 
@@ -312,6 +339,9 @@ Scalar GTensorTorchWrapper::toScalar() const {
         case NumericalDataType::kUInt8:
             scalar = Scalar(impl_->tensor.item<uint8_t>());
             break;
+        // case NumericalDataType::kUInt32:
+        //     scalar = Scalar(impl_->tensor.item<uint32_t>());
+        //     break;
         default:
             throw std::runtime_error("Unsupported data type");
     }
@@ -319,10 +349,11 @@ Scalar GTensorTorchWrapper::toScalar() const {
 }
 
 GTensorTorchWrapper& GTensorTorchWrapper::fromScalar(const Scalar& scalar) {
+    int8_t device_id = (device_type_ == DeviceType::kCPU) ? 0 : g_default_cuda_id;
     impl_->tensor = torch::scalar_tensor(
         internal::toTorchScalar(scalar),
         torch::TensorOptions().dtype(internal::TorchTensorImpl::getTorchDtype(dtype_))
-                             .device(g_device_type));
+                             .device(internal::TorchTensorImpl::getTorchDevice(device_type_), device_id));
     return *this;
 }
 
@@ -424,15 +455,8 @@ void GTensorTorchWrapper::gatherMin(const std::vector<const GTensorTorchWrapper*
     impl_->tensor = values;
 }
 
-void GTensorTorchWrapper::setTensorDefaultDeviceImpl(const std::string &device_name) {
-    // convert device name to torch device type
-    if (device_name == "cuda") {
-        g_device_type = torch::kCUDA;
-    } else if (device_name == "cpu") {
-        g_device_type = torch::kCPU;
-    } else {
-        throw std::runtime_error("Unsupported device type");
-    }
+void GTensorTorchWrapper::setTensorDefaultDeviceIdImpl(int device_id) {
+    g_default_cuda_id = device_id;
 }
 
 void GTensorTorchWrapper::setSeedImpl(uint64_t seed) {

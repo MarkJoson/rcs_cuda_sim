@@ -8,6 +8,8 @@
 
 #include "core/console_style.h"
 
+#include "core/geometry/GeometryManager.cuh"
+
 using namespace cuda_simulator::core;
 
 // Test components

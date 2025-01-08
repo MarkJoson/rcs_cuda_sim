@@ -59,6 +59,9 @@ find_package(Torch REQUIRED)
 include(thirdparty/googletest/googletest.cmake)
 include(GoogleTest)
 
+# eigen
+include(thirdparty/eigen/eigen.cmake)
+
 # boost
 find_package(Boost REQUIRED COMPONENTS graph)
 
@@ -114,7 +117,8 @@ target_include_directories(test_core
 # 链接依赖
 target_link_libraries(test_core
     PUBLIC
-        ${TORCH_LIBRARIES}
+    ${TORCH_LIBRARIES}
+    cuda_sim_eigen
 )
 
 

@@ -7,7 +7,7 @@
 #include <optional>
 #include <string>
 #include "core_types.hh"
-#include "storage/TensorRegistry.hh"
+#include "EnvGroupManager.hh"
 
 namespace cuda_simulator
 {
@@ -47,7 +47,7 @@ public:
 
             if(history_padding_val_.has_value()) {
                 // 填充历史数据
-                history_[i] = *history_padding_val_;
+                *history_[i] = *history_padding_val_;
             }
         }
     }
@@ -59,17 +59,15 @@ public:
         }
 
         int index = (write_index_ - offset + max_history_len_) % max_history_len_;
-        return &history_[index];
+        return history_[index];
     }
 
     // 获取当前的写入Tensor
     TensorHandle* getWriteTensorPtr() {
-        auto &result = history_[write_index_];
+        auto result = history_[write_index_];
         write_index_ = (write_index_ + 1) % max_history_len_;
-        return &result;
+        return result;
     }
-
-    // TODO. 增加一个添加外部WriteTensor的接口，当history_len=1时，可以直接使用外部的Tensor
 
     void resetEnvData(int env_group_id, int env_id) {
         // TODO.
@@ -88,14 +86,14 @@ private:
                std::to_string(index);
     }
 
-    TensorHandle createTensorByShape(const std::string& uri, const MessageShapeRef& shape) {
+    TensorHandle* createTensorByShape(const std::string& uri, const MessageShapeRef& shape) {
         // 根据shape的维度创建tensor
         std::vector<int64_t> tensor_shape;
         for(int64_t i = 0; i < shape.size(); i++) {
             tensor_shape.push_back(shape[i]);
         }
-        // 创建float类型的tensor
-        // 注意：这里假设所有tensor都是float类型，如果需要支持其他类型，需要添加类型参数
+        // 创建float类型的tensor，假设所有tensor都是float类型，使用指针类型，数据由TensorRegistry管理
+        // TODO. 使用EnvGroupManager替代TensorRegistry
         return TensorRegistry::getInstance().createTensor<float>(uri, tensor_shape);
     }
 
@@ -106,6 +104,8 @@ private:
     MessageId   message_id_;
     MessageNameRef message_name_;
 
+    // TODO. batchsize
+
     MessageShapeRef shape_;
     size_t max_history_len_;
     std::optional<TensorHandle> history_padding_val_;
@@ -114,7 +114,7 @@ private:
     size_t valid_count_ = 0;
 
     // [History_len, env_group_size, env_cnt, *shape...]
-    std::vector<TensorHandle> history_;
+    std::vector<TensorHandle*> history_;
 };
 
 

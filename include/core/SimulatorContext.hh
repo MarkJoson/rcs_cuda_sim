@@ -4,7 +4,7 @@
 #include <memory>
 #include "MessageBus.hh"
 #include "Component.hh"
-
+#include "EnvGroupManager.hh"
 
 namespace cuda_simulator
 {
@@ -25,8 +25,8 @@ public:
         return message_bus.get();
     }
 
-    void setDefaultDevice(const std::string &device_name ) {
-        GTensor::setTensorDefaultDevice(device_name);
+    void setDefaultCudaDeviceId(int device_id) {
+        GTensor::setTensorDefaultDeviceId(device_id);
     }
 
     void setSeed(uint64_t seed) {
@@ -36,12 +36,15 @@ public:
     void initialize() {
     }
 
-    void getEnvironGroupManager() {}
+    EnvGroupManager* getEnvironGroupManager() {
+        return env_group_manager.get();
+    }
 
     void loadBasicComponent() {}
 
 private:
     std::unique_ptr<MessageBus> message_bus;
+    std::unique_ptr<EnvGroupManager> env_group_manager;
 };
 
 } // namespace core

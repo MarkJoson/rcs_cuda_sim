@@ -41,21 +41,6 @@ private:
     float radius_;
 };
 
-// 线段
-class SegmentShapeDef : public ShapeDef {
-public:
-    SegmentShapeDef(const Vector2& point1, const Vector2& point2)
-        : point1_(point1)
-        , point2_(point2) {}
-
-    const Vector2& getPoint1() const { return point1_; }
-    const Vector2& getPoint2() const { return point2_; }
-
-private:
-    Vector2 point1_;
-    Vector2 point2_;
-};
-
 // 多边形
 class PolygonShapeDef : public ShapeDef {
 public:
@@ -76,29 +61,6 @@ private:
     float radius_;
 };
 
-// 链条段
-class ChainSegmentDef : public ShapeDef {
-public:
-    ChainSegmentDef(int chainId,
-                    const Vector2& ghostTail,
-                    const std::shared_ptr<SegmentShapeDef>& segment,
-                    const Vector2& ghostHead)
-        : chainId_(chainId)
-        , ghostTail_(ghostTail)
-        , segment_(segment)
-        , ghostHead_(ghostHead) {}
-
-    int getChainId() const { return chainId_; }
-    const Vector2& getGhostTail() const { return ghostTail_; }
-    const std::shared_ptr<SegmentShapeDef>& getSegment() const { return segment_; }
-    const Vector2& getGhostHead() const { return ghostHead_; }
-
-private:
-    int chainId_;
-    Vector2 ghostTail_;
-    std::shared_ptr<SegmentShapeDef> segment_;
-    Vector2 ghostHead_;
-};
 
 } // namespace geometry
 } // namespace cuda_simulator
