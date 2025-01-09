@@ -7,7 +7,7 @@
 #include <optional>
 #include <string>
 #include "core_types.hh"
-#include "EnvGroupManager.hh"
+#include "EnvGroupManager.cuh"
 
 namespace cuda_simulator
 {

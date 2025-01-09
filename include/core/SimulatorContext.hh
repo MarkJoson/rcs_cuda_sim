@@ -4,7 +4,7 @@
 #include <memory>
 #include "MessageBus.hh"
 #include "Component.hh"
-#include "EnvGroupManager.hh"
+#include "EnvGroupManager.cuh"
 
 namespace cuda_simulator
 {

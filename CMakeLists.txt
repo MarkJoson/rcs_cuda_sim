@@ -100,7 +100,7 @@ target_link_libraries(test_boost_graph
 add_executable(test_core
     src/test_core.cu
     src/core/storage/GTensorTorchWrapper.cpp
-    src/core/ReducerComponent.cc
+    src/core/ReducerComponent.cu
 )
 
 # 设置目标属性

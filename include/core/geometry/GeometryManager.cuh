@@ -14,7 +14,7 @@
 #include <cuda_runtime.h>
 #include <glm/glm.hpp>
 
-#include "core/EnvGroupManager.hh"
+#include "core/EnvGroupManager.cuh"
 #include "core/SimulatorContext.hh"
 #include "core/geometry/types.hh"
 #include "core/storage/GTensorConfig.hh"
@@ -248,7 +248,7 @@ public:
 
     void transformDynamicLines(core::SimulatorContext *context) {
         // 将所有静态多边形转换为线段
-        const uint32_t num_group = context->getEnvironGroupManager()->getNumEnvGroup();
+        const uint32_t num_group = context->getEnvironGroupManager()->getNumGroup();
         const uint32_t num_env_per_group = context->getEnvironGroupManager()->getNumEnvPerGroup();
 
         uint32_t num_envs = num_group*num_env_per_group;

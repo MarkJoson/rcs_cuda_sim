@@ -4,6 +4,7 @@
 - ~~编写GeometryManager~~
 - ~~配置。。如何告诉仿真当前的环境中对应的机器人数量？在register。增加onConfigure回调，并在register时dosomething~~
 - ~~Component如何在运行时获得环境组的参数？ExecuteContext：当前活动的环境组id。当前Kernel~~
+- constant memory 读取接口, sync_to_device
 - 移植地图生成、Gridmap
 - 修改message queue创建shapes时的batch
 

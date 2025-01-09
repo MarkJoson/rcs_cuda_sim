@@ -8,7 +8,7 @@
 
 #include "core/console_style.h"
 
-#include "core/geometry/GeometryManager.cu"
+#include "core/geometry/GeometryManager.cuh"
 
 using namespace cuda_simulator::core;
 
@@ -244,9 +244,14 @@ void testMultiSourceFusion() {
     std::cout << "Multi-source fusion test completed!\n";
 }
 
+#include "cuda_helper.h"
+struct Motherfucker {
+    int abc;
+};
+
+
 int main() {
     auto& registry = TensorRegistry::getInstance();
-
     // testBasicMessagePassing();
     // testMessageHistory();
     testMultiSourceFusion();

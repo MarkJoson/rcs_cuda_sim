@@ -1,8 +1,10 @@
 CompileFlags:
   Compiler: /usr/local/cuda/bin/nvcc
   Add:
-    - “-std=c++20”
-    - “-fdeclspec”
+    - "-std=c++20"
+    - "-fdeclspec"
+    - "-D__CUDACC__"
+    - "-allow-unsupported-compiler"
   Remove:
     # strip CUDA fatbin args
     - "-Xfatbin*"
