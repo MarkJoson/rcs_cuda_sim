@@ -22,8 +22,11 @@ class GTensorTorchWrapper final : public ITensor<GTensorTorchWrapper> {
     friend class ITensor<GTensorTorchWrapper>;
 public:
     // explicit GTensorTorchWrapper();
-    explicit GTensorTorchWrapper(const std::vector<int64_t>& shape, NumericalDataType dtype, DeviceType deviceType=DeviceType::kCUDA);
-    explicit GTensorTorchWrapper(const Scalar& scalar, DeviceType deviceType=DeviceType::kCUDA);
+    explicit GTensorTorchWrapper(NumericalDataType dtype, DeviceType device_type=DeviceType::kCUDA);
+    explicit GTensorTorchWrapper(const std::vector<int64_t>& shape, NumericalDataType dtype, DeviceType device_type=DeviceType::kCUDA);
+    explicit GTensorTorchWrapper(const Scalar& scalar, DeviceType device_type=DeviceType::kCUDA);
+    explicit GTensorTorchWrapper(const std::shared_ptr<internal::TorchTensorImpl>& impl, NumericalDataType dtype, DeviceType device_type=DeviceType::kCUDA)
+        : impl_(impl), dtype_(dtype), device_type_(device_type) {}
 
     virtual ~GTensorTorchWrapper() final = default;
 

@@ -7,7 +7,7 @@ using namespace cuda_simulator;
 using namespace cuda_simulator::geometry;
 
 void testGeometryManager() {
-    try {
+    // try {
         // 创建模拟器上下文
         auto context = std::make_unique<core::SimulatorContext>();
 
@@ -60,9 +60,9 @@ void testGeometryManager() {
 
         std::cout << "GeometryManager test completed successfully!" << std::endl;
 
-    } catch (const std::exception& e) {
-        std::cerr << "Test failed with error: " << e.what() << std::endl;
-    }
+    // } catch (const std::exception& e) {
+    //     std::cerr << "Test failed with error: " << e.what() << std::endl;
+    // }
 }
 
 int main() {

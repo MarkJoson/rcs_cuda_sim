@@ -126,7 +126,7 @@ public:
         // 静态物体，环境组参数
         num_static_lines_ = group_mgr->registerConfigItem<uint32_t, core::MemoryType::CONSTANT_GPU_MEM>("num_static_lines");
         static_lines_ = group_mgr->registerConfigTensor<float>("static_lines", {MAX_STATIC_LINES, 4});
-        static_esdf_ = group_mgr->registerConfigTensor<float>("static_esdf",{MAX_STATIC_LINES, GRIDMAP_GRIDSIZE_X, GRIDMAP_GRIDSIZE_Y, 4});
+        static_esdf_ = group_mgr->registerConfigTensor<float>("static_esdf",{GRIDMAP_GRIDSIZE_Y, GRIDMAP_GRIDSIZE_X, 4});
     }
 
     void onStart(core::SimulatorContext *context) {

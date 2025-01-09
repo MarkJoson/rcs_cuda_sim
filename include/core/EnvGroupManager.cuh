@@ -90,9 +90,10 @@ inline int getConstantMemPoolOffset(int group_id, int offset) {
 
 
 enum class MemoryType {
-    GLOBAL_GPU_MEM,     // 普通全局内存
+    HOST_MEM,           // 主机内存
     CONSTANT_GPU_MEM,   // 常量内存
-    HOST_MEM
+    GLOBAL_GPU_MEM,     // 普通全局内存
+    GLOBAL_TENSOR       // 全局张量
 };
 
 // ------------------- 内存管理 -------------------
@@ -247,7 +248,7 @@ class EGGlobalMemConfigTensor : public EGConfigItemBase {
     TensorHandle* device_tensor_;
 public:
     EGGlobalMemConfigTensor(const std::string& name, int64_t num_group, const TensorShape& shape)
-        : EGConfigItemBase(MemoryType::GLOBAL_GPU_MEM)
+        : EGConfigItemBase(MemoryType::GLOBAL_TENSOR)
     {
         TensorShape new_shape = shape;
         new_shape.insert(new_shape.begin(), num_group);
@@ -264,6 +265,10 @@ public:
         return device_tensor_;
     }
 
+    void syncToDevice() {
+        host_tensor_->copyTo(*device_tensor_);
+    }
+
     template<typename... Args>
     auto at(int64_t group_id, Args... indices) {
         return (*host_tensor_)[{group_id, indices...}];
@@ -275,9 +280,9 @@ public:
 
 class EnvGroupManager {
 public:
-    EnvGroupManager(int max_num_active_env_group, int max_num_env_group)
-        : max_num_group_(max_num_env_group)
-        , max_num_active_group_(max_num_active_env_group)
+    EnvGroupManager(int max_num_active_group, int max_num_group)
+        : max_num_group_(max_num_group)
+        , max_num_active_group_(max_num_active_group)
         , num_group_(0)
     { }
 

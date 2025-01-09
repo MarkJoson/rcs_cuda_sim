@@ -11,6 +11,7 @@
 
 - python接口
 - Node的onReset接口
+- TensorHandle* 改为TensorHandle
 
 - ReducerComponent改名
 

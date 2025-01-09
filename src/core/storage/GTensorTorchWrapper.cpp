@@ -1,5 +1,7 @@
+#include <ATen/TensorIndexing.h>
 #include <c10/core/DeviceType.h>
 #include <c10/core/TensorOptions.h>
+#include <c10/util/ArrayRef.h>
 #include <cstdint>
 #include <memory>
 #include <torch/torch.h>
@@ -17,6 +19,9 @@ namespace internal
     {
     public:
         torch::Tensor tensor;
+
+        TorchTensorImpl() = default;
+        TorchTensorImpl(torch::Tensor t) : tensor(t) {}
 
         static torch::Dtype getTorchDtype(NumericalDataType dtype) {
             switch (dtype)
@@ -113,6 +118,10 @@ namespace internal
 
 static int8_t g_default_cuda_id = -1;      // -1 means current cuda device
 
+GTensorTorchWrapper::GTensorTorchWrapper(NumericalDataType dtype, DeviceType device_type)
+    : impl_(std::make_shared<internal::TorchTensorImpl>()), dtype_(dtype), device_type_(device_type)
+{ }
+
 GTensorTorchWrapper::GTensorTorchWrapper(const std::vector<int64_t> &shape, NumericalDataType dtype, DeviceType device_type)
     : impl_(std::make_shared<internal::TorchTensorImpl>()), dtype_(dtype), device_type_(device_type)
 {
@@ -201,61 +210,56 @@ void GTensorTorchWrapper::resize(const std::vector<int64_t> &shape)
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::add_impl(const GTensorTorchWrapper& other) const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = impl_->tensor + other.impl_->tensor;
     return result;
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::sub_impl(const GTensorTorchWrapper& other) const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = impl_->tensor - other.impl_->tensor;
     return result;
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::mul_impl(const GTensorTorchWrapper& other) const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = impl_->tensor * other.impl_->tensor;
     return result;
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::div_impl(const GTensorTorchWrapper& other) const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = impl_->tensor / other.impl_->tensor;
     return result;
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::slice_impl(int64_t dim, int64_t start, int64_t end) const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = impl_->tensor.slice(dim, start, end);
     return result;
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::index_impl(const std::vector<int64_t>& indices) const {
-    torch::Tensor indexed = impl_->tensor;
-    // 依次对每个维度进行索引
-    for (size_t i = 0; i < indices.size(); ++i) {
-        indexed = indexed.select(i, indices[i]);
-    }
-
-    GTensorTorchWrapper result(indexed.sizes().vec(), dtype_);
-    result.impl_->tensor = indexed;
+    GTensorTorchWrapper result(dtype_, device_type_);
+    std::vector<torch::indexing::TensorIndex> indices_torch(indices.begin(), indices.end());
+    result.impl_->tensor = impl_->tensor.index(indices_torch);
     return result;
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::index_impl(int64_t index) const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = impl_->tensor.select(0, index);
     return result;
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::bitwise_not_impl() const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = torch::bitwise_not(impl_->tensor);
     return result;
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::neg_impl() const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = impl_->tensor.neg();
     return result;
 }
@@ -367,25 +371,25 @@ GTensorTorchWrapper& GTensorTorchWrapper::fromScalar(const Scalar& scalar) {
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::add_scalar_impl(const Scalar& scalar) const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = impl_->tensor + (internal::toTorchScalar(scalar));;
     return result;
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::sub_scalar_impl(const Scalar& scalar) const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = impl_->tensor - (internal::toTorchScalar(scalar));;
     return result;
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::mul_scalar_impl(const Scalar& scalar) const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = impl_->tensor * (internal::toTorchScalar(scalar));;
     return result;
 }
 
 GTensorTorchWrapper GTensorTorchWrapper::div_scalar_impl(const Scalar& scalar) const {
-    GTensorTorchWrapper result(shape(), dtype());
+    GTensorTorchWrapper result(dtype_, device_type_);
     result.impl_->tensor = impl_->tensor / (internal::toTorchScalar(scalar));;
     return result;
 }
