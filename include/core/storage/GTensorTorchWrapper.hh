@@ -61,6 +61,7 @@ public:
     size_t elemSize() const override;
     size_t dim() const override;
     NumericalDataType dtype() const override;
+    bool is_contiguous() const override;
 
     void* data() override;
     const void* data() const override;
@@ -72,6 +73,7 @@ public:
     void fill(Scalar value) override;
     void copyFrom(const GTensorTorchWrapper& other) override;
     void copyTo(GTensorTorchWrapper& other) const override;
+    void resize(const std::vector<int64_t>& shape) override;
 
     GTensorTorchWrapper clone() const override;
     GTensorTorchWrapper move() override;

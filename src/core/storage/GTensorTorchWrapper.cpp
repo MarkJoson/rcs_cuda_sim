@@ -195,6 +195,11 @@ void GTensorTorchWrapper::copyTo(GTensorTorchWrapper &other) const
     other.impl_->tensor.copy_(impl_->tensor);
 }
 
+void GTensorTorchWrapper::resize(const std::vector<int64_t> &shape)
+{
+    impl_->tensor = torch::zeros(shape, impl_->tensor.options());
+}
+
 GTensorTorchWrapper GTensorTorchWrapper::add_impl(const GTensorTorchWrapper& other) const {
     GTensorTorchWrapper result(shape(), dtype());
     result.impl_->tensor = impl_->tensor + other.impl_->tensor;
@@ -311,6 +316,10 @@ int32_t GTensorTorchWrapper::item_int32_impl() const {
 
 NumericalDataType GTensorTorchWrapper::dtype() const {
     return dtype_;
+}
+
+bool GTensorTorchWrapper::is_contiguous() const {
+    return impl_->tensor.is_contiguous();
 }
 
 void* GTensorTorchWrapper::data() {

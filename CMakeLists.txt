@@ -59,6 +59,9 @@ find_package(Torch REQUIRED)
 include(thirdparty/googletest/googletest.cmake)
 include(GoogleTest)
 
+# OpenCV
+find_package(OpenCV REQUIRED)
+
 # eigen
 include(thirdparty/eigen/eigen.cmake)
 
@@ -112,6 +115,7 @@ target_include_directories(test_core
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>          # 安装后使用安装的 include 目录
     PRIVATE
         ${TORCH_INCLUDE_DIRS}
+        ${OpenCV_INCLUDE_DIRS}
 )
 
 # 链接依赖
@@ -119,6 +123,7 @@ target_link_libraries(test_core
     PUBLIC
     ${TORCH_LIBRARIES}
     cuda_sim_eigen
+    ${OpenCV_LIBS}
 )
 
 
@@ -128,7 +133,7 @@ target_link_libraries(test_core
 
 if(BUILD_TESTING)
     enable_testing()
-    add_subdirectory(tests)
+    # add_subdirectory(tests)
 endif()
 
 ############

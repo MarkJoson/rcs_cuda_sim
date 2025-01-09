@@ -40,6 +40,7 @@ public:
     virtual size_t elemSize() const = 0;
     virtual size_t dim() const = 0;
     virtual NumericalDataType dtype() const = 0;
+    virtual bool is_contiguous() const = 0;
 
     // raw data access
     virtual void* data() = 0;
@@ -54,6 +55,7 @@ public:
     virtual void fill(Scalar value) = 0;
     virtual void copyFrom(const Derived& other) = 0;
     virtual void copyTo(Derived& other) const = 0;
+    virtual void resize(const std::vector<int64_t>& shape) = 0;
 
     // Gather方法
     virtual void gatherSum(const std::vector<const Derived*> src) = 0;

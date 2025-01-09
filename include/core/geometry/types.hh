@@ -8,10 +8,8 @@ namespace cuda_simulator {
 namespace geometry {
 
 enum class ShapeType {
-    Circle,
-    Segment,
-    Polygon,
-    Chain
+    POLYGON,
+    CIRCLE,
 };
 
 enum class ObjectType {

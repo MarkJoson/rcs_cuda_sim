@@ -504,7 +504,7 @@ private:    // ^---- 私有定义 -----
             for (auto sub_id : sub_ids) {
                 auto *sub = &input_descriptions_[sub_id];
 
-                printf(FG_CYAN "stack_order size: %d" FG_DEFAULT LINE_ENDL, sub->stack_order.size());
+                printf(FG_CYAN "stack_order size: %lu" FG_DEFAULT LINE_ENDL, sub->stack_order.size());
 
                 if (sub->stack_order.size() == 0) {
                     for (auto pub_id : pub_ids) {

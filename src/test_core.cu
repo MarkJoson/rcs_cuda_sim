@@ -8,7 +8,7 @@
 
 #include "core/console_style.h"
 
-#include "core/geometry/GeometryManager.cuh"
+#include "core/geometry/GeometryManager.cu"
 
 using namespace cuda_simulator::core;
 
