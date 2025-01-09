@@ -80,8 +80,10 @@ public:
     using const_pointer = const T*;
     using size_type = std::size_t;
 
+    // !!! 类型T的每一个实例都会对齐到一个字的边界，尽管此时会浪费空间。
     pointer allocate(size_type n) {
-        size_type words = ((n * sizeof(T) + sizeof(env_group_impl::constant_mem_pool[0]) + 1) / sizeof(env_group_impl::constant_mem_pool[0])) ;    // 按照字大小对齐分配
+        // 向上取整后×n
+        size_type words = (sizeof(T) + sizeof(env_group_impl::constant_mem_pool[0]) + 1) / sizeof(env_group_impl::constant_mem_pool[0]) * n;
         if(env_group_impl::getConstantMemAllocatedWords() + words
             > sizeof(env_group_impl::constant_mem_pool) / sizeof(env_group_impl::constant_mem_pool[0])) {
             throw std::bad_alloc();
@@ -108,17 +110,19 @@ public:
 
 class EGConfigItemBase {
     MemoryType mem_type_;
-    int64_t num_env_grp_;
+    int64_t num_group_;
 public:
-    EGConfigItemBase(MemoryType mem_type, int64_t num_env_grp=1)
-        : mem_type_(mem_type), num_env_grp_(num_env_grp) {}
+    EGConfigItemBase(MemoryType mem_type, int64_t num_group=1)
+        : mem_type_(mem_type), num_group_(num_group) {}
+
+    virtual ~EGConfigItemBase() = default;
 
     MemoryType getMemoryType() const {
         return mem_type_;
     }
 
     int64_t getNumEnvGroup() const {
-        return num_env_grp_;
+        return num_group_;
     }
 };
 
@@ -126,8 +130,8 @@ template<typename T>
 class EGHostMemConfigItem : public EGConfigItemBase {
     std::vector<T> host_data_;
 public:
-    EGHostMemConfigItem(int64_t num_env_grp, MemoryType alternative=MemoryType::HOST_MEM)
-        : EGConfigItemBase(alternative, num_env_grp), host_data_(num_env_grp)
+    EGHostMemConfigItem(int64_t num_group, MemoryType alternative=MemoryType::HOST_MEM)
+        : EGConfigItemBase(alternative, num_group), host_data_(num_group)
     { }
 
     T& at(int64_t idx) {
@@ -143,13 +147,19 @@ public:
 template<typename T>
 class EGConstMemConfigItem : public EGHostMemConfigItem<T> {
     std::vector<T, ConstantMemoryAllocator<T>> device_data_;
-    int64_t num_active_env_grp;
+    int64_t num_active_group_;
 
 public:
-    EGConstMemConfigItem(int64_t num_env_grp, int64_t num_active_env_grp)
-        : EGHostMemConfigItem<T>(num_env_grp, MemoryType::CONSTANT_GPU_MEM), device_data_(num_active_env_grp), num_active_env_grp(num_active_env_grp)
+    EGConstMemConfigItem(int64_t num_group, int64_t num_active_group)
+        : EGHostMemConfigItem<T>(num_group, MemoryType::CONSTANT_GPU_MEM), device_data_(num_active_group), num_active_group_(num_active_group)
     { }
 
+    // 根据活跃组id同步到设备
+    void syncToDevice(const std::vector<int64_t> active_group_incides) override {
+        for(int i = 0; i < num_active_group_; i++) {
+            cudaMemcpyToSymbol(device_data_.data(), host_data_.data(), host_data_.size() * sizeof(T), i * host_data_.size() * sizeof(T));
+        }
+    }
 };
 
 // 全局内存区域句柄，
@@ -157,8 +167,8 @@ template<typename T>
 class EGGlobalMemConfigItem : public EGHostMemConfigItem<T> {
     std::vector<T, GlobalMemoryAllocator<T>> device_data_;
 public:
-    EGGlobalMemConfigItem(int64_t num_env_grp)
-        : EGHostMemConfigItem<T>(num_env_grp, MemoryType::GLOBAL_GPU_MEM), device_data_(num_env_grp)
+    EGGlobalMemConfigItem(int64_t num_group)
+        : EGHostMemConfigItem<T>(num_group, MemoryType::GLOBAL_GPU_MEM), device_data_(num_group)
     { }
 };
 
@@ -168,11 +178,11 @@ class EGGlobalMemConfigTensor : public EGConfigItemBase {
     TensorHandle* host_tensor_;
     TensorHandle* device_tensor_;
 public:
-    EGGlobalMemConfigTensor(const std::string& name, int64_t num_env_grp, const TensorShape& shape)
+    EGGlobalMemConfigTensor(const std::string& name, int64_t num_group, const TensorShape& shape)
         : EGConfigItemBase(MemoryType::GLOBAL_GPU_MEM)
     {
         TensorShape new_shape = shape;
-        new_shape.insert(new_shape.begin(), num_env_grp);
+        new_shape.insert(new_shape.begin(), num_group);
 
         host_tensor_ = TensorRegistry::getInstance().createTensor<T>(name + "_Config@CPU", new_shape, DeviceType::kCPU);
         device_tensor_ = TensorRegistry::getInstance().createTensor<T>( name + "_Config@CUDA", new_shape, DeviceType::kCUDA);
@@ -187,8 +197,8 @@ public:
     }
 
     template<typename... Args>
-    auto at(int64_t env_grp_id, Args... indices) {
-        return (*host_tensor_)[{env_grp_id, indices...}];
+    auto at(int64_t group_id, Args... indices) {
+        return (*host_tensor_)[{group_id, indices...}];
     }
 };
 
@@ -203,7 +213,7 @@ public:
         , num_env_group_(0)
     { }
 
-    constexpr static int SHAPE_PLACEHOLDER_ENV_GRP = -100;
+    constexpr static int SHAPE_PLACEHOLDER_GROUP = -100;
     constexpr static int SHAPE_PLACEHOLDER_ENV = -101;
 
     template<typename T, MemoryType mem_type>
@@ -263,7 +273,7 @@ public:
 
         std::vector<int64_t> shape;
         for(auto s : shape_with_placeholder) {
-            if(s == SHAPE_PLACEHOLDER_ENV_GRP) {
+            if(s == SHAPE_PLACEHOLDER_GROUP) {
                 shape.push_back(num_env_group_);
             } else if(s == SHAPE_PLACEHOLDER_ENV) {
                 shape.push_back(num_env_per_group_);

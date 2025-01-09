@@ -42,8 +42,8 @@ __global__ void transformDynamicLinesKernel(
         const uint32_t num_envs,
         const float     * __restrict__ dyn_obj_lines,       // 多边形边集合
         const uint32_t  * __restrict__ dyn_obj_line_ids,    // 多边形边集合对应的物体ID
-        const float     * __restrict__ dyn_obj_poses,       // 多边形形状位姿，[obj, env_grp, env]
-        float           * __restrict__ dyn_lines) {         // 当前多边形外形线段在坐标系的端点 [env_grp, env, lines, 4]
+        const float     * __restrict__ dyn_obj_poses,       // 多边形形状位姿，[obj, group, env]
+        float           * __restrict__ dyn_lines) {         // 当前多边形外形线段在坐标系的端点 [group, env, lines, 4]
 
     // 每个block负责dyn_obj的一个line(y), 每个线程负责一个点(x)
     // const uint32_t point_id = threadIdx.x;          // 线段的点Id, 0起点，1终点
@@ -119,14 +119,14 @@ public:
     }
 
     void onRegister(core::SimulatorContext *context) {
-        core::EnvGroupManager *env_grp_mgr = context->getEnvironGroupManager();
+        core::EnvGroupManager *group_mgr = context->getEnvironGroupManager();
         // 主机内存，环境组参数
-        static_scene_descs_ = env_grp_mgr->registerConfigItem<StaticSceneDescription, core::MemoryType::HOST_MEM>("scene_desc");
+        static_scene_descs_ = group_mgr->registerConfigItem<StaticSceneDescription, core::MemoryType::HOST_MEM>("scene_desc");
 
         // 静态物体，环境组参数
-        num_static_lines_ = env_grp_mgr->registerConfigItem<uint32_t, core::MemoryType::CONSTANT_GPU_MEM>("num_static_lines");
-        static_lines_ = env_grp_mgr->registerConfigTensor<float>("static_lines", {MAX_STATIC_LINES, 4});
-        static_esdf_ = env_grp_mgr->registerConfigTensor<float>("static_esdf",{MAX_STATIC_LINES, GRIDMAP_GRIDSIZE_X, GRIDMAP_GRIDSIZE_Y, 4});
+        num_static_lines_ = group_mgr->registerConfigItem<uint32_t, core::MemoryType::CONSTANT_GPU_MEM>("num_static_lines");
+        static_lines_ = group_mgr->registerConfigTensor<float>("static_lines", {MAX_STATIC_LINES, 4});
+        static_esdf_ = group_mgr->registerConfigTensor<float>("static_esdf",{MAX_STATIC_LINES, GRIDMAP_GRIDSIZE_X, GRIDMAP_GRIDSIZE_Y, 4});
     }
 
     void onStart(core::SimulatorContext *context) {
@@ -138,18 +138,18 @@ public:
         assembleDynamicWorld();
 
         // 初始化动态物体存储空间
-        core::EnvGroupManager *env_grp_mgr = context->getEnvironGroupManager();
-        // 场景中所有的线段, [env_grp, env, lines, 4]
-        dyn_lines_ = env_grp_mgr->createTensor<float>("scene_lines", {
-            core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV_GRP,
+        core::EnvGroupManager *group_mgr = context->getEnvironGroupManager();
+        // 场景中所有的线段, [group, env, lines, 4]
+        dyn_lines_ = group_mgr->createTensor<float>("scene_lines", {
+            core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
             core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
             num_dyn_shape_lines_,
             4});
-        // 场景中所有dyn object的pose, [obj, env_grp, env, 4]
+        // 场景中所有dyn object的pose, [obj, group, env, 4]
         const uint32_t num_dynobj = dyn_scene_desc_.size();
-        dyn_poses_ = env_grp_mgr->createTensor<float>("dynamic_poses", {
+        dyn_poses_ = group_mgr->createTensor<float>("dynamic_poses", {
             num_dynobj,
-            core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV_GRP,
+            core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
             core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
             4});
 
@@ -162,9 +162,9 @@ public:
 
     void renderStaticEDF() {
         // 为所有的场景组生成静态物体的SDF
-        for (int64_t env_grp_id=0; env_grp_id<static_scene_descs_->getNumEnvGroup(); env_grp_id++) {
+        for (int64_t group_id=0; group_id<static_scene_descs_->getNumEnvGroup(); group_id++) {
             GridMapGenerator grid_map(GRIDMAP_WIDTH, GRIDMAP_HEIGHT, {0, 0}, GRIDMAP_RESOLU);
-            for (auto &static_obj : static_scene_descs_->at(env_grp_id)) {
+            for (auto &static_obj : static_scene_descs_->at(group_id)) {
                 auto &shape = static_obj.first;
                 auto &pose = static_obj.second;
 
@@ -173,7 +173,7 @@ public:
                     grid_map.drawPolygon(*poly, pose);
                 }
             }
-            core::TensorHandle selected_map = static_esdf_->at(env_grp_id);
+            core::TensorHandle selected_map = static_esdf_->at(group_id);
             grid_map.fastEDT(selected_map);
         }
     }
@@ -248,10 +248,10 @@ public:
 
     void transformDynamicLines(core::SimulatorContext *context) {
         // 将所有静态多边形转换为线段
-        const uint32_t num_env_grp = context->getEnvironGroupManager()->getNumEnvGroup();
-        const uint32_t num_env_per_grp = context->getEnvironGroupManager()->getNumEnvPerGroup();
+        const uint32_t num_group = context->getEnvironGroupManager()->getNumEnvGroup();
+        const uint32_t num_env_per_group = context->getEnvironGroupManager()->getNumEnvPerGroup();
 
-        uint32_t num_envs = num_env_grp*num_env_per_grp;
+        uint32_t num_envs = num_group*num_env_per_group;
         uint32_t blocksize_y = std::min(num_envs, static_cast<uint32_t>(DUMP_DYM_LINES_CTA_SIZE/2));
         uint32_t grid_x = std::max((num_envs+blocksize_y-1) / blocksize_y, static_cast<uint32_t>(1u));
         dim3 block(2, blocksize_y, 1);
@@ -279,7 +279,7 @@ private:
     core::EGHostMemConfigItem<StaticSceneDescription> *static_scene_descs_;
     core::EGConstMemConfigItem<uint32_t> *num_static_lines_=nullptr; // 静态多边形物体，外轮廓线段数量，用于激光雷达
     core::EGGlobalMemConfigTensor<float> *static_lines_=nullptr;     // 静态多边形物体，外轮廓线段端点，用于激光雷达
-    core::EGGlobalMemConfigTensor<float> *static_esdf_=nullptr;      // 静态物体形成的ESDF: [env_grp, width, height, 4]
+    core::EGGlobalMemConfigTensor<float> *static_esdf_=nullptr;      // 静态物体形成的ESDF: [group, width, height, 4]
 
     // 动态物体
     DynamicSceneDescription dyn_scene_desc_;                        // 动态物体定义（仅支持多边形）
@@ -288,8 +288,8 @@ private:
     core::TensorHandle      *dyn_shape_lines_ = nullptr;            // 多边形线段集合（局部坐标系）: [line, 4]
 
     // 为每个环境准备的数据
-    core::TensorHandle *dyn_poses_ = nullptr;                       // 动态物体位姿集合: [obj, env_grp, env, 4]
-    core::TensorHandle *dyn_lines_ = nullptr;                       // 动态物体线段集合: [env_grp, env, lines, 4]
+    core::TensorHandle *dyn_poses_ = nullptr;                       // 动态物体位姿集合: [obj, group, env, 4]
+    core::TensorHandle *dyn_lines_ = nullptr;                       // 动态物体线段集合: [group, env, lines, 4]
 
     // TODO. 动态物体的初始位姿，放到onReset中初始化
 
