@@ -98,9 +98,10 @@ target_link_libraries(test_boost_graph
 
 
 add_executable(test_core
-    src/test_core.cu
+    src/test_geometry_mgr.cu
     src/core/storage/GTensorTorchWrapper.cpp
     src/core/ReducerComponent.cu
+    src/core/EnvGroupManager.cu
 )
 
 # 设置目标属性
@@ -118,12 +119,15 @@ target_include_directories(test_core
         ${OpenCV_INCLUDE_DIRS}
 )
 
+message("****************************" ${OpenCV_LIBS})
+
+
 # 链接依赖
 target_link_libraries(test_core
     PUBLIC
+    ${OpenCV_LIBS}
     ${TORCH_LIBRARIES}
     cuda_sim_eigen
-    ${OpenCV_LIBS}
 )
 
 

@@ -2,7 +2,6 @@
 #define CUDASIM_ENV_GROUP_MANAGER_HH
 
 #include <cstdint>
-#include <exception>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -11,10 +10,8 @@
 
 // #include <cuda_runtime_api.h>
 #include "cuda_helper.h"
-#include "config.h"
 #include "core/storage/GTensorConfig.hh"
 #include "core/storage/ITensor.hh"
-#include "core/storage/Scalar.hh"
 
 #include "storage/TensorRegistry.hh"
 
@@ -23,15 +20,15 @@ namespace cuda_simulator
 namespace core
 {
 
-constexpr int MAX_NUM_ACTIVE_GROUP = 64;    // 最大活跃环境组数量
-
 namespace env_group_impl
 {
 
 constexpr int CONST_MEM_WORD_SIZE = 8192;
 extern __constant__ __device__ int constant_mem_pool[CONST_MEM_WORD_SIZE];
-extern __constant__ __device__ uint32_t dc_active_group_count;
-extern __constant__ __device__ int dc_const_mem_alloc_words;
+extern __constant__ __device__ uint32_t d_active_group_count;
+extern __constant__ __device__ int d_const_mem_alloc_words;
+
+// TODO. 原有定义
 
 // 单个group的所有常量数据是顺序排列的，每个group的数据是分开的
 // group 1: |[var1, var2, var3, ...]|
@@ -47,7 +44,7 @@ inline int& getConstMemAllocWords() {
 inline int addConstMemAllocWords(int inc_words) {
     int old_words = getConstMemAllocWords();
     getConstMemAllocWords() = inc_words;
-    checkCudaErrors(cudaMemcpyToSymbol(dc_const_mem_alloc_words, &inc_words, sizeof(uint32_t)));
+    checkCudaErrors(cudaMemcpyToSymbol(d_const_mem_alloc_words, &inc_words, sizeof(uint32_t)));
     return old_words;
 }
 
@@ -65,7 +62,7 @@ inline void setActiveGroupCount(int count) {
     if(!constMemFreeSpaceLeft()) {
         throw std::runtime_error("constant memory pool is full after setting active group count!");
     }
-    checkCudaErrors(cudaMemcpyToSymbol(dc_active_group_count, &count, sizeof(uint32_t)));
+    checkCudaErrors(cudaMemcpyToSymbol(d_active_group_count, &count, sizeof(uint32_t)));
 }
 
 template<typename T>
@@ -82,7 +79,7 @@ inline int allocate() {
 
 template<typename T>
 inline __device__ T getConstData(int group_id, int offset) {
-    return env_group_impl::constant_mem_pool[group_id * dc_const_mem_alloc_words + offset];
+    return env_group_impl::constant_mem_pool[group_id * d_const_mem_alloc_words + offset];
 }
 
 inline int getConstantMemPoolOffset(int group_id, int offset) {
@@ -140,7 +137,7 @@ public:
     }
 
     __device__ inline const T operator[](int idx) {
-        if(idx >= env_group_impl::dc_active_group_count) {
+        if(idx >= env_group_impl::d_active_group_count) {
             printf("index out of range: %d\n", idx);
             return T();
         }
@@ -153,8 +150,8 @@ public:
             throw std::out_of_range("index out of range");
         }
         env_group_impl::constant_mem_pool[offset_ + idx] = value;
-        int offset = env_group_impl::getConstantMemPoolOffset(idx, offset_);
-        checkCudaErrors(cudaMemcpyToSymbol(env_group_impl::constant_mem_pool, value, sizeof(T), offset));
+        int pool_offset = env_group_impl::getConstantMemPoolOffset(idx, offset_);
+        checkCudaErrors(cudaMemcpyToSymbol(env_group_impl::constant_mem_pool, &value, sizeof(T), pool_offset));
     }
 };
 
@@ -168,6 +165,8 @@ public:
         : mem_type_(mem_type), num_group_(num_group) {}
 
     virtual ~EGConfigItemBase() = default;
+
+    virtual void syncToDevice() {};
 
     MemoryType getMemoryType() const {
         return mem_type_;
@@ -215,7 +214,7 @@ public:
     }
 
     // 根据活跃组id同步到设备
-    void syncToDevice() {
+    void syncToDevice() override {
         for(auto group_id : active_group_indices_) {
             // reflect_data.push_back(EGHostMemConfigItem<T>::host_data_[group_id]);
             device_data_.set(group_id, EGHostMemConfigItem<T>::host_data_[group_id]);
@@ -223,7 +222,7 @@ public:
     }
 };
 
-// 全局内存区域句柄，
+// 全局内存区域句柄
 template<typename T>
 class EGGlobalMemConfigItem : public EGHostMemConfigItem<T> {
     std::vector<T, GlobalMemoryAllocator<T>> device_data_;
@@ -231,6 +230,14 @@ public:
     EGGlobalMemConfigItem(int64_t num_group)
         : EGHostMemConfigItem<T>(num_group, MemoryType::GLOBAL_GPU_MEM), device_data_(num_group)
     { }
+
+    void syncToDevice() override {
+        checkCudaErrors(cudaMemcpy(
+            device_data_.data(),
+            EGHostMemConfigItem<T>::host_data().data(),
+            EGHostMemConfigItem<T>::host_data().size() * sizeof(T), cudaMemcpyHostToDevice
+        ));
+    }
 };
 
 
@@ -348,6 +355,12 @@ public:
 
     int getNumGroup() const { return num_group_; }
     int getNumEnvPerGroup() const { return num_env_per_group_; }
+
+    void syncToDevice() {
+        for(auto& [name, item] : registry_) {
+            item->syncToDevice();
+        }
+    }
 
 private:
     // 最大环境组的数量

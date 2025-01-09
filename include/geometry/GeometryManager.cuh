@@ -16,10 +16,10 @@
 
 #include "core/EnvGroupManager.cuh"
 #include "core/SimulatorContext.hh"
-#include "core/geometry/types.hh"
 #include "core/storage/GTensorConfig.hh"
-
 #include "core/storage/TensorRegistry.hh"
+
+#include "types.hh"
 #include "shapes.hh"
 #include "transform.hh"
 #include "GridMapGenerator.hh"

@@ -8,7 +8,7 @@
 
 #include "core/console_style.h"
 
-#include "core/geometry/GeometryManager.cuh"
+#include "geometry/GeometryManager.cuh"
 
 using namespace cuda_simulator::core;
 
@@ -243,11 +243,6 @@ void testMultiSourceFusion() {
 
     std::cout << "Multi-source fusion test completed!\n";
 }
-
-#include "cuda_helper.h"
-struct Motherfucker {
-    int abc;
-};
 
 
 int main() {

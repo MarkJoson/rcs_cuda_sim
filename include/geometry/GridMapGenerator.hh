@@ -76,7 +76,7 @@ public:
     void fastEDT(core::TensorHandle& output) const {
         //-----------------------------  计算辅助地图：边界与inside  -------------------------------------
         // 生成可用的边界地图
-        cv::Mat kernel = (cv::Mat_<char>(3, 3) << 1, 1, 1, 1, 1, 1, 1, 1, 1);
+        cv::Mat kernel = cv::Mat::ones(3, 3, CV_8U);
         kernel.convertTo(kernel, CV_8UC1);
         cv::Mat erosion, edge_map;
         cv::erode(occ_map_, erosion, kernel);
@@ -85,19 +85,19 @@ public:
 
         cv::Mat inside_flags = erosion;      // 指示该点是否在障碍物内，有障碍物的地方为255
 
-        //------------------------------------  计算距离场  --------------------------------------------
+        // ------------------------------------  计算距离场  --------------------------------------------
         cv::Mat col_chk_map = cv::Mat::zeros(desc_.grid_size.y, desc_.grid_size.x, CV_32FC1);
         cv::Mat col_chk_field = cv::Mat::zeros(desc_.grid_size.y, desc_.grid_size.x, CV_32FC2);
         col_chk_map.setTo(MAX_DIST);
 
-            auto ks = std::vector<int>(desc_.grid_size.x + 1, 0);
+        auto ks = std::vector<int>(desc_.grid_size.x + 1, 0);
         auto js = std::vector<int>(desc_.grid_size.x + 1, 0);
 
-        cv::Mat dist_map_ = cv::Mat::zeros(desc_.grid_size.y, desc_.grid_size.x, CV_32FC1);       // 距离场
-        cv::Mat dist_field_ = cv::Mat::zeros(desc_.grid_size.y, desc_.grid_size.x, CV_32FC2);     // 距离矢量场
+        cv::Mat dist_map = cv::Mat::zeros(desc_.grid_size.y, desc_.grid_size.x, CV_32FC1);       // 距离场
+        cv::Mat dist_field = cv::Mat::zeros(desc_.grid_size.y, desc_.grid_size.x, CV_32FC2);     // 距离矢量场
 
         // lambda函数，检查edgemap，并更新当前的矩阵
-        auto lambda = [&](int &obst_index, int x, int y) {
+        auto lambda = [&col_chk_map, &edge_map, &col_chk_field](int &obst_index, int x, int y) {
             // 至今没有遇到障碍物
             if (obst_index == -1)
                 return;
@@ -119,7 +119,7 @@ public:
         };
 
         // 计算两条相同曲率抛物线的交点
-        auto parabolaIntersection = [&](float Dl, float Dk, int l, int k)->int {
+        auto parabolaIntersection = [](float Dl, float Dk, int l, int k)->int {
             if (l == k)
                 return l;
             return std::ceil((Dl - Dk - k * k + l * l) / (2 * (l - k)));
@@ -156,6 +156,8 @@ public:
                     // 新交点的位置小于上一个交点的位置，妥妥的要替换
                     // 康康到底需要替换几条
                     while (jd < js[idx]) {
+                        if(idx == 0)
+                            throw std::runtime_error("idx == 0, at jd < js[idx]");
                         idx -= 1;
                         jd = parabolaIntersection(
                                 val_ji, col_chk_map.at<float>(j, ks[idx]), i, ks[idx]);
@@ -181,19 +183,19 @@ public:
 
                     // 方向指向障碍物内部
                     if (dist != 0)
-                        dist_field_.at<cv::Vec2f>(j, i) =
+                        dist_field.at<cv::Vec2f>(j, i) =
                                 sign * cv::Vec2f(i - k, col_chk_field.at<cv::Vec2f>(j, k)[1]) / dist;
                     else
-                        dist_field_.at<cv::Vec2f>(j, i) = cv::Vec2f(0, 0);
+                        dist_field.at<cv::Vec2f>(j, i) = cv::Vec2f(0, 0);
 
-                    dist_map_.at<float>(j, i) = (-sign) * dist * desc_.resolu;
+                    dist_map.at<float>(j, i) = (-sign) * dist * desc_.resolu;
                 }
             }
         }
 
         //------------------------------------  导出距离场  --------------------------------------------
         // output.resize(desc_.grid_size.x * desc_.grid_size.y);
-        if(output.shape()[0] != desc_.grid_size.y  && output.shape()[1] != desc_.grid_size.x && output.is_contiguous()) {
+        if(output.shape()[0] != desc_.grid_size.y || output.shape()[1] != desc_.grid_size.x || output.is_contiguous()) {
             throw std::runtime_error("output container is not match with the output!");
         }
 
@@ -202,8 +204,8 @@ public:
         for (int y = 0; y < desc_.grid_size.y; y++) {
             for (int x = 0; x < desc_.grid_size.x; x++) {
                 output_ptr[y * desc_.grid_size.x + x] = make_float4(
-                        dist_field_.at<cv::Vec2f>(y, x)[0], dist_field_.at<cv::Vec2f>(y, x)[1],
-                        dist_map_.at<float>(y, x), edge_map.at<uint8_t>(y, x));
+                        dist_field.at<cv::Vec2f>(y, x)[0], dist_field.at<cv::Vec2f>(y, x)[1],
+                        dist_map.at<float>(y, x), edge_map.at<uint8_t>(y, x));
             }
         }
     }
