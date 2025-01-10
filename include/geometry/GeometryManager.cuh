@@ -25,6 +25,7 @@
 #include "transform.hh"
 #include "GridMapGenerator.hh"
 
+
 namespace cuda_simulator {
 namespace geometry {
 
@@ -35,8 +36,8 @@ namespace geometry {
  * @param num_dynobj_lines 动态物体边的数量总和
  * @param dyn_obj_lines 动态物体边外形
  * @param dyn_obj_line_ids 动态物体边对应的object id
- * @param dyn_obj_poses 动态物体位置[obj_id, env_group, env, 4]
- * @param dyn_lines 输出，动态物体的边 [env_group, env, lines, 4]
+ * @param dyn_obj_poses 动态物体位置[obj_id, group, env, 4]
+ * @param dyn_lines 输出，动态物体的边 [group, env, lines, 4]
  */
 __global__ void transformDynamicLinesKernel(
         const uint32_t num_dynobj_lines,
@@ -62,7 +63,10 @@ __global__ void transformDynamicLinesKernel(
 
     // [obj_id, batch, 4]
     const float4 pose = reinterpret_cast<const float4 *>(dyn_obj_poses)[dyn_obj_id * num_envs + batch_id];
-    float sint = pose.z, cost = pose.w;
+    // float sint = pose.z, cost = pose.w;
+    float sint, cost;
+    sincosf(pose.z, &sint, &cost);
+
     float2 new_vertex = {
             vertex.x * cost - vertex.y * sint + pose.x,
             vertex.x * sint + vertex.y * cost + pose.y
@@ -76,7 +80,7 @@ __global__ void transformDynamicLinesKernel(
 class GeometryManager {
     constexpr static uint32_t MAX_STATIC_LINES = 16384;
 
-    constexpr static float GRIDMAP_RESOLU = 0.1;
+    constexpr static float GRIDMAP_RESOLU = 0.05;
     constexpr static float GRIDMAP_WIDTH = 10;
     constexpr static float GRIDMAP_HEIGHT = 10;
     constexpr static uint32_t GRIDMAP_GRIDSIZE_X = GRIDMAP_WIDTH / GRIDMAP_RESOLU;
@@ -105,8 +109,8 @@ public:
     ~GeometryManager() = default;
 
     // 静态物体在指定环境组中创建
-    void createStaticPolyObj(int environ_group_id, const PolygonShapeDef &polygon_def, const Transform2D &pose) {
-        static_scene_descs_->at(environ_group_id).push_back(
+    void createStaticPolyObj(int group_id, const PolygonShapeDef &polygon_def, const Transform2D &pose) {
+        static_scene_descs_->at(group_id).push_back(
             std::make_pair(std::make_unique<PolygonShapeDef>(polygon_def), pose));
     }
 
@@ -174,8 +178,8 @@ public:
                     grid_map.drawPolygon(*poly, pose);
                 }
             }
-            core::TensorHandle selected_map = static_esdf_->at(group_id);
-            grid_map.fastEDT(selected_map);
+            core::TensorHandle map_tensor = static_esdf_->at(group_id);
+            grid_map.fastEDT(map_tensor);
         }
     }
 
@@ -259,6 +263,8 @@ public:
         const uint32_t num_group = context->getEnvironGroupManager()->getNumGroup();
         const uint32_t num_env_per_group = context->getEnvironGroupManager()->getNumEnvPerGroup();
 
+        if (num_dyn_shape_lines_ == 0) return;
+
         uint32_t num_envs = num_group*num_env_per_group;
         uint32_t blocksize_y = std::min(num_envs, static_cast<uint32_t>(DUMP_DYM_LINES_CTA_SIZE/2));
         uint32_t grid_x = std::max((num_envs+blocksize_y-1) / blocksize_y, static_cast<uint32_t>(1u));
@@ -272,10 +278,20 @@ public:
                 dyn_shape_line_ids_.typed_data<uint32_t>(),
                 dyn_poses_.typed_data<float>(),
                 dyn_lines_.typed_data<float>());
+
+        cudaDeviceSynchronize();
+
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            printf("CUDA Error: %s\n", cudaGetErrorString(err));
+        }
     }
 
     core::TensorHandle getDynamicLines() { return dyn_lines_; }
     core::TensorHandle getDynamicPoses() { return dyn_poses_; }
+    core::TensorHandle getStaticESDF(int group_id) {
+        return static_esdf_->at(group_id);
+    }
 
 private:
     // 静态物体描述，带位姿，随环境组变化
@@ -284,14 +300,14 @@ private:
     using DynamicSceneDescription = std::vector<std::unique_ptr<ShapeDef>>;
 
     // 静态物体
-    core::EGHostMemConfigItem<StaticSceneDescription> *static_scene_descs_;
+    core::EGHostMemConfigItem<StaticSceneDescription> *static_scene_descs_ = nullptr;
     core::EGConstMemConfigItem<uint32_t> *num_static_lines_=nullptr; // 静态多边形物体，外轮廓线段数量，用于激光雷达
     core::EGGlobalMemConfigTensor<float> *static_lines_=nullptr;     // 静态多边形物体，外轮廓线段端点，用于激光雷达
     core::EGGlobalMemConfigTensor<float> *static_esdf_=nullptr;      // 静态物体形成的ESDF: [group, width, height, 4]
 
     // 动态物体
     DynamicSceneDescription dyn_scene_desc_;                        // 动态物体定义（仅支持多边形）
-    uint32_t                num_dyn_shape_lines_;                   // 多边形线段数量
+    uint32_t                num_dyn_shape_lines_ = 0;               // 多边形线段数量
     core::TensorHandle      dyn_shape_line_ids_;                    // 点集合对应的物体id: [line] -> {16位物体id, 16位内部点id}
     core::TensorHandle      dyn_shape_lines_;                       // 多边形线段集合（局部坐标系）: [line, 4]
 

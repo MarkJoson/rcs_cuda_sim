@@ -24,9 +24,8 @@ namespace env_group_impl
 {
 
 constexpr int CONST_MEM_WORD_SIZE = 8192;
-extern __constant__ __device__ int constant_mem_pool[CONST_MEM_WORD_SIZE];
-extern __constant__ __device__ uint32_t d_active_group_count;
-extern __constant__ __device__ int d_const_mem_alloc_words;
+extern __constant__ int constant_mem_pool[CONST_MEM_WORD_SIZE];
+extern __constant__ uint32_t d_num_active_group;
 
 // TODO. 原有定义
 
@@ -35,34 +34,33 @@ extern __constant__ __device__ int d_const_mem_alloc_words;
 // group 2: |[var1, var2, var3, ...]|
 // group 3: |[var1, var2, var3, ...]|
 
-inline int& getConstMemAllocWords() {
+inline int& getConstMemAllocPerGroup() {
     // TODO. 多线程互斥锁
     static int allocated_words = 0;
     return allocated_words;
 }
 
 inline int addConstMemAllocWords(int inc_words) {
-    int old_words = getConstMemAllocWords();
-    getConstMemAllocWords() = inc_words;
-    checkCudaErrors(cudaMemcpyToSymbol(d_const_mem_alloc_words, &inc_words, sizeof(uint32_t)));
+    int old_words = getConstMemAllocPerGroup();
+    getConstMemAllocPerGroup() = inc_words;
     return old_words;
 }
 
-inline int& getActiveGroupCount() {
+inline int& getNumActiveGroup() {
     static int active_group_count = 0;
     return active_group_count;
 }
 
 inline bool constMemFreeSpaceLeft(int words_needed=0) {
-    return (getConstMemAllocWords()+words_needed)*getActiveGroupCount() < CONST_MEM_WORD_SIZE;
+    return getConstMemAllocPerGroup() + words_needed < CONST_MEM_WORD_SIZE / getNumActiveGroup();
 }
 
-inline void setActiveGroupCount(int count) {
-    getActiveGroupCount() = count;
+inline void setNumActiveGroup(int count) {
+    getNumActiveGroup() = count;
     if(!constMemFreeSpaceLeft()) {
         throw std::runtime_error("constant memory pool is full after setting active group count!");
     }
-    checkCudaErrors(cudaMemcpyToSymbol(d_active_group_count, &count, sizeof(uint32_t)));
+    checkCudaErrors(cudaMemcpyToSymbol(d_num_active_group, &count, sizeof(uint32_t)));
 }
 
 template<typename T>
@@ -72,18 +70,19 @@ inline int allocate() {
     if(!constMemFreeSpaceLeft(words_per_elem))
         throw std::bad_alloc();
 
-    int offset = env_group_impl::getConstMemAllocWords();
-    env_group_impl::getConstMemAllocWords() += words_per_elem;
+    int offset = env_group_impl::getConstMemAllocPerGroup();
+    env_group_impl::getConstMemAllocPerGroup() += words_per_elem;
     return offset;
 }
 
 template<typename T>
 inline __device__ T getConstData(int group_id, int offset) {
-    return env_group_impl::constant_mem_pool[group_id * d_const_mem_alloc_words + offset];
+    return env_group_impl::constant_mem_pool[group_id * (CONST_MEM_WORD_SIZE / d_num_active_group) + offset];
 }
 
 inline int getConstantMemPoolOffset(int group_id, int offset) {
-    return group_id * getConstMemAllocWords() + offset;
+    // return group_id * (getConstMemAllocPerGroup()) + offset;
+    return group_id * (CONST_MEM_WORD_SIZE / getNumActiveGroup()) + offset;
 }
 
 } // namespace env_group_impl
@@ -138,7 +137,7 @@ public:
     }
 
     __device__ inline const T operator[](int idx) {
-        if(idx >= env_group_impl::d_active_group_count) {
+        if(idx >= env_group_impl::d_num_active_group) {
             printf("index out of range: %d\n", idx);
             return T();
         }
@@ -147,7 +146,7 @@ public:
     }
 
     void set(int idx, const T& value) {
-        if(CHECK_BOUND && idx >= env_group_impl::getActiveGroupCount()) {
+        if(CHECK_BOUND && idx >= env_group_impl::getNumActiveGroup()) {
             throw std::out_of_range("index out of range");
         }
         env_group_impl::constant_mem_pool[offset_ + idx] = value;
@@ -211,7 +210,7 @@ public:
         , num_active_group_(num_active_group)
         , active_group_indices_(active_group_indices)
     {
-        env_group_impl::setActiveGroupCount(num_active_group);
+        env_group_impl::setNumActiveGroup(num_active_group);
     }
 
     // 根据活跃组id同步到设备
@@ -280,11 +279,16 @@ public:
 
 class EnvGroupManager {
 public:
-    EnvGroupManager(int max_num_active_group, int max_num_group)
-        : max_num_group_(max_num_group)
-        , max_num_active_group_(max_num_active_group)
-        , num_group_(0)
-    { }
+    EnvGroupManager(int num_env_per_group=1, int num_group=1, int num_active_group=1)
+        : num_env_per_group_(num_env_per_group)
+        , num_group_(num_group)
+        , num_active_group_(num_active_group)
+    {
+        if(num_active_group > num_group) {
+            throw std::runtime_error("num_active_group should be less than or equal to num_group");
+        }
+        env_group_impl::setNumActiveGroup(num_active_group);
+    }
 
     constexpr static int SHAPE_PLACEHOLDER_GROUP = -100;
     constexpr static int SHAPE_PLACEHOLDER_ENV = -101;
@@ -296,17 +300,17 @@ public:
         }
 
         if constexpr (mem_type == MemoryType::CONSTANT_GPU_MEM) {
-            std::unique_ptr<EGConstMemConfigItem<T>> item = std::make_unique<EGConstMemConfigItem<T>> (max_num_group_, max_num_active_group_, active_group_indices_);
+            std::unique_ptr<EGConstMemConfigItem<T>> item = std::make_unique<EGConstMemConfigItem<T>> (num_group_, num_active_group_, active_group_indices_);
             EGConstMemConfigItem<T>* ptr = item.get();
             registry_.insert({name, std::move(item)});
             return ptr;
         } else if constexpr (mem_type == MemoryType::GLOBAL_GPU_MEM) {
-            std::unique_ptr<EGGlobalMemConfigItem<T>> item = std::make_unique<EGGlobalMemConfigItem<T>> (max_num_group_);
+            std::unique_ptr<EGGlobalMemConfigItem<T>> item = std::make_unique<EGGlobalMemConfigItem<T>> (num_group_);
             EGGlobalMemConfigItem<T>* ptr = item.get();
             registry_.insert({name, std::move(item)});
             return ptr;
         } else if constexpr (mem_type == MemoryType::HOST_MEM) {
-            std::unique_ptr<EGHostMemConfigItem<T>> item = std::make_unique<EGHostMemConfigItem<T>> (max_num_group_);
+            std::unique_ptr<EGHostMemConfigItem<T>> item = std::make_unique<EGHostMemConfigItem<T>> (num_group_);
             EGHostMemConfigItem<T>* ptr = item.get();
             registry_.insert({name, std::move(item)});
             return ptr;
@@ -321,24 +325,10 @@ public:
             throw std::runtime_error("name already exists in registry, please check your code.");
         }
         // TODO. 到底用max_num_env_group_还是num_env_group_
-        std::unique_ptr<EGGlobalMemConfigTensor<T>> item = std::make_unique<EGGlobalMemConfigTensor<T>> (name, max_num_group_, shape);
+        std::unique_ptr<EGGlobalMemConfigTensor<T>> item = std::make_unique<EGGlobalMemConfigTensor<T>> (name, num_group_, shape);
         EGGlobalMemConfigTensor<T>* ptr = item.get();
         registry_.insert({name, std::move(item)});
         return ptr;
-    }
-
-    void setEnvGroupCount(int new_num_group) {
-
-        if(new_num_group > max_num_group_) {
-            throw std::runtime_error("new_num_group exceeds max_num_env_group_");
-        }
-
-
-        if(new_num_group > num_group_) {
-            // TODO. 调用所有回调函数初始化对应的环境组参数
-        }
-
-        num_group_ = new_num_group;
     }
 
     template<typename T>
@@ -350,7 +340,8 @@ public:
         std::vector<int64_t> shape;
         for(auto s : shape_with_placeholder) {
             if(s == SHAPE_PLACEHOLDER_GROUP) {
-                shape.push_back(num_group_);
+                // TODO. 这里使用的是num_group，因为某些核函数需要数据紧密排列。因此需要在调整group数量后的二次分配
+                shape.push_back(num_env_per_group_);
             } else if(s == SHAPE_PLACEHOLDER_ENV) {
                 shape.push_back(num_env_per_group_);
             } else {
@@ -383,6 +374,7 @@ public:
     }
 
     int getNumGroup() const { return num_group_; }
+    int getNumActiveGroup() const { return active_group_indices_.size(); }
     int getNumEnvPerGroup() const { return num_env_per_group_; }
 
     void syncToDevice() {
@@ -393,13 +385,16 @@ public:
 
 private:
     // 最大环境组的数量
-    int max_num_group_;
+    // int max_num_group_;
     // 最大活跃环境组的数量
-    int max_num_active_group_;
+    // int max_num_active_group_;
+
     // 每个环境组的环境数量
-    int num_env_per_group_;
+    const int num_env_per_group_;
     // 当前环境组的数量
-    int num_group_;
+    const int num_group_;
+    // 当前活跃环境组的数量
+    const int num_active_group_;
     // 活跃环境组的索引
     std::vector<int> active_group_indices_;
     // 环境组配置项注册表

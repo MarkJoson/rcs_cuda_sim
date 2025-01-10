@@ -53,7 +53,8 @@ public:
     virtual ~GTensorTorchWrapper() final = default;
 
     GTensorTorchWrapper& operator=(const GTensorTorchWrapper& other) {
-        // !赋值操作将替换最内层的tensor
+        // !赋值操作将替换最内层的tensor，
+        // TODO. 引入*符号取代当前操作
         if (this != &other) { replaceTensor(other); }
         return *this;
     }

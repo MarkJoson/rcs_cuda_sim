@@ -5,6 +5,8 @@
 #include <opencv2/core/hal/interface.h>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+
 #include <cuda_runtime.h>
 
 #include "core/storage/GTensorConfig.hh"
@@ -28,7 +30,34 @@ struct GridMapDescription {
     }
 };
 
+class CvMatViewer {
+public:
+    static constexpr int IMG_SCALING_FACTOR = 1;
 
+    static cv::Mat floatMapToU8C3(const cv::Mat& float_map) {
+        double min_val, max_val;
+        cv::Point min_loc, max_loc;
+        cv::Mat img_u8c1;
+        float_map.copyTo(img_u8c1);
+
+        // disp_img = cv::max(disp_img, 0);
+        cv::minMaxLoc(img_u8c1, &min_val, &max_val, &min_loc, &max_loc);
+        img_u8c1 = (img_u8c1-min_val) / (max_val-min_val) * 255;
+        img_u8c1.convertTo(img_u8c1, CV_8UC1);
+
+        cv::Mat img_color;
+        cv::applyColorMap(img_color, img_u8c1, cv::COLORMAP_BONE);
+
+        return img_color;
+    }
+
+    static void showFloatImg(const cv::Mat& float_img) {
+        cv::Mat img = floatMapToU8C3(float_img);
+        cv::resize(img, img, img.size()*IMG_SCALING_FACTOR, 0, 0, 0);
+        cv::imshow("showFloatImg", img);
+        cv::waitKey(0);
+    }
+};
 
 class GridMapGenerator {
 public:
@@ -42,10 +71,6 @@ public:
         desc_.grid_size.y = std::ceil(height / resolu);
         desc_.resolu = resolu;
         occ_map_ = cv::Mat::zeros(desc_.grid_size.y, desc_.grid_size.x, CV_8UC1);
-    }
-
-    GridMapDescription getGridMapDescritpion() const {
-        return desc_;
     }
 
     void drawPolygon(const PolygonShapeDef& poly, const Transform2D& tf) {
@@ -73,7 +98,7 @@ public:
      * @brief 计算欧几里得距离场（快速算法）
      * @param output 输出的距离场，每个元素包含了距离场的x，y分量，距离值，以及是否是边界
      */
-    void fastEDT(core::TensorHandle& output) const {
+    void fastEDT(core::TensorHandle& output) {
         //-----------------------------  计算辅助地图：边界与inside  -------------------------------------
         // 生成可用的边界地图
         cv::Mat kernel = cv::Mat::ones(3, 3, CV_8U);
@@ -84,6 +109,10 @@ public:
         cv::absdiff(occ_map_, erosion, edge_map);
 
         cv::Mat inside_flags = erosion;      // 指示该点是否在障碍物内，有障碍物的地方为255
+
+        cv::imshow("edge_map", edge_map);
+        cv::imshow("inside_flags", inside_flags);
+        cv::waitKey(0);
 
         // ------------------------------------  计算距离场  --------------------------------------------
         cv::Mat col_chk_map = cv::Mat::zeros(desc_.grid_size.y, desc_.grid_size.x, CV_32FC1);
@@ -98,10 +127,6 @@ public:
 
         // lambda函数，检查edgemap，并更新当前的矩阵
         auto lambda = [&col_chk_map, &edge_map, &col_chk_field](int &obst_index, int x, int y) {
-            // 至今没有遇到障碍物
-            if (obst_index == -1)
-                return;
-
             // 当前是障碍物
             if (edge_map.at<uint8_t>(y, x) == 255) {
                 obst_index = y;
@@ -110,11 +135,13 @@ public:
                 return;
             }
 
-            // 更新当前的距离最近距离
-            float dist_sqr = (y - obst_index) * (y - obst_index);
-            if (col_chk_map.at<float>(y, x) > dist_sqr) {
-                col_chk_map.at<float>(y, x) = dist_sqr;
-                col_chk_field.at<cv::Vec2f>(y, x) = cv::Vec2f(0, y - obst_index);
+            // 已经遇到障碍物，更新当前的距离最近距离
+            if (obst_index != -1) {
+                float dist_sqr = (y - obst_index) * (y - obst_index);
+                if (col_chk_map.at<float>(y, x) > dist_sqr) {
+                    col_chk_map.at<float>(y, x) = dist_sqr;
+                    col_chk_field.at<cv::Vec2f>(y, x) = cv::Vec2f(0, y - obst_index);
+                }
             }
         };
 
@@ -210,9 +237,12 @@ public:
         }
     }
 
+    GridMapDescription getGridMapDescritpion() const {
+        return desc_;
+    }
+
 private:
     GridMapDescription desc_;
-
     cv::Mat occ_map_;        // 障碍物占有地图
 };
 

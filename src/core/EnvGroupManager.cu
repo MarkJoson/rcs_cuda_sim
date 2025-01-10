@@ -6,9 +6,8 @@ namespace cuda_simulator {
 namespace core {
 namespace env_group_impl {
 
-__constant__ __device__ int constant_mem_pool[CONST_MEM_WORD_SIZE];
-__constant__ __device__ uint32_t d_active_group_count;
-__constant__ __device__ int d_const_mem_alloc_words;
+__constant__ int constant_mem_pool[CONST_MEM_WORD_SIZE];
+__constant__ uint32_t d_num_active_group;
 
 } // env_group_impl
 } // core

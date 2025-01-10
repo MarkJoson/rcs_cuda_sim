@@ -8,11 +8,6 @@
 # cmake .. '-DCMAKE_CUDA_ARCHITECTURES=75;72'
 include("${CMAKE_CURRENT_LIST_DIR}/cuda/setup_compute_capability.cmake")
 
-# This option avoids any implementations using std::string in their signature in
-# header files Useful for Nvblox PyTorch wrapper, which requires the old
-# Pre-CXX11 ABI
-option(PRE_CXX11_ABI_LINKABLE "Better support pre-C++11 ABI library users" OFF)
-
 # Treat warnings as errors on an opt-in basis. This flag should be enabled in CI
 # and is also recommended for developers. Reason for opt-in is to avoid
 # nuisances for users with compilers different from the one the lib was tested
@@ -51,12 +46,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE TRUE)
 # ##############################################################################
 # Setup compiler definitions
 # ##############################################################################
-add_compile_definitions(
-  "$<$<BOOL:${PRE_CXX11_ABI_LINKABLE}>:PRE_CXX11_ABI_LINKABLE>")
 
-# Change namespace cub:: into nvblox::cub. This is to avoid conflicts when other modules calls non
-# thread safe functions in the cub namespace. Appending nvblox:: ensures an unique symbol that is
-# only accesed by this library.
+
+
 # add_compile_definitions(CUB_WRAPPED_NAMESPACE=rcsim)
 
 # ##############################################################################

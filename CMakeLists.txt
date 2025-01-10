@@ -68,10 +68,78 @@ include(thirdparty/eigen/eigen.cmake)
 # boost
 find_package(Boost REQUIRED COMPONENTS graph)
 
+# 使用python自带的库就不能使用新版ABI
+# add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=1)
+# set_target_properties(torch PROPERTIES INTERFACE_COMPILE_OPTIONS "-D_GLIBCXX_USE_CXX11_ABI=1")
+# get_target_property(CURRENT_OPTIONS torch INTERFACE_COMPILE_OPTIONS)
+
 ############
 # Targets #
 ############
 
+# /////////////////////////////////////////////////////
+# torch依赖隔离编译，实现ABI兼容
+add_library(cudasim_torch_dep
+    src/core/storage/GTensorTorchWrapper.cpp
+)
+target_include_directories(cudasim_torch_dep
+    PRIVATE
+        include
+        ${TORCH_INCLUDE_DIRS}
+)
+target_link_libraries(cudasim_torch_dep
+    PRIVATE
+    ${TORCH_LIBRARIES}
+)
+
+# /////////////////////////////////////////////////////
+add_library(cudasim_core
+    src/core/ReducerComponent.cu
+    src/core/EnvGroupManager.cu
+)
+
+# 设置目标属性
+set_target_properties(cudasim_core PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+    POSITION_INDEPENDENT_CODE ON
+)
+
+target_include_directories(cudasim_core
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>    # 构建时使用源代码中的 include 目录
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>          # 安装后使用安装的 include 目录
+    PRIVATE
+        ${OpenCV_INCLUDE_DIRS}
+        ${Boost_INCLUDE_DIRS}
+)
+
+# 链接依赖
+target_link_libraries(cudasim_core
+    PUBLIC
+        ${OpenCV_LIBRARIES}
+        ${Boost_LIBRARIES}
+        cuda_sim_eigen
+
+    PRIVATE
+        cudasim_torch_dep
+)
+
+# /////////////////////////////////////////////////////
+add_executable(cudasim_test
+    src/test_geometry_mgr.cu
+
+)
+
+set_target_properties(cudasim_test PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+    POSITION_INDEPENDENT_CODE ON
+)
+
+target_link_libraries(cudasim_test
+    cudasim_core
+)
+
+# /////////////////////////////////////////////////////
 add_executable(test_boost_graph
     src/test_boost_graph.cpp
 )
@@ -94,41 +162,6 @@ target_link_libraries(test_boost_graph
     PUBLIC
     ${Boost_LIBRARIES}
     ${TORCH_LIBRARIES}
-)
-
-
-add_executable(test_core
-    src/test_geometry_mgr.cu
-    # src/test_core.cu
-    src/core/storage/GTensorTorchWrapper.cpp
-    src/core/ReducerComponent.cu
-    src/core/EnvGroupManager.cu
-)
-
-# 设置目标属性
-set_target_properties(test_core PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-    POSITION_INDEPENDENT_CODE ON
-)
-
-target_include_directories(test_core
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>    # 构建时使用源代码中的 include 目录
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>          # 安装后使用安装的 include 目录
-    PRIVATE
-        ${TORCH_INCLUDE_DIRS}
-        ${OpenCV_INCLUDE_DIRS}
-)
-
-message("****************************" ${OpenCV_LIBS})
-
-
-# 链接依赖
-target_link_libraries(test_core
-    PUBLIC
-    ${OpenCV_LIBS}
-    ${TORCH_LIBRARIES}
-    cuda_sim_eigen
 )
 
 
