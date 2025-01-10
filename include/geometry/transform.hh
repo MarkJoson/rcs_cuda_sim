@@ -3,7 +3,7 @@
 
 #pragma once
 #include <cmath>
-#include "types.hh"
+#include "geometry_types.hh"
 
 namespace cuda_simulator {
 namespace geometry {

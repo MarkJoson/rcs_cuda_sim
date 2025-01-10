@@ -5,7 +5,7 @@
 #pragma once
 #include <vector>
 #include <memory>
-#include "types.hh"
+#include "geometry_types.hh"
 
 namespace cuda_simulator {
 namespace geometry {

@@ -19,7 +19,7 @@
 #include "core/storage/GTensorConfig.hh"
 #include "core/storage/TensorRegistry.hh"
 
-#include "types.hh"
+#include "geometry_types.hh"
 #include "shapes.hh"
 #include "transform.hh"
 #include "GridMapGenerator.hh"
