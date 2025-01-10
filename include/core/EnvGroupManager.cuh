@@ -253,15 +253,15 @@ public:
         TensorShape new_shape = shape;
         new_shape.insert(new_shape.begin(), num_group);
 
-        host_tensor_ = TensorRegistry::getInstance().createTensor<T>(name + "_Config@CPU", new_shape, DeviceType::kCPU);
-        device_tensor_ = TensorRegistry::getInstance().createTensor<T>( name + "_Config@CUDA", new_shape, DeviceType::kCUDA);
+        TensorRegistry::getInstance().createTensor<T>(host_tensor_, name + "_Config@CPU", new_shape, DeviceType::kCPU);
+        TensorRegistry::getInstance().createTensor<T>(device_tensor_, name + "_Config@CUDA", new_shape, DeviceType::kCUDA);
     }
 
-    TensorHandle getHostTensor() {
+    TensorHandle& getHostTensor() {
         return host_tensor_;
     }
 
-    const TensorHandle getDeviceTensor() {
+    const TensorHandle& getDeviceTensor() {
         return device_tensor_;
     }
 
@@ -342,7 +342,10 @@ public:
     }
 
     template<typename T>
-    TensorHandle createTensor(const std::string& name, const TensorShape& shape_with_placeholder, DeviceType device_type=DeviceType::kCUDA) {
+    TensorHandle& createTensor(
+            const std::string& name,
+            const TensorShape& shape_with_placeholder,
+            DeviceType device_type=DeviceType::kCUDA) {
 
         std::vector<int64_t> shape;
         for(auto s : shape_with_placeholder) {
@@ -356,6 +359,27 @@ public:
         }
 
         return TensorRegistry::getInstance().createTensor<T>(name, shape, device_type);
+    }
+
+    template<typename T>
+    void createTensor(
+            TensorHandle &target,
+            const std::string& name,
+            const TensorShape& shape_with_placeholder,
+            DeviceType device_type=DeviceType::kCUDA) {
+
+        std::vector<int64_t> shape;
+        for(auto s : shape_with_placeholder) {
+            if(s == SHAPE_PLACEHOLDER_GROUP) {
+                shape.push_back(num_group_);
+            } else if(s == SHAPE_PLACEHOLDER_ENV) {
+                shape.push_back(num_env_per_group_);
+            } else {
+                shape.push_back(s);
+            }
+        }
+
+        TensorRegistry::getInstance().createTensor<T>(target, name, shape, device_type);
     }
 
     int getNumGroup() const { return num_group_; }

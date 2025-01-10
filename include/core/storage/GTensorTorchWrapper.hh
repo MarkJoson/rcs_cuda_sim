@@ -1,6 +1,7 @@
 #ifndef __GTENSOR_TORCH_WRAPPER_H__
 #define __GTENSOR_TORCH_WRAPPER_H__
 
+#include <cstdint>
 #include <memory>
 #include "ITensor.hh"
 #include "Scalar.hh"
@@ -52,20 +53,14 @@ public:
     virtual ~GTensorTorchWrapper() final = default;
 
     GTensorTorchWrapper& operator=(const GTensorTorchWrapper& other) {
-        if (this != &other) {
-            // impl_ = other.impl_;
-            // !赋值操作将替换最内层的tensor
-            replaceTensor(other);
-        }
+        // !赋值操作将替换最内层的tensor
+        if (this != &other) { replaceTensor(other); }
         return *this;
     }
 
     GTensorTorchWrapper& operator=(GTensorTorchWrapper&& other) noexcept {
-        if (this != &other) {
-            // impl_ = std::move(other.impl_);
-            // !赋值操作将替换最内层的tensor
-            replaceTensor(std::move(other));
-        }
+        // !赋值操作将替换最内层的tensor
+        if (this != &other) { replaceTensor(std::move(other)); }
         return *this;
     }
 
@@ -94,9 +89,20 @@ public:
     void copyFrom(const GTensorTorchWrapper& other) override;
     void copyTo(GTensorTorchWrapper& other) const override;
     void resize(const std::vector<int64_t>& shape) override;
+    void reshape(const std::vector<int64_t>& shape) override;
+
     // TODO. replaceTensor需要成为虚函数吗？
-    void replaceTensor(const GTensorTorchWrapper& other);         // 替换内部的Tensor
+    // TODO. fixme. bindTensor 和 replaceTensor这种奇怪的东西还是别要了
+    // 替换内部的Tensor
+    void replaceTensor(const GTensorTorchWrapper& other);
     void replaceTensor(GTensorTorchWrapper&& other);              // 移动替换内部的Tensor
+    // 绑定shared_ptr，不拷贝Tensor。使两个对象共享同一个TensorPtr
+    void bindTensorRef(const GTensorTorchWrapper& other) { impl_ = other.impl_; }
+    void bindTensorRef(GTensorTorchWrapper&& other) { impl_ = std::move(other.impl_); }
+
+
+    // 从主机数组创建张量
+    void fromHostArray(const void* data, NumericalDataType type, int64_t numel) override;
 
     GTensorTorchWrapper clone() const override;
     GTensorTorchWrapper move() override;
@@ -160,6 +166,26 @@ protected:
     double item_double_impl() const;
     int64_t item_int64_impl() const;
     int32_t item_int32_impl() const;
+
+    template<typename T>
+    void fromHostVectorImpl(const std::vector<T>& vec) {
+        if constexpr (std::is_same_v<T, float>) {
+            fromHostArray(vec.data(), NumericalDataType::kFloat32, vec.size());
+        } else if constexpr (std::is_same_v<T, double>) {
+            fromHostArray(vec.data(), NumericalDataType::kFloat64, vec.size());
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            fromHostArray(vec.data(), NumericalDataType::kInt64, vec.size());
+        } else if constexpr (std::is_same_v<T, int32_t>) {
+            fromHostArray(vec.data(), NumericalDataType::kInt32, vec.size());
+        } else if constexpr (std::is_same_v<T, uint8_t>) {
+            fromHostArray(vec.data(), NumericalDataType::kUInt8, vec.size());
+        } else if constexpr (std::is_same_v<T, uint32_t>) {
+            fromHostArray(vec.data(), NumericalDataType::kUInt32, vec.size());
+        } else {
+            // print what type is not supported
+            static_assert(always_false_v<T>, "Unsupported data type");
+        }
+    }
 
     // 类的Static声明
     static void setTensorDefaultDeviceIdImpl(int device_id);

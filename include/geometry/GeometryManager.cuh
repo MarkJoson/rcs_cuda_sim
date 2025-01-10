@@ -17,6 +17,7 @@
 #include "core/EnvGroupManager.cuh"
 #include "core/SimulatorContext.hh"
 #include "core/storage/GTensorConfig.hh"
+#include "core/storage/Scalar.hh"
 #include "core/storage/TensorRegistry.hh"
 
 #include "geometry_types.hh"
@@ -140,14 +141,14 @@ public:
         // 初始化动态物体存储空间
         core::EnvGroupManager *group_mgr = context->getEnvironGroupManager();
         // 场景中所有的线段, [group, env, lines, 4]
-        dyn_lines_ = group_mgr->createTensor<float>("scene_lines", {
+        group_mgr->createTensor<float>(dyn_lines_, "scene_lines", {
             core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
             core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
             num_dyn_shape_lines_,
             4});
         // 场景中所有dyn object的pose, [obj, group, env, 4]
         const uint32_t num_dynobj = dyn_scene_desc_.size();
-        dyn_poses_ = group_mgr->createTensor<float>("dynamic_poses", {
+        group_mgr->createTensor<float>(dyn_poses_, "dynamic_poses", {
             num_dynobj,
             core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
             core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
@@ -218,10 +219,8 @@ public:
     }
 
     void assembleDynamicWorld() {
-        dyn_shape_lines_ = core::TensorRegistry::getInstance().createTensor<float>(
-                "dyn_obj_lines", {num_dyn_shape_lines_, 4});
-        dyn_shape_line_ids_ = core::TensorRegistry::getInstance().createTensor<uint32_t>(
-                "dyn_obj_line_ids", {num_dyn_shape_lines_});
+        std::vector<float4> h_dyn_shape_lines(num_dyn_shape_lines_);
+        std::vector<uint32_t> h_dyn_shape_line_ids(num_dyn_shape_lines_);
 
         int line_idx = 0;
         for(size_t dyn_shape_id = 0; dyn_shape_id < dyn_scene_desc_.size(); dyn_shape_id++) {
@@ -235,15 +234,24 @@ public:
                 const Vector2 vertex = poly_shape->vertices[vertex_id];
                 const Vector2 next_vertex = poly_shape->vertices[(vertex_id+1) % poly_shape->vertices.size()];
 
-                float4* static_line_data = reinterpret_cast<float4*>(dyn_shape_lines_[{line_idx, 0}].data());
+                // float4* static_line_data = reinterpret_cast<float4*>(dyn_shape_lines_[{line_idx, 0}].data());
                 // 线段信息
-                *static_line_data = make_float4(vertex.x(), vertex.y(), next_vertex.x(), next_vertex.y());
+                h_dyn_shape_lines[line_idx] = make_float4(vertex.x(), vertex.y(), next_vertex.x(), next_vertex.y());
                 // 线段所属的obj id
-                dyn_shape_line_ids_[line_idx] = (uint32_t)dyn_shape_id << 16;
-
+                h_dyn_shape_line_ids[line_idx] = (uint32_t)dyn_shape_id << 16;
                 line_idx++;
             }
         }
+
+        core::TensorRegistry::getInstance().createTensor<float>(dyn_shape_lines_, "dyn_obj_lines", {});
+        dyn_shape_lines_.fromHostArray(h_dyn_shape_lines.data(), core::NumericalDataType::kFloat32, h_dyn_shape_lines.size() * 4);
+        dyn_shape_lines_.reshape({num_dyn_shape_lines_, 4});
+
+        core::TensorRegistry::getInstance().createTensor<uint32_t>(dyn_shape_line_ids_, "dyn_obj_line_ids", {});
+        dyn_shape_line_ids_.fromHostVector(h_dyn_shape_line_ids);
+
+        std::cout << "Dynamic Object Line: " << dyn_shape_lines_ << std::endl;
+        std::cout << "Dynamic Object Line Ids: " << dyn_shape_line_ids_ << std::endl;
     }
 
     void transformDynamicLines(core::SimulatorContext *context) {
@@ -288,8 +296,8 @@ private:
     core::TensorHandle      dyn_shape_lines_;                       // 多边形线段集合（局部坐标系）: [line, 4]
 
     // 为每个环境准备的数据
-    core::TensorHandle dyn_poses_;                                  // 动态物体位姿集合: [obj, group, env, 4]
-    core::TensorHandle dyn_lines_;                                  // 动态物体线段集合: [group, env, lines, 4]
+    core::TensorHandle      dyn_poses_;                             // 动态物体位姿集合: [obj, group, env, 4]
+    core::TensorHandle      dyn_lines_;                             // 动态物体线段集合: [group, env, lines, 4]
 
     // TODO. 动态物体的初始位姿，放到onReset中初始化
 

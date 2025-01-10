@@ -1,3 +1,4 @@
+#include <c10/core/TensorOptions.h>
 #include <cstdint>
 #include <memory>
 #include <torch/torch.h>
@@ -221,6 +222,10 @@ void GTensorTorchWrapper::copyTo(GTensorTorchWrapper &other) const
 void GTensorTorchWrapper::resize(const std::vector<int64_t> &shape)
 {
     impl_->tensor = torch::zeros(shape, impl_->tensor.options());
+}
+
+void GTensorTorchWrapper::reshape(const std::vector<int64_t>& shape) {
+    impl_->tensor = impl_->tensor.reshape(shape);
 }
 
 void GTensorTorchWrapper::replaceTensor(const GTensorTorchWrapper &other)
@@ -487,6 +492,14 @@ void GTensorTorchWrapper::gatherMin(const std::vector<GTensorTorchWrapper> src) 
     // min 返回两个值：最小值和最小值的索引，我们只需要最小值
     auto [values, indices] = torch::min(stacked, 0);
     impl_->tensor = values;
+}
+
+void GTensorTorchWrapper::fromHostArray(const void* data, NumericalDataType type, int64_t numel) {
+    auto new_tensor = torch::from_blob(const_cast<void*>(data), {numel}, internal::TorchTensorImpl::getTorchDtype(type));
+    impl_->tensor = new_tensor.clone();
+    // 转换到指定设备
+    impl_->tensor.to(torch::TensorOptions().device(internal::TorchTensorImpl::getTorchDevice(impl_->device_type), g_default_cuda_id));
+    impl_->dtype = type;
 }
 
 void GTensorTorchWrapper::setTensorDefaultDeviceIdImpl(int device_id) {

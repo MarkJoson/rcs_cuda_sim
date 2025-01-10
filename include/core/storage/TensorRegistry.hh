@@ -15,28 +15,32 @@ namespace core {
 
 // 单例模式
 class TensorRegistry {
-public:
-    static TensorRegistry& getInstance() {
-        static TensorRegistry instance;
-        return instance;
-    }
-
-    // 删除拷贝和移动操作
-    TensorRegistry(const TensorRegistry&) = delete;
-    TensorRegistry& operator=(const TensorRegistry&) = delete;
-    TensorRegistry(TensorRegistry&&) = delete;
-    TensorRegistry& operator=(TensorRegistry&&) = delete;
-
+protected:
     // 创建张量接口，返回刚刚创建Tensor的引用
     TensorHandle& createTensor(const std::string& uri, const std::vector<int64_t>& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
         tensors.insert(std::make_pair(uri, TensorHandle(shape, dtype, device_type)));
         return tensors.at(uri);
     }
 
+public:
+    // 删除拷贝和移动操作
+    TensorRegistry(const TensorRegistry&) = delete;
+    TensorRegistry& operator=(const TensorRegistry&) = delete;
+    TensorRegistry(TensorRegistry&&) = delete;
+    TensorRegistry& operator=(TensorRegistry&&) = delete;
+
     template<typename T>
     TensorHandle& createTensor(const std::string& uri, const std::vector<int64_t>& shape, DeviceType device_type=DeviceType::kCUDA) {
         auto dtype = TensorHandle::convertTypeToTensorType<T>();
         return createTensor(uri, shape, dtype, device_type);
+    }
+
+    // 对已经定义的TensorHandle直接使用赋值运算符，不会使新TensorHandle的内部impl指针指向在TensorRegistry中的真实数据
+    // 因此如果对已有符号赋值，需要使用带tensor参数的方法
+    template<typename T>
+    void createTensor(TensorHandle& target, const std::string& uri, const std::vector<int64_t>& shape, DeviceType device_type=DeviceType::kCUDA) {
+        auto dtype = TensorHandle::convertTypeToTensorType<T>();
+        target.bindTensorRef(createTensor(uri, shape, dtype, device_type));
     }
 
     // 获取张量
@@ -94,6 +98,11 @@ public:
             uris.push_back(uri);
         }
         return uris;
+    }
+
+    static TensorRegistry& getInstance() {
+        static TensorRegistry instance;
+        return instance;
     }
 
 private:

@@ -98,8 +98,8 @@ target_link_libraries(test_boost_graph
 
 
 add_executable(test_core
-    # src/test_geometry_mgr.cu
-    src/test_core.cu
+    src/test_geometry_mgr.cu
+    # src/test_core.cu
     src/core/storage/GTensorTorchWrapper.cpp
     src/core/ReducerComponent.cu
     src/core/EnvGroupManager.cu

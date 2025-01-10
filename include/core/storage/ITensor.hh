@@ -56,6 +56,7 @@ public:
     virtual void copyFrom(const Derived& other) = 0;
     virtual void copyTo(Derived& other) const = 0;
     virtual void resize(const std::vector<int64_t>& shape) = 0;
+    virtual void reshape(const std::vector<int64_t>& shape) = 0;
 
     // Gather方法
     virtual void gatherSum(const std::vector<Derived> src) = 0;
@@ -65,6 +66,13 @@ public:
 
     template<typename T>
     inline T item() const { return derived().template item_impl<T>(); }
+
+    template<typename T>
+    void fromHostVector(const std::vector<T>& vec) {
+        derived().fromHostVectorImpl(vec);
+    }
+
+    virtual void fromHostArray(const void* data, NumericalDataType type, int64_t numel) = 0;
 
 
     static inline void setTensorDefaultDeviceId(int device_id) {
