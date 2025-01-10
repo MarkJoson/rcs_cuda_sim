@@ -47,13 +47,16 @@ using MessageName = std::string;
 using MessageNameRef = std::string_view;
 using MessageShape = std::vector<int64_t>;
 
-using NodeExecInputType = std::unordered_map<MessageNameRef, std::vector<const TensorHandle *>>;
-using NodeExecOutputType = std::unordered_map<MessageNameRef, TensorHandle*>;
-using NodeExecStateType = std::unordered_map<MessageNameRef, TensorHandle*>;
+using NodeExecInputType = std::unordered_map<MessageNameRef, const std::vector<TensorHandle>>;
+using NodeExecOutputType = std::unordered_map<MessageNameRef, TensorHandle>;
+using NodeExecStateType = std::unordered_map<MessageNameRef, TensorHandle>;
 
 
 class MessageShapeRef {
 public:
+    using iterator = int64_t*;
+    using const_iterator = const int64_t*;
+
     MessageShapeRef(std::vector<int64_t> &shape) : shape_(shape.data()) {
         dim_ = shape.size();
     }
@@ -84,6 +87,16 @@ public:
 
         return true;
     }
+
+    iterator begin() { return shape_; }
+    iterator end() { return shape_ + dim_; }
+
+    const_iterator begin() const { return shape_; }
+    const_iterator end() const { return shape_ + dim_; }
+
+    const_iterator cbegin() const { return shape_; }
+    const_iterator cend() const { return shape_ + dim_; }
+
 private:
     int64_t dim_;
     int64_t *shape_;

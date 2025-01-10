@@ -19,7 +19,7 @@ public:
     virtual void onExecute(
         SimulatorContext* context,
         const NodeExecInputType &input,
-        const NodeExecOutputType &output) = 0;
+        NodeExecOutputType &output) = 0;
 
     // Getters
     const NodeName& getName() const { return name_; }

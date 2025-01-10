@@ -820,10 +820,12 @@ private:    // ^---- 私有定义 -----
         NodeExecInputType input_data;
 
         for (const auto& [message_name, sub_mq_ids] : node_des.active_input_map) {
-            input_data[message_name] = {};
+            // input_data[message_name] = {};
+            std::vector<TensorHandle> input_data_list;
             for (auto [mq_id, hist_off] : sub_mq_ids) {
-                input_data[message_name].push_back(message_queues_[mq_id]->getHistoryTensorPtr(hist_off));
+                input_data_list.push_back(message_queues_[mq_id]->getHistoryTensorHandle(hist_off));
             }
+            input_data.insert(std::make_pair(message_name, input_data_list));
         }
 
         NodeExecOutputType output_data;

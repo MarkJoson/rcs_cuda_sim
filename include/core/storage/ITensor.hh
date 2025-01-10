@@ -58,10 +58,10 @@ public:
     virtual void resize(const std::vector<int64_t>& shape) = 0;
 
     // Gather方法
-    virtual void gatherSum(const std::vector<const Derived*> src) = 0;
-    virtual void gatherMean(const std::vector<const Derived*> src) = 0;
-    virtual void gatherMax(const std::vector<const Derived*> src) = 0;
-    virtual void gatherMin(const std::vector<const Derived*> src) = 0;
+    virtual void gatherSum(const std::vector<Derived> src) = 0;
+    virtual void gatherMean(const std::vector<Derived> src) = 0;
+    virtual void gatherMax(const std::vector<Derived> src) = 0;
+    virtual void gatherMin(const std::vector<Derived> src) = 0;
 
     template<typename T>
     inline T item() const { return derived().template item_impl<T>(); }

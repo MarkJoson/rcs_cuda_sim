@@ -30,15 +30,15 @@ public:
     void onExecute(
         SimulatorContext*,
         const NodeExecInputType&,
-        const NodeExecOutputType& output
+        NodeExecOutputType& output
     ) override {
         auto& tensor = output.at("source_output");
-        *tensor = value;
+        tensor = value;
         printf(BG_GREEN "Source Component Sending %f..." FG_DEFAULT LINE_ENDL, value);
         value += 1.0f;
     }
 
-    void onReset(TensorHandle, NodeExecStateType&) override {}
+    void onReset(const TensorHandle&, NodeExecStateType&) override {}
 };
 
 class ProcessComponent : public CountableComponent<ProcessComponent> {
@@ -59,19 +59,19 @@ public:
     void onExecute(
         SimulatorContext*,
         const NodeExecInputType& input,
-        const NodeExecOutputType& output
+        NodeExecOutputType& output
     ) override {
         const auto& in_tensor = input.at("source_output").at(0);
         auto& out_tensor = output.at("process_output");
 
         std::cout << "Process Component Executing...\n";
-        std::cout << "Received value: " << *in_tensor << std::endl;
+        std::cout << "Received value: " << in_tensor << std::endl;
 
-        received_value = in_tensor->item<float>();
-        out_tensor->copyFrom(*in_tensor);
+        received_value = in_tensor.item<float>();
+        out_tensor = in_tensor;
     }
 
-    void onReset(TensorHandle, NodeExecStateType&) override {}
+    void onReset(const TensorHandle&, NodeExecStateType&) override {}
 };
 
 class SinkComponent : public CountableComponent<SinkComponent> {
@@ -91,19 +91,19 @@ public:
     void onExecute(
         SimulatorContext*,
         const NodeExecInputType& input,
-        const NodeExecOutputType&
+        NodeExecOutputType&
     ) override {
 
         auto in_tensor = input.at("process_output")[0];
-        received_value = in_tensor->item<float>();
+        received_value = in_tensor.item<float>();
         std::cout << "Sink Component Executing...\n";
         std::cout << "Received value: " << received_value << std::endl;
-        received_value = in_tensor->item<float>() * 2;
-        std::cout << "Output value: " << in_tensor->item<float>() << std::endl;
+        received_value = in_tensor.item<float>() * 2;
+        std::cout << "Output value: " << in_tensor.item<float>() << std::endl;
 
     }
 
-    void onReset(TensorHandle, NodeExecStateType&) override {}
+    void onReset(const TensorHandle&, NodeExecStateType&) override {}
 };
 
 void testBasicMessagePassing() {
@@ -150,14 +150,14 @@ public:
     void onExecute(
         SimulatorContext*,
         const NodeExecInputType& input,
-        const NodeExecOutputType&
+        NodeExecOutputType&
     ) override {
         auto in_tensor = input.at("source_output");
-        printf(BG_BLUE "History Component Receive:%f ..." FG_DEFAULT LINE_ENDL, in_tensor[0]->item<float>());
-        received_values.push_back(in_tensor[0]->item<float>());
+        printf(BG_BLUE "History Component Receive:%f ..." FG_DEFAULT LINE_ENDL, in_tensor[0].item<float>());
+        received_values.push_back(in_tensor[0].item<float>());
     }
 
-    void onReset(TensorHandle, NodeExecStateType&) override {}
+    void onReset(const TensorHandle&, NodeExecStateType&) override {}
 };
 
 void testMessageHistory() {
@@ -207,14 +207,14 @@ public:
     void onExecute(
         SimulatorContext*,
         const NodeExecInputType& input,
-        const NodeExecOutputType&) override {
+        NodeExecOutputType&) override {
         auto in_tensor = input.at("source_output");
         for(size_t i = 0; i < in_tensor.size(); i++) {
-            received_values.push_back(in_tensor[i]->item<float>());
+            received_values.push_back(in_tensor[i].item<float>());
         }
     }
 
-    void onReset(TensorHandle, NodeExecStateType&) override {}
+    void onReset(const TensorHandle&, NodeExecStateType&) override {}
 };
 
 void testMultiSourceFusion() {
@@ -247,8 +247,8 @@ void testMultiSourceFusion() {
 
 int main() {
     auto& registry = TensorRegistry::getInstance();
-    // testBasicMessagePassing();
-    // testMessageHistory();
+    testBasicMessagePassing();
+    testMessageHistory();
     testMultiSourceFusion();
 
     std::cout << "\nAll tests passed successfully!\n";

@@ -47,13 +47,13 @@ public:
 
             if(history_padding_val_.has_value()) {
                 // 填充历史数据
-                *history_[i] = *history_padding_val_;
+                history_[i] = *history_padding_val_;
             }
         }
     }
 
     // 获取历史消息
-    const TensorHandle* getHistoryTensorPtr(size_t offset) {
+    const TensorHandle& getHistoryTensorHandle(size_t offset) {
         if (offset >= max_history_len_) {
             throw std::runtime_error("Invalid history offset");
         }
@@ -63,8 +63,8 @@ public:
     }
 
     // 获取当前的写入Tensor
-    TensorHandle* getWriteTensorPtr() {
-        auto result = history_[write_index_];
+    TensorHandle& getWriteTensorPtr() {
+        auto& result = history_[write_index_];
         write_index_ = (write_index_ + 1) % max_history_len_;
         return result;
     }
@@ -86,12 +86,10 @@ private:
                std::to_string(index);
     }
 
-    TensorHandle* createTensorByShape(const std::string& uri, const MessageShapeRef& shape) {
+    TensorHandle& createTensorByShape(const std::string& uri, const MessageShapeRef& shape) {
         // 根据shape的维度创建tensor
-        std::vector<int64_t> tensor_shape;
-        for(int64_t i = 0; i < shape.size(); i++) {
-            tensor_shape.push_back(shape[i]);
-        }
+        std::vector<int64_t> tensor_shape(shape.begin(), shape.end());
+
         // 创建float类型的tensor，假设所有tensor都是float类型，使用指针类型，数据由TensorRegistry管理
         // TODO. 使用EnvGroupManager替代TensorRegistry
         return TensorRegistry::getInstance().createTensor<float>(uri, tensor_shape);
@@ -114,7 +112,7 @@ private:
     size_t valid_count_ = 0;
 
     // [History_len, env_group_size, env_cnt, *shape...]
-    std::vector<TensorHandle*> history_;
+    std::vector<TensorHandle> history_;
 };
 
 

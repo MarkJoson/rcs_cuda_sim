@@ -90,7 +90,7 @@ public:
             return manager_->dyn_scene_desc_[obj_id_].get();
         }
         core::TensorHandle getShapePose() {
-            return (*manager_->dyn_poses_)[obj_id_];
+            return manager_->dyn_poses_[obj_id_];
         }
     protected:
         DynamicObjectProxy(int obj_id, GeometryManager *manager) :
@@ -235,11 +235,11 @@ public:
                 const Vector2 vertex = poly_shape->vertices[vertex_id];
                 const Vector2 next_vertex = poly_shape->vertices[(vertex_id+1) % poly_shape->vertices.size()];
 
-                float4* static_line_data = reinterpret_cast<float4*>((*dyn_shape_lines_)[{line_idx, 0}].data());
+                float4* static_line_data = reinterpret_cast<float4*>(dyn_shape_lines_[{line_idx, 0}].data());
                 // 线段信息
                 *static_line_data = make_float4(vertex.x(), vertex.y(), next_vertex.x(), next_vertex.y());
                 // 线段所属的obj id
-                (*dyn_shape_line_ids_)[line_idx] = (uint32_t)dyn_shape_id << 16;
+                dyn_shape_line_ids_[line_idx] = (uint32_t)dyn_shape_id << 16;
 
                 line_idx++;
             }
@@ -260,14 +260,14 @@ public:
         transformDynamicLinesKernel<<<grid, block>>>(
                 num_dyn_shape_lines_,
                 num_envs,
-                dyn_shape_lines_->typed_data<float>(),
-                dyn_shape_line_ids_->typed_data<uint32_t>(),
-                dyn_poses_->typed_data<float>(),
-                dyn_lines_->typed_data<float>());
+                dyn_shape_lines_.typed_data<float>(),
+                dyn_shape_line_ids_.typed_data<uint32_t>(),
+                dyn_poses_.typed_data<float>(),
+                dyn_lines_.typed_data<float>());
     }
 
-    core::TensorHandle *getDynamicLines() { return dyn_lines_; }
-    core::TensorHandle *getDynamicPoses() { return dyn_poses_; }
+    core::TensorHandle getDynamicLines() { return dyn_lines_; }
+    core::TensorHandle getDynamicPoses() { return dyn_poses_; }
 
 private:
     // 静态物体描述，带位姿，随环境组变化
@@ -284,12 +284,12 @@ private:
     // 动态物体
     DynamicSceneDescription dyn_scene_desc_;                        // 动态物体定义（仅支持多边形）
     uint32_t                num_dyn_shape_lines_;                   // 多边形线段数量
-    core::TensorHandle      *dyn_shape_line_ids_ = nullptr;         // 点集合对应的物体id: [line] -> {16位物体id, 16位内部点id}
-    core::TensorHandle      *dyn_shape_lines_ = nullptr;            // 多边形线段集合（局部坐标系）: [line, 4]
+    core::TensorHandle      dyn_shape_line_ids_;                    // 点集合对应的物体id: [line] -> {16位物体id, 16位内部点id}
+    core::TensorHandle      dyn_shape_lines_;                       // 多边形线段集合（局部坐标系）: [line, 4]
 
     // 为每个环境准备的数据
-    core::TensorHandle *dyn_poses_ = nullptr;                       // 动态物体位姿集合: [obj, group, env, 4]
-    core::TensorHandle *dyn_lines_ = nullptr;                       // 动态物体线段集合: [group, env, lines, 4]
+    core::TensorHandle dyn_poses_;                                  // 动态物体位姿集合: [obj, group, env, 4]
+    core::TensorHandle dyn_lines_;                                  // 动态物体线段集合: [group, env, lines, 4]
 
     // TODO. 动态物体的初始位姿，放到onReset中初始化
 

@@ -34,8 +34,8 @@ public:
 
     void onRegister(SimulatorContext* context) override;
     void onEnvironGroupInit(SimulatorContext*) override { };
-    void onExecute( SimulatorContext* context, const NodeExecInputType &input, const NodeExecOutputType &output) override;
-    void onReset( TensorHandle reset_flags, NodeExecStateType &state ) override;
+    void onExecute( SimulatorContext* context, const NodeExecInputType &input, NodeExecOutputType &output) override;
+    void onReset( const TensorHandle& reset_flags, NodeExecStateType &state ) override;
 
     MessageNameRef getMessageName() { return message_name_; }
     MessageNameRef getOutputMessageName() { return output_message_name_; }

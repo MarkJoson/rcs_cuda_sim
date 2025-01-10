@@ -21,33 +21,50 @@ namespace internal
 class GTensorTorchWrapper final : public ITensor<GTensorTorchWrapper> {
     friend class ITensor<GTensorTorchWrapper>;
 public:
-    // explicit GTensorTorchWrapper();
-    explicit GTensorTorchWrapper(NumericalDataType dtype, DeviceType device_type=DeviceType::kCUDA);
-    explicit GTensorTorchWrapper(const std::vector<int64_t>& shape, NumericalDataType dtype, DeviceType device_type=DeviceType::kCUDA);
-    explicit GTensorTorchWrapper(const Scalar& scalar, DeviceType device_type=DeviceType::kCUDA);
-    explicit GTensorTorchWrapper(const std::shared_ptr<internal::TorchTensorImpl>& impl, NumericalDataType dtype, DeviceType device_type=DeviceType::kCUDA)
-        : impl_(impl), dtype_(dtype), device_type_(device_type) {}
+    // 创建
+    explicit GTensorTorchWrapper(
+        NumericalDataType dtype=NumericalDataType::kFloat32,
+        DeviceType device_type=DeviceType::kCUDA);
+
+    explicit GTensorTorchWrapper(
+        const std::vector<int64_t>& shape,
+        NumericalDataType dtype=NumericalDataType::kFloat32,
+        DeviceType device_type=DeviceType::kCUDA);
+
+    explicit GTensorTorchWrapper(
+        const Scalar& scalar,
+        DeviceType device_type=DeviceType::kCUDA);
+
+    explicit GTensorTorchWrapper(
+        const std::shared_ptr<internal::TorchTensorImpl>& impl)
+        : impl_(impl) {}
+
+    GTensorTorchWrapper& fromScalar(const Scalar& scalar) override;
+
+    // 拷贝
+    GTensorTorchWrapper(const GTensorTorchWrapper& other)
+        : impl_(other.impl_) {}
+
+    // 移动
+    GTensorTorchWrapper(GTensorTorchWrapper&& other) noexcept
+        : impl_(std::move(other.impl_)) {}
 
     virtual ~GTensorTorchWrapper() final = default;
 
-    GTensorTorchWrapper(const GTensorTorchWrapper& other)
-        : impl_(internal::shareTorchTensorImpl(other.impl_)), dtype_(other.dtype_) {}
-
-    GTensorTorchWrapper(GTensorTorchWrapper&& other) noexcept
-        : impl_(std::move(other.impl_)), dtype_(other.dtype_) {}
-
     GTensorTorchWrapper& operator=(const GTensorTorchWrapper& other) {
         if (this != &other) {
-            impl_ = internal::shareTorchTensorImpl(other.impl_);
-            dtype_ = other.dtype_;
+            // impl_ = other.impl_;
+            // !赋值操作将替换最内层的tensor
+            replaceTensor(other);
         }
         return *this;
     }
 
     GTensorTorchWrapper& operator=(GTensorTorchWrapper&& other) noexcept {
         if (this != &other) {
-            impl_ = std::move(other.impl_);
-            dtype_ = other.dtype_;
+            // impl_ = std::move(other.impl_);
+            // !赋值操作将替换最内层的tensor
+            replaceTensor(std::move(other));
         }
         return *this;
     }
@@ -77,18 +94,20 @@ public:
     void copyFrom(const GTensorTorchWrapper& other) override;
     void copyTo(GTensorTorchWrapper& other) const override;
     void resize(const std::vector<int64_t>& shape) override;
+    // TODO. replaceTensor需要成为虚函数吗？
+    void replaceTensor(const GTensorTorchWrapper& other);         // 替换内部的Tensor
+    void replaceTensor(GTensorTorchWrapper&& other);              // 移动替换内部的Tensor
 
     GTensorTorchWrapper clone() const override;
     GTensorTorchWrapper move() override;
 
     // Scalar方法实现
     Scalar toScalar() const override;
-    GTensorTorchWrapper& fromScalar(const Scalar& scalar) override;
 
-    void gatherSum(const std::vector<const GTensorTorchWrapper*> src) override;
-    void gatherMean(const std::vector<const GTensorTorchWrapper*> src) override;
-    void gatherMax(const std::vector<const GTensorTorchWrapper*> src) override;
-    void gatherMin(const std::vector<const GTensorTorchWrapper*> src) override;
+    void gatherSum(const std::vector<GTensorTorchWrapper> src) override;
+    void gatherMean(const std::vector<GTensorTorchWrapper> src) override;
+    void gatherMax(const std::vector<GTensorTorchWrapper> src) override;
+    void gatherMin(const std::vector<GTensorTorchWrapper> src) override;
 
 protected:
     // 具体实现方法
@@ -148,8 +167,6 @@ protected:
 
 private:
     std::shared_ptr<internal::TorchTensorImpl> impl_;
-    NumericalDataType dtype_;
-    DeviceType device_type_;
 };
 
 
