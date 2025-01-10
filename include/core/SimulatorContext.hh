@@ -16,7 +16,7 @@ class SimulatorContext
 public:
     SimulatorContext() {
         message_bus = std::make_unique<MessageBus>(this);
-        env_group_manager = std::make_unique<EnvGroupManager>(1,1,1);
+        env_group_manager = std::make_unique<EnvGroupManager>(1,2,1);
     }
     virtual ~SimulatorContext() {}
 

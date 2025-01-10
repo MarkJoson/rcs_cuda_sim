@@ -161,7 +161,7 @@ protected:
     MemoryType mem_type_;
     int num_group_;
 public:
-    EGConfigItemBase(MemoryType mem_type, int num_group=1)
+    EGConfigItemBase(int num_group, MemoryType mem_type)
         : mem_type_(mem_type), num_group_(num_group) {}
 
     virtual ~EGConfigItemBase() = default;
@@ -183,7 +183,7 @@ protected:
     std::vector<T> host_data_;
 public:
     EGHostMemConfigItem(int64_t num_group, MemoryType alternative=MemoryType::HOST_MEM)
-        : EGConfigItemBase(alternative, num_group), host_data_(num_group)
+        : EGConfigItemBase(num_group, alternative), host_data_(num_group)
     { }
 
     T& at(int64_t idx) {
@@ -247,7 +247,7 @@ class EGGlobalMemConfigTensor : public EGConfigItemBase {
     TensorHandle device_tensor_;
 public:
     EGGlobalMemConfigTensor(const std::string& name, int64_t num_group, const TensorShape& shape)
-        : EGConfigItemBase(MemoryType::GLOBAL_TENSOR)
+        : EGConfigItemBase(num_group, MemoryType::GLOBAL_TENSOR)
     {
         TensorShape new_shape = shape;
         new_shape.insert(new_shape.begin(), num_group);
@@ -270,6 +270,9 @@ public:
 
     template<typename... Args>
     auto at(int64_t group_id, Args... indices) {
+        if (group_id >= num_group_) {
+            throw std::out_of_range("group_id out of range");
+        }
         return host_tensor_[{group_id, indices...}];
     }
 };

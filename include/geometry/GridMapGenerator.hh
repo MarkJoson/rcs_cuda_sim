@@ -57,7 +57,7 @@ public:
         img_u8c1.convertTo(img_u8c1, CV_8UC1);
 
         cv::Mat img_color;
-        cv::applyColorMap(img_color, img_u8c1, cv::COLORMAP_BONE);
+        cv::applyColorMap(img_u8c1, img_color, cv::COLORMAP_BONE);
 
         return img_color;
     }
@@ -237,12 +237,10 @@ public:
             }
         }
 
-        cv::Mat blob_map = cv::Mat(desc_.grid_size.y, desc_.grid_size.x, CV_32FC4, output_ptr);
-        std::vector<cv::Mat> dist_float_splited;
-        cv::split(blob_map, dist_float_splited);
-        CvMatViewer::showFloatImg(dist_float_splited[2]);
-
-        // cv::Mat dist_map_u8 = CvMatViewer::floatMapToU8C3(dist_map);
+        // cv::Mat blob_map = cv::Mat(desc_.grid_size.y, desc_.grid_size.x, CV_32FC4, output_ptr);
+        // std::vector<cv::Mat> dist_float_splited;
+        // cv::split(blob_map, dist_float_splited);
+        // CvMatViewer::showFloatImg(dist_float_splited[2]);
     }
 
     GridMapDescription getGridMapDescritpion() const {

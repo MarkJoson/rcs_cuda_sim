@@ -75,20 +75,19 @@ void testGeometryManager() {
 constexpr int IMG_SCALING_FACTOR = 1;
 
 // 辅助函数：将EDF数据转换为可视化图像
-cv::Mat visualizeEDF(const float* edf_data, int width, int height) {
+cv::Mat visualizeEDF(const float4* edf_data, int width, int height) {
     cv::Mat visualization(height, width, CV_8UC3);
 
     // 找到最大距离值用于归一化
     float max_distance = 0.0f;
     for(int i = 0; i < width * height; i++) {
-        max_distance = std::max(max_distance, std::abs(edf_data[i * 4]));
+        max_distance = std::max(max_distance, std::abs(edf_data[i].z));
     }
 
     // 将EDF值转换为颜色
     for(int y = 0; y < height; y++) {
         for(int x = 0; x < width; x++) {
-            int idx = (y * width + x) * 4;
-            float distance = edf_data[idx];
+            float distance = edf_data[y * width + x].z;
 
             // 归一化距离值到0-1范围
             float normalized_distance = std::abs(distance) / max_distance;
@@ -98,13 +97,13 @@ cv::Mat visualizeEDF(const float* edf_data, int width, int height) {
             if(distance < 0) {
                 // 物体内部为红色系
                 color[0] = 0;  // B
-                color[1] = 0;  // G
+                color[1] = 0.6*static_cast<uchar>(255 * normalized_distance);;  // G
                 color[2] = static_cast<uchar>(255 * normalized_distance);  // R
             } else {
                 // 物体外部为蓝色系
                 color[0] = static_cast<uchar>(255 * normalized_distance);  // B
                 color[1] = 0;  // G
-                color[2] = 0;  // R
+                color[2] = 255-0.8*static_cast<uchar>(255 * normalized_distance);;  // R
             }
             visualization.at<cv::Vec3b>(y, x) = color;
         }
@@ -170,16 +169,16 @@ void testGeometryManagerEDF() {
 
         // 创建窗口显示结果
         cv::namedWindow("EDF Visualization", cv::WINDOW_NORMAL);
-        cv::resizeWindow("EDF Visualization", 800, 800);
+        // cv::resizeWindow("EDF Visualization", 800, 800);
 
         // 获取EDF数据并转换为可视化图像
-        core::TensorHandle static_esdf = geom_manager->getStaticESDF(0);
+        core::TensorHandle static_esdf = geom_manager->getStaticESDF(1);
 
         // 获取环境组0的EDF数据
-        auto esdf_data = static_esdf.typed_data<float>();
+        auto esdf_data = static_esdf.typed_data<float4>();
 
         // 创建可视化图像
-        cv::Mat vis_img = visualizeEDF(esdf_data, GRID_WIDTH, GRID_HEIGHT);
+        cv::Mat vis_img = visualizeEDF(esdf_data, static_esdf.shape()[1], static_esdf.shape()[0]);
 
         // 显示图像
         cv::imshow("EDF Visualization", vis_img);

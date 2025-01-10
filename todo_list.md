@@ -7,9 +7,9 @@
 - ~~constant memory 读取接口, sync_to_device~~
 - ~~TensorHandle* 改为TensorHandle~~
 - ~~环境组在Kernel中的访问接口~~
-
-- 测试GeometryManager
-- 移植地图生成、Gridmap
+- ~~GridMap ESDF生成~~
+- ~~测试GeometryManager~~
+- 移植地图生成
 - 修改message queue创建shapes时的batch
 - 移植并测试激光雷达
 - 移植一个brax引擎测试
