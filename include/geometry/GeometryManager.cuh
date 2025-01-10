@@ -168,7 +168,7 @@ public:
     void renderStaticEDF() {
         // 为所有的场景组生成静态物体的SDF
         for (int64_t group_id=0; group_id<static_scene_descs_->getNumEnvGroup(); group_id++) {
-            GridMapGenerator grid_map(GRIDMAP_WIDTH, GRIDMAP_HEIGHT, {0, 0}, GRIDMAP_RESOLU);
+            GridMapGenerator grid_map({GRIDMAP_WIDTH, GRIDMAP_HEIGHT, {0, 0}, GRIDMAP_RESOLU});
             for (auto &static_obj : static_scene_descs_->at(group_id)) {
                 auto &shape = static_obj.first;
                 auto &pose = static_obj.second;
@@ -215,7 +215,7 @@ public:
                     if(num_static_lines_in_group >= MAX_STATIC_LINES)
                         throw std::runtime_error("Number of Static Lines exceeds the container capacity!");
 
-                    static_line_data[num_static_lines_in_group++] = make_float4(new_vertex.x(), new_vertex.y(), new_next_vertex.x(), new_next_vertex.y());
+                    static_line_data[num_static_lines_in_group++] = make_float4(new_vertex.x, new_vertex.y, new_next_vertex.x, new_next_vertex.y);
                 }
             }
             num_static_lines_->at(group_id) = num_static_lines_in_group;
@@ -240,7 +240,7 @@ public:
 
                 // float4* static_line_data = reinterpret_cast<float4*>(dyn_shape_lines_[{line_idx, 0}].data());
                 // 线段信息
-                h_dyn_shape_lines[line_idx] = make_float4(vertex.x(), vertex.y(), next_vertex.x(), next_vertex.y());
+                h_dyn_shape_lines[line_idx] = make_float4(vertex.x, vertex.y, next_vertex.x, next_vertex.y);
                 // 线段所属的obj id
                 h_dyn_shape_line_ids[line_idx] = (uint32_t)dyn_shape_id << 16;
                 line_idx++;
@@ -279,6 +279,7 @@ public:
                 dyn_poses_.typed_data<float>(),
                 dyn_lines_.typed_data<float>());
 
+        // TODO. 现在不需要这个
         cudaDeviceSynchronize();
 
         cudaError_t err = cudaGetLastError();

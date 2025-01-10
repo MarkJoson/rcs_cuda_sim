@@ -169,8 +169,8 @@ void testGeometryManagerEDF() {
         constexpr int GRID_HEIGHT = 100;
 
         // 创建窗口显示结果
-        // cv::namedWindow("EDF Visualization", cv::WINDOW_NORMAL);
-        // cv::resizeWindow("EDF Visualization", 800, 800);
+        cv::namedWindow("EDF Visualization", cv::WINDOW_NORMAL);
+        cv::resizeWindow("EDF Visualization", 800, 800);
 
         // 获取EDF数据并转换为可视化图像
         core::TensorHandle static_esdf = geom_manager->getStaticESDF(0);
@@ -179,19 +179,16 @@ void testGeometryManagerEDF() {
         auto esdf_data = static_esdf.typed_data<float>();
 
         // 创建可视化图像
-        // cv::Mat vis_img = visualizeEDF(esdf_data, GRID_WIDTH, GRID_HEIGHT);
-        // // cv::Mat visualization(GRID_HEIGHT, GRID_WIDTH, CV_32FC1, esdf_data);
-        // // cv::Mat vis_img = getVisualDistMap(visualization);
+        cv::Mat vis_img = visualizeEDF(esdf_data, GRID_WIDTH, GRID_HEIGHT);
 
         // 显示图像
+        cv::imshow("EDF Visualization", vis_img);
 
-        // cv::imshow("EDF Visualization", vis_img);
+        // 保存图像
+        cv::imwrite("edf_visualization.png", vis_img);
 
-        // // 保存图像
-        // cv::imwrite("edf_visualization.png", vis_img);
-
-        // std::cout << "EDF visualization has been saved to 'edf_visualization.png'" << std::endl;
-        // std::cout << "Press any key to exit..." << std::endl;
+        std::cout << "EDF visualization has been saved to 'edf_visualization.png'" << std::endl;
+        std::cout << "Press any key to exit..." << std::endl;
 
         cv::waitKey(0);
 

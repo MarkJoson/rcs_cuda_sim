@@ -45,8 +45,8 @@ public:
 
     Vector2 localPointTransform(const Vector2& point) const {
         Vector2 result;
-        result.x() = point.x() * rotation_.cos() - point.y() * rotation_.sin();
-        result.y() = point.x() * rotation_.sin() + point.y() * rotation_.cos();
+        result.x = point.x * rotation_.cos() - point.y * rotation_.sin();
+        result.y = point.x * rotation_.sin() + point.y * rotation_.cos();
         result += position_;
         return result;
     }
@@ -54,8 +54,8 @@ public:
     Vector2 inverseTransformPoint(const Vector2& point) const {
         Vector2 centered = point - position_;
         Vector2 result;
-        result.x() = centered.x() * rotation_.cos() + centered.y() * rotation_.sin();
-        result.y() = -centered.x() * rotation_.sin() + centered.y() * rotation_.cos();
+        result.x = centered.x * rotation_.cos() + centered.y * rotation_.sin();
+        result.y = -centered.x * rotation_.sin() + centered.y * rotation_.cos();
         return result;
     }
 

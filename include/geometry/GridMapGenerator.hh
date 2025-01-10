@@ -1,6 +1,7 @@
 #ifndef CUDASIM_GEOMETRY_GRIDMAP_GENERATOR_HH
 #define CUDASIM_GEOMETRY_GRIDMAP_GENERATOR_HH
 
+#include <initializer_list>
 #include <opencv2/core.hpp>
 #include <opencv2/core/hal/interface.h>
 #include <opencv2/imgcodecs.hpp>
@@ -22,11 +23,21 @@ struct GridMapDescription {
     int2 grid_size = {0, 0};
 
     std::pair<int, int> world2Grid(Vector2 point) {
-        int grid_x = std::max(0, int((point.x() - origin.x) / resolu));
+        int grid_x = std::max(0, int((point.x - origin.x) / resolu));
         grid_x = std::min(grid_x, grid_size.x - 1);
-        int grid_y = std::max(0, int((point.y() - origin.y) / resolu));
+        int grid_y = std::max(0, int((point.y - origin.y) / resolu));
         grid_y = std::min(grid_y, grid_size.y - 1);
         return {grid_x, grid_y};
+    }
+
+    GridMapDescription(float w, float h, Vector2 ori, float res) {
+        if (res <= 0)
+            throw std::runtime_error("resolution must be positive");
+        resolu = res;
+        origin.x = ori.x;
+        origin.y = ori.y;
+        grid_size.x = std::ceil(w / res);
+        grid_size.y = std::ceil(h / res);
     }
 };
 
@@ -62,14 +73,8 @@ public:
 class GridMapGenerator {
 public:
     static constexpr int MAX_DIST = 1e6;
-    explicit GridMapGenerator() = default;
 
-    GridMapGenerator(float width, float height, Vector2 origin, float resolu) : desc_() {
-        desc_.origin.x = origin.x();
-        desc_.origin.y = origin.y();
-        desc_.grid_size.x = std::ceil(width / resolu);
-        desc_.grid_size.y = std::ceil(height / resolu);
-        desc_.resolu = resolu;
+    GridMapGenerator(const GridMapDescription& desc = {0,0,{},1}) : desc_(desc) {
         occ_map_ = cv::Mat::zeros(desc_.grid_size.y, desc_.grid_size.x, CV_8UC1);
     }
 
@@ -109,10 +114,6 @@ public:
         cv::absdiff(occ_map_, erosion, edge_map);
 
         cv::Mat inside_flags = erosion;      // 指示该点是否在障碍物内，有障碍物的地方为255
-
-        cv::imshow("edge_map", edge_map);
-        cv::imshow("inside_flags", inside_flags);
-        cv::waitKey(0);
 
         // ------------------------------------  计算距离场  --------------------------------------------
         cv::Mat col_chk_map = cv::Mat::zeros(desc_.grid_size.y, desc_.grid_size.x, CV_32FC1);
@@ -235,6 +236,13 @@ public:
                         dist_map.at<float>(y, x), edge_map.at<uint8_t>(y, x));
             }
         }
+
+        cv::Mat blob_map = cv::Mat(desc_.grid_size.y, desc_.grid_size.x, CV_32FC4, output_ptr);
+        std::vector<cv::Mat> dist_float_splited;
+        cv::split(blob_map, dist_float_splited);
+        CvMatViewer::showFloatImg(dist_float_splited[2]);
+
+        // cv::Mat dist_map_u8 = CvMatViewer::floatMapToU8C3(dist_map);
     }
 
     GridMapDescription getGridMapDescritpion() const {
