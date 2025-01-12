@@ -109,17 +109,17 @@ public:
     ~GeometryManager() = default;
 
     // 静态物体在指定环境组中创建
-    void createStaticPolyObj(int group_id, const PolygonShapeDef &polygon_def, const Transform2D &pose) {
+    void createStaticPolyObj(int group_id, const SimplePolyShapeDef &polygon_def, const Transform2D &pose) {
         static_scene_descs_->at(group_id).push_back(
-            std::make_pair(std::make_unique<PolygonShapeDef>(polygon_def), pose));
+            std::make_pair(std::make_unique<SimplePolyShapeDef>(polygon_def), pose));
     }
 
     // 动态物体在所有环境组中创建
-    DynamicObjectProxy createDynamicPolyObj(const PolygonShapeDef &polygon_def) {
+    DynamicObjectProxy createDynamicPolyObj(const SimplePolyShapeDef &polygon_def) {
         // 累加动态物体的边数
         num_dyn_shape_lines_ += polygon_def.vertices.size();
         int obj_id = dyn_scene_desc_.size();
-        dyn_scene_desc_.push_back(std::make_unique<PolygonShapeDef>(polygon_def));
+        dyn_scene_desc_.push_back(std::make_unique<SimplePolyShapeDef>(polygon_def));
         return DynamicObjectProxy(obj_id, this);
     }
 
@@ -140,23 +140,7 @@ public:
         assembleStaticWorld();
 
         // 动态物体
-        assembleDynamicWorld();
-
-        // 初始化动态物体存储空间
-        core::EnvGroupManager *group_mgr = context->getEnvironGroupManager();
-        // 场景中所有的线段, [group, env, lines, 4]
-        group_mgr->createTensor<float>(dyn_lines_, "scene_lines", {
-            core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
-            core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
-            num_dyn_shape_lines_,
-            4});
-        // 场景中所有dyn object的pose, [obj, group, env, 4]
-        const uint32_t num_dynobj = dyn_scene_desc_.size();
-        group_mgr->createTensor<float>(dyn_poses_, "dynamic_poses", {
-            num_dynobj,
-            core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
-            core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
-            4});
+        assembleDynamicWorld(context);
 
     }
 
@@ -173,8 +157,8 @@ public:
                 auto &shape = static_obj.first;
                 auto &pose = static_obj.second;
 
-                if (shape->type == ShapeType::POLYGON) {
-                    auto poly = reinterpret_cast<PolygonShapeDef *>(shape.get());
+                if (shape->type == ShapeType::SIMPLE_POLYGON) {
+                    auto poly = reinterpret_cast<SimplePolyShapeDef *>(shape.get());
                     grid_map.drawPolygon(*poly, pose);
                 }
             }
@@ -197,62 +181,95 @@ public:
 
             for (auto &static_obj : static_scene_descs_->at(group_id)) {
                 const auto &shape = static_obj.first;
-                const auto &pose = static_obj.second;
+                const auto &transform = static_obj.second;
 
-                // TODO. 当前仅支持Polygon型Static Object
-                if(shape->type != ShapeType::POLYGON)
-                    throw std::runtime_error("Only Support Polygon Object at Present!");
 
-                // 将Polygon的所有边加入static_line_data
-                auto poly_shape = reinterpret_cast<PolygonShapeDef *>(shape.get());
-                for (size_t j=0; j<poly_shape->vertices.size(); j++) {
+                if(shape->type == ShapeType::SIMPLE_POLYGON) {          // 简单多边形
+                    const SimplePolyShapeDef *simple_poly = reinterpret_cast<SimplePolyShapeDef *>(shape.get());
+                    for(auto line_iter = simple_poly->begin(transform);
+                            line_iter != simple_poly->end(transform); ++line_iter) {
 
-                    const Vector2 vertex = poly_shape->vertices[j];
-                    const Vector2 next_vertex = poly_shape->vertices[(j+1) % poly_shape->vertices.size()];
-                    Vector2 new_vertex = pose.localPointTransform(vertex);
-                    Vector2 new_next_vertex = pose.localPointTransform(next_vertex);
+                        if(num_static_lines_in_group >= MAX_STATIC_LINES)
+                            throw std::runtime_error("Number of Static Lines exceeds the container capacity!");
 
-                    if(num_static_lines_in_group >= MAX_STATIC_LINES)
-                        throw std::runtime_error("Number of Static Lines exceeds the container capacity!");
+                        static_line_data[num_static_lines_in_group++] = make_float4(
+                            (*line_iter).start.x, (*line_iter).start.y,
+                            (*line_iter).end.x, (*line_iter).end.y);
+                    }
+                } else if(shape->type == ShapeType::COMPOSED_POLYGON) {     // 复合多边形
+                    const ComposedPolyShapeDef *composed_poly = reinterpret_cast<ComposedPolyShapeDef *>(shape.get());
+                    for(auto line_iter = composed_poly->begin(transform);
+                            line_iter != composed_poly->end(transform); ++line_iter) {
 
-                    static_line_data[num_static_lines_in_group++] = make_float4(new_vertex.x, new_vertex.y, new_next_vertex.x, new_next_vertex.y);
+                        if(num_static_lines_in_group >= MAX_STATIC_LINES)
+                            throw std::runtime_error("Number of Static Lines exceeds the container capacity!");
+
+                        static_line_data[num_static_lines_in_group++] = make_float4(
+                            (*line_iter).start.x, (*line_iter).start.y,
+                            (*line_iter).end.x, (*line_iter).end.y);
+                    }
+                } else {
+                    throw std::runtime_error("Shape Type Not Support at Present!");
                 }
             }
             num_static_lines_->at(group_id) = num_static_lines_in_group;
         }
     }
 
-    void assembleDynamicWorld() {
+    void assembleDynamicWorld(core::SimulatorContext *context) {
+        /// Dynamic Object 仅保留多边形的凸包
+
         std::vector<float4> h_dyn_shape_lines(num_dyn_shape_lines_);
         std::vector<uint32_t> h_dyn_shape_line_ids(num_dyn_shape_lines_);
 
         int line_idx = 0;
-        for(size_t dyn_shape_id = 0; dyn_shape_id < dyn_scene_desc_.size(); dyn_shape_id++) {
-            const std::unique_ptr<ShapeDef>& dyn_shape = dyn_scene_desc_[dyn_shape_id];
-            if(dyn_shape->type != ShapeType::POLYGON)
-                throw std::runtime_error("Only Support Polygon Object at Present!");
 
-            PolygonShapeDef* poly_shape = reinterpret_cast<PolygonShapeDef *>(dyn_shape.get());
-
-            for (size_t vertex_id=0; vertex_id<poly_shape->vertices.size(); vertex_id++) {
-                const Vector2 vertex = poly_shape->vertices[vertex_id];
-                const Vector2 next_vertex = poly_shape->vertices[(vertex_id+1) % poly_shape->vertices.size()];
-
-                // float4* static_line_data = reinterpret_cast<float4*>(dyn_shape_lines_[{line_idx, 0}].data());
+        auto poly_handle_fn = [&h_dyn_shape_line_ids, &h_dyn_shape_lines, &line_idx]<typename T>(const T* shape, int shape_id) {
+            for(auto line_iter = shape->begin({}); line_iter != shape->end({}); ++line_iter) {
                 // 线段信息
-                h_dyn_shape_lines[line_idx] = make_float4(vertex.x, vertex.y, next_vertex.x, next_vertex.y);
+                h_dyn_shape_lines[line_idx] = make_float4((*line_iter).start.x, (*line_iter).start.y,
+                                                            (*line_iter).end.x, (*line_iter).end.y);
                 // 线段所属的obj id
-                h_dyn_shape_line_ids[line_idx] = (uint32_t)dyn_shape_id << 16;
+                h_dyn_shape_line_ids[line_idx] = (uint32_t)shape_id << 16;
                 line_idx++;
+            }
+        };
+
+        for(size_t dyn_shape_id = 0; dyn_shape_id < dyn_scene_desc_.size(); dyn_shape_id++) {
+            const std::unique_ptr<ShapeDef>& shape = dyn_scene_desc_[dyn_shape_id];
+
+            if(shape->type == ShapeType::SIMPLE_POLYGON) {          // 简单多边形
+                poly_handle_fn(reinterpret_cast<SimplePolyShapeDef *>(shape.get()), dyn_shape_id);
+            } else if(shape->type == ShapeType::COMPOSED_POLYGON) {     // 复合多边形
+                poly_handle_fn(reinterpret_cast<ComposedPolyShapeDef *>(shape.get()), dyn_shape_id);
+            } else {
+                throw std::runtime_error("Shape Type Not Support at Present!");
             }
         }
 
+        // 拷贝dyn_shape_lines_
         core::TensorRegistry::getInstance().createTensor<float>(dyn_shape_lines_, "dyn_obj_lines", {});
         dyn_shape_lines_.fromHostArray(h_dyn_shape_lines.data(), core::NumericalDataType::kFloat32, h_dyn_shape_lines.size() * 4);
         dyn_shape_lines_.reshape({num_dyn_shape_lines_, 4});
 
+        // 拷贝dyn_shape_line_ids_
         core::TensorRegistry::getInstance().createTensor<uint32_t>(dyn_shape_line_ids_, "dyn_obj_line_ids", {});
         dyn_shape_line_ids_.fromHostVector(h_dyn_shape_line_ids);
+
+        // 申请动态数组，dyn_lines，单个场景中的所有全局坐标系线段, [group, env, lines, 4]
+        // TODO. 取代这个，在kernel中实时计算
+        context->getEnvironGroupManager()->createTensor<float>(dyn_lines_, "scene_lines", {
+            core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
+            core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
+            num_dyn_shape_lines_,
+            4});
+
+        // 场景中所有dyn object的pose, [obj, group, env, 4]
+        context->getEnvironGroupManager()->createTensor<float>(dyn_poses_, "dynamic_poses", {
+            static_cast<int64_t>(dyn_scene_desc_.size()),
+            core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
+            core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
+            4});
 
         std::cout << "Dynamic Object Line: " << dyn_shape_lines_ << std::endl;
         std::cout << "Dynamic Object Line Ids: " << dyn_shape_line_ids_ << std::endl;

@@ -29,11 +29,7 @@ void testGeometryManager() {
             Vector2(0.0, 1.0)
         };
 
-        PolygonShapeDef static_polygon(
-            static_vertices,
-            Vector2(0.5, 0.5), // centroid
-            0.707 // radius (approximate diagonal/2)
-        );
+        SimplePolyShapeDef static_polygon(static_vertices);
 
         // 在环境组0中创建静态多边形
         Transform2D static_pose(Vector2(2.0, 2.0), Rotation2D(M_PI/4));
@@ -47,11 +43,7 @@ void testGeometryManager() {
             Vector2(-0.5, 0.5)
         };
 
-        PolygonShapeDef dynamic_polygon(
-            dynamic_vertices,
-            Vector2(0.0, 0.0), // centroid
-            0.707 // radius
-        );
+        SimplePolyShapeDef dynamic_polygon(dynamic_vertices);
 
         // 创建动态物体
         auto dynamic_obj = geom_manager->createDynamicPolyObj(dynamic_polygon);
@@ -135,11 +127,7 @@ void testGeometryManagerEDF() {
             Vector2(3.0, 7.0)
         };
 
-        PolygonShapeDef l_shape_polygon(
-            l_shape_vertices,
-            Vector2(5.0, 5.0), // approximate centroid
-            2.0 // approximate radius
-        );
+        SimplePolyShapeDef l_shape_polygon(l_shape_vertices);
 
         // 2. 创建一个小正方形
         std::vector<Vector2> square_vertices = {
@@ -149,11 +137,7 @@ void testGeometryManagerEDF() {
             Vector2(1.0, 2.0)
         };
 
-        PolygonShapeDef square_polygon(
-            square_vertices,
-            Vector2(1.5, 1.5), // centroid
-            0.707 // radius
-        );
+        SimplePolyShapeDef square_polygon(square_vertices);
 
         // 在环境组0中创建静态多边形
         geom_manager->createStaticPolyObj(0, l_shape_polygon, Transform2D());
@@ -172,7 +156,7 @@ void testGeometryManagerEDF() {
         // cv::resizeWindow("EDF Visualization", 800, 800);
 
         // 获取EDF数据并转换为可视化图像
-        core::TensorHandle static_esdf = geom_manager->getStaticESDF(1);
+        core::TensorHandle static_esdf = geom_manager->getStaticESDF(0);
 
         // 获取环境组0的EDF数据
         auto esdf_data = static_esdf.typed_data<float4>();

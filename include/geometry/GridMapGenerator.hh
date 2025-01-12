@@ -78,7 +78,7 @@ public:
         occ_map_ = cv::Mat::zeros(desc_.grid_size.y, desc_.grid_size.x, CV_8UC1);
     }
 
-    void drawPolygon(const PolygonShapeDef& poly, const Transform2D& tf) {
+    void drawPolygon(const SimplePolyShapeDef& poly, const Transform2D& tf) {
         auto pt_list = std::vector<cv::Point>();
 
         std::transform(poly.vertices.begin(), poly.vertices.end(), std::back_insert_iterator(pt_list),

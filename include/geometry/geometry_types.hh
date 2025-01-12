@@ -9,8 +9,10 @@ namespace cuda_simulator {
 namespace geometry {
 
 enum class ShapeType {
-    POLYGON,
+    SIMPLE_POLYGON,
+    COMPOSED_POLYGON,
     CIRCLE,
+    LINE,
 };
 
 enum class ObjectType {
@@ -83,6 +85,14 @@ struct Vector2 {
     }
 
     static Vector2 Zero() { return Vector2(0, 0); }
+};
+
+struct Line {
+    Vector2 start;
+    Vector2 end;
+
+    Line() : start(Vector2::Zero()), end(Vector2::Zero()) {}
+    Line(const Vector2& start, const Vector2& end) : start(start), end(end) {}
 };
 
 

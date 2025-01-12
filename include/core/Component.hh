@@ -19,9 +19,7 @@ public:
 
     // Component特有的接口
     virtual void onEnvironGroupInit(SimulatorContext* context) = 0;
-    virtual void onReset(
-        const TensorHandle& reset_flags,
-        NodeExecStateType &state) = 0;
+    virtual void onReset(const TensorHandle& reset_flags, NodeExecStateType &state) = 0;
 };
 
 template<typename Derived>
