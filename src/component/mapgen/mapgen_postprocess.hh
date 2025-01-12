@@ -23,6 +23,8 @@ namespace cuda_simulator {
 namespace map_gen {
 namespace impl {
 
+using namespace std::literals;
+
 template <typename T> struct Point {
     T x;
     T y;
