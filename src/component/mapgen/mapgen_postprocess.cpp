@@ -281,7 +281,7 @@ ArrayPt<float> douglasPeukcer(const ArrayPt<float> &pts, float grid_size)
 }
 
 //
-ArrayShape<float> processGridmap(const Array2d &map, float grid_size)
+ArrayShape<float> gridMapToLines(const Array2d &map, float grid_size)
 {
     // 提取连通域
     std::vector<ArrayPt<int>> regions;
