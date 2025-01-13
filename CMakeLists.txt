@@ -94,7 +94,6 @@ target_link_libraries(cudasim_torch_dep
 
 # /////////////////////////////////////////////////////
 add_library(cudasim_core
-    src/core/ReducerComponent.cu
     src/core/EnvGroupManager.cu
 )
 

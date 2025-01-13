@@ -34,9 +34,36 @@ public:
     { }
 
 
-    void onNodeInit(SimulatorContext *context) override;
-    void onNodeExecute(SimulatorContext* context, const NodeExecInputType &input, NodeExecOutputType &output) override;
-    void onNodeReset(const TensorHandle& reset_flags, NodeExecStateType &state ) override;
+    void onNodeInit(SimulatorContext* ) override {
+        addInput({message_name_, message_shape_, history_offset_});
+        addOutput({output_message_name_, message_shape_});
+    }
+
+    void onNodeExecute(SimulatorContext* , const NodeExecInputType &input, NodeExecOutputType &output) override {
+        switch (reduce_method_) {
+            case ReduceMethod::STACK:
+                throw std::runtime_error("STACK method not supported in ReducerComponent");
+                break;
+            case ReduceMethod::SUM:
+                output.begin()->second.gatherSum(input.begin()->second);
+                break;
+            case ReduceMethod::MAX:
+                output.begin()->second.gatherMax(input.begin()->second);
+                break;
+            case ReduceMethod::MIN:
+                output.begin()->second.gatherMin(input.begin()->second);
+                break;
+            case ReduceMethod::AVERAGE:
+                output.begin()->second.gatherMean(input.begin()->second);
+                break;
+            default:
+                throw std::runtime_error("Invalid reduce method");
+        }
+    }
+
+    void onNodeReset(const TensorHandle& reset_flags, NodeExecStateType &state ) override {
+        // TODO. 处理MessageQueue
+    }
 
     MessageNameRef getMessageName() { return message_name_; }
     MessageNameRef getOutputMessageName() { return output_message_name_; }

@@ -33,7 +33,7 @@
 #include "core_types.hh"
 #include "ExecuteNode.hh"
 #include "MessageQueue.hh"
-#include "ReducerComponent.hh"
+#include "ReducerNode.hh"
 
 namespace cuda_simulator
 {
