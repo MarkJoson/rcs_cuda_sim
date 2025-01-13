@@ -55,6 +55,10 @@ public:
             });
         }
     }
+
+    void onNodeInit() override { }
+    void onNodeExecute(const core::NodeExecInputType &input, core::NodeExecOutputType &output) override { }
+    void onNodeReset(const core::TensorHandle& reset_flags, core::NodeExecStateType &state) override { }
 private:
     const int MAP_WIDTH;
     const int MAP_HEIGHT;

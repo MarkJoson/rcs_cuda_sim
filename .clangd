@@ -8,6 +8,7 @@ CompileFlags:
   Remove:
     # strip CUDA fatbin args
     - "-Xfatbin*"
+    - "--device-debug"
     # strip CUDA arch flags
     - "-gencode*"
     - "--generate-code*"

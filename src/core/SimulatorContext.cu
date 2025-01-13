@@ -1,11 +1,13 @@
 #include "core/SimulatorContext.hh"
 #include "core/MessageBus.hh"
+#include "core/EnvGroupManager.cuh"
+#include "geometry/GeometryManager.cuh"
 
 namespace cuda_simulator {
 namespace core {
 
 void SimulatorContext::initialize()  {
-    message_bus = std::make_unique<MessageBus>(this);
+    message_bus = std::make_unique<MessageBus>();
     env_group_manager = std::make_unique<EnvGroupManager>(1,2,1);
     geometry_manager = std::make_unique<geometry::GeometryManager>();
 }

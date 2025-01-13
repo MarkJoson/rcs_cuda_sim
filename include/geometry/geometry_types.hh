@@ -91,6 +91,10 @@ struct Line {
 
     constexpr Line() : start(Vector2<T>::Zero()), end(Vector2<T>::Zero()) {}
     constexpr Line(const Vector2<T>& start, const Vector2<T>& end) : start(start), end(end) {}
+
+    constexpr bool operator==(const Line& other) const {
+        return start == other.start && end == other.end;
+    }
 };
 
 // 2D向量和变换相关的类型定义

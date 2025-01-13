@@ -95,6 +95,8 @@ target_link_libraries(cudasim_torch_dep
 # /////////////////////////////////////////////////////
 add_library(cudasim_core
     src/core/EnvGroupManager.cu
+    src/core/SimulatorContext.cu
+    src/core/geometry/GeometryManager.cu
 )
 
 # 设置目标属性
@@ -125,7 +127,7 @@ target_link_libraries(cudasim_core
 
 # /////////////////////////////////////////////////////
 add_executable(cudasim_test
-    src/test_geometry_mgr.cu
+    src/test_mapgen.cu
 
 )
 
