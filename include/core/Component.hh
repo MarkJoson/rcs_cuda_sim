@@ -3,7 +3,6 @@
 
 #include <string>
 #include "core_types.hh"
-#include "storage/GTensorConfig.hh"
 #include "ExecuteNode.hh"
 
 namespace cuda_simulator {
@@ -17,18 +16,31 @@ public:
         : ExecuteNode(name, tag) {}
     virtual ~Component() = default;
 
-    virtual void onRegister(SimulatorContext* context) = 0;
+    virtual void onEnvironGroupInit() = 0;
 
-    virtual void onEnvironGroupInit(SimulatorContext* context) = 0;
+    void addDependence(const std::string &dependence) {
+        dependences_.push_back(dependence);
+    }
+
+    const std::vector<std::string> &getDependences() const {
+        return dependences_;
+    }
+
+    using ExecuteNode::getName;
+    using ExecuteNode::getTag;
+
+protected:
+    std::vector<std::string> dependences_;
 };
 
-template<typename Derived>
-class CountableComponent : public Component {
-public:
-    using Base = CountableComponent<Derived>::Component;
-    using CountableBase = CountableComponent<Derived>;
 
-    CountableComponent(const NodeName &name, const NodeTag &tag = "default")
+template<typename Derived>
+class MultiInstComponent : public Component {
+public:
+    using Base = MultiInstComponent<Derived>::Component;
+    using CountableBase = MultiInstComponent<Derived>;
+
+    MultiInstComponent(const NodeName &name, const NodeTag &tag = "default")
         : Base("#TBD", tag), inst_id_(componentInstCntInc()) {
             name_ = name + "_" + std::to_string(inst_id_);
         }

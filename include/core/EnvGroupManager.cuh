@@ -8,20 +8,14 @@
 #include <unordered_map>
 #include <vector>
 
-// #include <cuda_runtime_api.h>
 #include "cuda_helper.h"
-#include "core/storage/GTensorConfig.hh"
-#include "core/storage/ITensor.hh"
-
+#include "storage/GTensorConfig.hh"
+#include "storage/ITensor.hh"
 #include "storage/TensorRegistry.hh"
 
-namespace cuda_simulator
-{
-namespace core
-{
-
-namespace env_group_impl
-{
+namespace cuda_simulator {
+namespace core {
+namespace env_group_impl {
 
 constexpr int CONST_MEM_WORD_SIZE = 8192;
 extern __constant__ int constant_mem_pool[CONST_MEM_WORD_SIZE];

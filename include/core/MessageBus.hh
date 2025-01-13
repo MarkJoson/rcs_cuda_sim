@@ -49,16 +49,16 @@ using DescriptionId = std::int32_t;
 class MessageBus
 {
 public:
-    MessageBus(SimulatorContext *context) : context_(context)  {};
+    MessageBus()  {};
 
     void registerComponent(ExecuteNode* node) {    // 改为接收ExecuteNode
         // std::lock_guard<std::mutex> lock(mutex_);
-        // TODO.
+        // TODO. 增加锁
 
         createNodeId(node->getName(), node->getTag(), node);
 
-        // 调用注册回调函数，初始化输入输出
-        node->onRegister(context_);
+        // TODO. 调用注册回调函数，初始化输入输出
+        // node->onRegister(context_);
     }
 
     void registerInput(ExecuteNode* component, const ExecuteNode::NodeInputInfo &info) {
@@ -823,7 +823,7 @@ private:    // ^---- 私有定义 -----
         }
 
         // 所有输入就绪时执行组件
-        node_ptr->onNodeExecute(context_, input_data, output_data);
+        node_ptr->onNodeExecute(input_data, output_data);
     }
 
     std::string generateGraphDot(const Graph& g, const std::string& graph_name, bool with_order=false) const {
@@ -896,8 +896,6 @@ private:
     static constexpr MessageId INVALID_MESSAGE_ID = std::numeric_limits<MessageId>::max();
     static constexpr DescriptionId INVALID_PUB_ID = std::numeric_limits<DescriptionId>::max();
     static constexpr DescriptionId INVALID_SUB_ID = std::numeric_limits<DescriptionId>::max();
-
-    SimulatorContext *context_;
 
     std::mutex mutex_;
 

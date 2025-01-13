@@ -14,8 +14,8 @@
 #include <cuda_runtime.h>
 #include <glm/glm.hpp>
 
-#include "core/EnvGroupManager.cuh"
 #include "core/SimulatorContext.hh"
+#include "core/EnvGroupManager.cuh"
 #include "core/storage/GTensorConfig.hh"
 #include "core/storage/Scalar.hh"
 #include "core/storage/TensorRegistry.hh"
@@ -105,16 +105,24 @@ public:
         GeometryManager* manager_;
     };
 
-    GeometryManager() { }
+    GeometryManager() {
+        core::EnvGroupManager *group_mgr = core::getEnvGroupMgr();
+        // 主机内存，环境组参数
+        static_scene_descs_ = group_mgr->registerConfigItem<StaticSceneDescription, core::MemoryType::HOST_MEM>("scene_desc");
+        // 静态物体，环境组参数
+        num_static_lines_ = group_mgr->registerConfigItem<uint32_t, core::MemoryType::CONSTANT_GPU_MEM>("num_static_lines");
+        static_lines_ = group_mgr->registerConfigTensor<float>("static_lines", {MAX_STATIC_LINES, 4});
+        static_esdf_ = group_mgr->registerConfigTensor<float>("static_esdf",{GRIDMAP_GRIDSIZE_Y, GRIDMAP_GRIDSIZE_X, 4});
+    }
     ~GeometryManager() = default;
 
-    // 静态物体在指定环境组中创建
+    // 在指定环境组中创建静态物体
     void createStaticPolyObj(int group_id, const SimplePolyShapeDef &polygon_def, const Transform2D &pose) {
         static_scene_descs_->at(group_id).push_back(
             std::make_pair(std::make_unique<SimplePolyShapeDef>(polygon_def), pose));
     }
 
-    // 动态物体在所有环境组中创建
+    // 在所有环境组中创建动态物体
     DynamicObjectProxy createDynamicPolyObj(const SimplePolyShapeDef &polygon_def) {
         // 累加动态物体的边数
         num_dyn_shape_lines_ += polygon_def.vertices.size();
@@ -123,32 +131,30 @@ public:
         return DynamicObjectProxy(obj_id, this);
     }
 
-    void onRegister(core::SimulatorContext *context) {
-        core::EnvGroupManager *group_mgr = context->getEnvironGroupManager();
-        // 主机内存，环境组参数
-        static_scene_descs_ = group_mgr->registerConfigItem<StaticSceneDescription, core::MemoryType::HOST_MEM>("scene_desc");
-
-        // 静态物体，环境组参数
-        num_static_lines_ = group_mgr->registerConfigItem<uint32_t, core::MemoryType::CONSTANT_GPU_MEM>("num_static_lines");
-        static_lines_ = group_mgr->registerConfigTensor<float>("static_lines", {MAX_STATIC_LINES, 4});
-        static_esdf_ = group_mgr->registerConfigTensor<float>("static_esdf",{GRIDMAP_GRIDSIZE_Y, GRIDMAP_GRIDSIZE_X, 4});
-    }
-
-    void onStart(core::SimulatorContext *context) {
+    // 组装环境，生成静态物体的SDF，以及静态物体的线段
+    void assemble() {
         // 初始化静态物体相关信息：SDF+Lines
         renderStaticEDF();
         assembleStaticWorld();
 
         // 动态物体
-        assembleDynamicWorld(context);
+        assembleDynamicWorld();
 
     }
 
-    void onExecute(core::SimulatorContext *context) {
+    // 更新环境状态，包括动态物体的线段
+    void execute() {
         // 将动态物体转换为线段
-        transformDynamicLines(context);
+        transformDynamicLines();
     }
 
+    core::TensorHandle getDynamicLines() { return dyn_lines_; }
+    core::TensorHandle getDynamicPoses() { return dyn_poses_; }
+    core::TensorHandle getStaticESDF(int group_id) {
+        return static_esdf_->at(group_id);
+    }
+
+protected:
     void renderStaticEDF() {
         // 为所有的场景组生成静态物体的SDF
         for (int64_t group_id=0; group_id<static_scene_descs_->getNumEnvGroup(); group_id++) {
@@ -216,7 +222,7 @@ public:
         }
     }
 
-    void assembleDynamicWorld(core::SimulatorContext *context) {
+    void assembleDynamicWorld() {
         /// Dynamic Object 仅保留多边形的凸包
 
         std::vector<float4> h_dyn_shape_lines(num_dyn_shape_lines_);
@@ -258,27 +264,33 @@ public:
 
         // 申请动态数组，dyn_lines，单个场景中的所有全局坐标系线段, [group, env, lines, 4]
         // TODO. 取代这个，在kernel中实时计算
-        context->getEnvironGroupManager()->createTensor<float>(dyn_lines_, "scene_lines", {
-            core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
-            core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
-            num_dyn_shape_lines_,
-            4});
+        core::getContext()->getEnvGroupMgr()->createTensor<float>(
+            dyn_lines_, "scene_lines", {
+                core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
+                core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
+                num_dyn_shape_lines_,
+                4
+            }
+        );
 
         // 场景中所有dyn object的pose, [obj, group, env, 4]
-        context->getEnvironGroupManager()->createTensor<float>(dyn_poses_, "dynamic_poses", {
-            static_cast<int64_t>(dyn_scene_desc_.size()),
-            core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
-            core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
-            4});
+        core::getContext()->getEnvGroupMgr()->createTensor<float>(
+            dyn_poses_, "dynamic_poses", {
+                static_cast<int64_t>(dyn_scene_desc_.size()),
+                core::EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
+                core::EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
+                4
+            }
+        );
 
         std::cout << "Dynamic Object Line: " << dyn_shape_lines_ << std::endl;
         std::cout << "Dynamic Object Line Ids: " << dyn_shape_line_ids_ << std::endl;
     }
 
-    void transformDynamicLines(core::SimulatorContext *context) {
+    void transformDynamicLines() {
         // 将所有静态多边形转换为线段
-        const uint32_t num_group = context->getEnvironGroupManager()->getNumGroup();
-        const uint32_t num_env_per_group = context->getEnvironGroupManager()->getNumEnvPerGroup();
+        const uint32_t num_group = core::getEnvGroupMgr()->getNumGroup();
+        const uint32_t num_env_per_group = core::getEnvGroupMgr()->getNumEnvPerGroup();
 
         if (num_dyn_shape_lines_ == 0) return;
 
@@ -305,12 +317,6 @@ public:
         }
     }
 
-    core::TensorHandle getDynamicLines() { return dyn_lines_; }
-    core::TensorHandle getDynamicPoses() { return dyn_poses_; }
-    core::TensorHandle getStaticESDF(int group_id) {
-        return static_esdf_->at(group_id);
-    }
-
 private:
     // 静态物体描述，带位姿，随环境组变化
     using StaticSceneDescription = std::vector<std::pair<std::unique_ptr<ShapeDef>, Transform2D>>;
@@ -335,7 +341,7 @@ private:
 
     // TODO. 动态物体的初始位姿，放到onReset中初始化
 
-    // TODO. 静态预渲染
+    // TODO. 静态2d预渲染
 
     // TODO. 静态/动态物体的加速结构, BVH, 四叉树
 

@@ -11,6 +11,7 @@ CompileFlags:
     # strip CUDA arch flags
     - "-gencode*"
     - "--generate-code*"
+    - "--diag_suppress*"
     # strip CUDA flags unknown to clang
     - "-ccbin*"
     - "--compiler-options*"

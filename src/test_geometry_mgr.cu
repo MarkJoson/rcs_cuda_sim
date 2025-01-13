@@ -6,6 +6,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "geometry/GeometryManager.cuh"
+#include "core/MessageBus.hh"
 
 using namespace cuda_simulator;
 using namespace cuda_simulator::geometry;
@@ -13,13 +14,11 @@ using namespace cuda_simulator::geometry;
 void testGeometryManager() {
     // try {
         // 创建模拟器上下文
-        auto context = std::make_unique<core::SimulatorContext>();
+
 
         // 创建几何管理器
         auto geom_manager = std::make_unique<GeometryManager>();
 
-        // 注册几何管理器
-        geom_manager->onRegister(context.get());
 
         // 创建一些静态多边形
         std::vector<Vector2> static_vertices = {
@@ -49,13 +48,13 @@ void testGeometryManager() {
         auto dynamic_obj = geom_manager->createDynamicPolyObj(dynamic_polygon);
 
         // 启动几何管理器
-        geom_manager->onStart(context.get());
+        geom_manager->assemble();
 
         // TODO.
-        context->getEnvironGroupManager()->syncToDevice();
+        core::getEnvGroupMgr()->syncToDevice();
 
         // 执行一次更新
-        geom_manager->onExecute(context.get());
+        geom_manager->execute();
 
         std::cout << "GeometryManager test completed successfully!" << std::endl;
 
@@ -112,9 +111,6 @@ void testGeometryManagerEDF() {
         // 创建几何管理器
         auto geom_manager = std::make_unique<GeometryManager>();
 
-        // 注册几何管理器
-        geom_manager->onRegister(context.get());
-
         // 创建一些静态多边形进行测试
 
         // 1. 创建一个L形状的多边形
@@ -143,8 +139,7 @@ void testGeometryManagerEDF() {
         geom_manager->createStaticPolyObj(0, l_shape_polygon, Transform2D());
         geom_manager->createStaticPolyObj(0, square_polygon, Transform2D());
 
-        // 启动几何管理器（这将触发EDF的生成）
-        geom_manager->onStart(context.get());
+        geom_manager->assemble();
 
         // 获取EDF数据并可视化
         // 假设我们知道GRIDMAP的尺寸是100x100 (10m/0.1m)

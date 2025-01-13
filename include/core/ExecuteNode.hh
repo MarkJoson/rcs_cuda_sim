@@ -30,15 +30,17 @@ public:
     virtual ~ExecuteNode() = default;
 
     // 初始化输入输出
-    virtual void onNodeInit(SimulatorContext* context) = 0;
+    virtual void onNodeInit() = 0;
+    // 初始化内部对象
+    virtual void onNodeStart() {}
     // 执行
-    virtual void onNodeExecute(SimulatorContext* context, const NodeExecInputType &input, NodeExecOutputType &output) = 0;
+    virtual void onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output) = 0;
     // 重置
     virtual void onNodeReset(const TensorHandle& reset_flags, NodeExecStateType &state) = 0;
 
     // Getters
-    const NodeName& getName() const { return name_; }
-    const NodeTag& getTag() const { return tag_; }
+    NodeNameRef getName() const { return name_; }
+    NodeTagRef getTag() const { return tag_; }
 
 protected:
     void addInput(const NodeInputInfo &info) {

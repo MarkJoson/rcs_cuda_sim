@@ -6,8 +6,10 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+
 #include "core_types.hh"
 #include "EnvGroupManager.cuh"
+#include "SimulatorContext.hh"
 
 namespace cuda_simulator
 {
@@ -42,8 +44,11 @@ public:
 
         for(size_t i = 0; i < max_history_len_; i++) {
             std::string tensor_uri = generateTensorUri(i);
+
             // 根据shape创建对应的tensor
-            history_.push_back(createTensorByShape(tensor_uri, shape_));
+            std::vector<int64_t> tensor_shape(shape_.begin(), shape_.end());
+            history_.push_back(
+                core::getEnvGroupMgr()->createTensor<float>(tensor_uri, tensor_shape));
 
             if(history_padding_val_.has_value()) {
                 // 填充历史数据
@@ -84,15 +89,6 @@ private:
         return std::string(message_name_) + "/" +
                std::string(pub_node_name_) + "/" +
                std::to_string(index);
-    }
-
-    TensorHandle& createTensorByShape(const std::string& uri, const MessageShapeRef& shape) {
-        // 根据shape的维度创建tensor
-        std::vector<int64_t> tensor_shape(shape.begin(), shape.end());
-
-        // 创建float类型的tensor，假设所有tensor都是float类型，使用指针类型，数据由TensorRegistry管理
-        // TODO. 使用EnvGroupManager替代TensorRegistry
-        return TensorRegistry::getInstance().createTensor<float>(uri, tensor_shape);
     }
 
 private:

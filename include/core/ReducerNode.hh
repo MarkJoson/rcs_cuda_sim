@@ -34,12 +34,12 @@ public:
     { }
 
 
-    void onNodeInit(SimulatorContext* ) override {
+    void onNodeInit() override {
         addInput({message_name_, message_shape_, history_offset_});
         addOutput({output_message_name_, message_shape_});
     }
 
-    void onNodeExecute(SimulatorContext* , const NodeExecInputType &input, NodeExecOutputType &output) override {
+    void onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output) override {
         switch (reduce_method_) {
             case ReduceMethod::STACK:
                 throw std::runtime_error("STACK method not supported in ReducerComponent");
