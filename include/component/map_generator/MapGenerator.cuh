@@ -35,7 +35,7 @@ public:
             auto shapes = MapPostProcess::gridMapToLines(map, GRID_SIZE);
 
             // 为每个形状生成ShapeDef并添加到GeometryManager
-            std::for_each(shapes.begin(), shapes.end(), [](const impl::Shape<float>& polygons){
+            for(const impl::Shape<float>& polygons : shapes) {
                 // 外边界逆时针排列，按原顺序排布点
                 const impl::SimplePoly<float>& outter_shape = polygons.front();
                 core::geometry::SimplePolyShapeDef outter_shape_def{
@@ -51,8 +51,8 @@ public:
                     {inner_shape_def}
                 };
 
-                core::getGeometryManager()->createStaticPolyObj(0, composed_shape, {});
-            });
+                core::getGeometryManager()->createStaticPolyObj(i, composed_shape, {});
+            }
         }
     }
 

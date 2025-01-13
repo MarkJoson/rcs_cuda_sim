@@ -34,10 +34,13 @@ void SimulatorContext::setup(const std::vector<std::string> &entrances) {
         components[com_id]->onEnvironGroupInit();
     }
 
+    geometry_manager->assemble();
+
     // 调用组件的启动函数
     for(auto &com_id : dep_seq) {
         components[com_id]->onNodeStart();
     }
+
 }
 
 void SimulatorContext::trigger(const std::string &trigger_tag) {
