@@ -4,6 +4,8 @@
 #pragma once
 // #include <Eigen/Eigen>
 #include <Eigen/Dense>
+#include <string>
+#include <iostream>
 
 namespace cuda_simulator {
 namespace core {
@@ -21,85 +23,150 @@ enum class ObjectType {
     Dynamic
 };
 
+template <typename T>
 struct Vector2 {
-    double x;
-    double y;
+    T x = 0;
+    T y = 0;
 
-    Vector2() : x(0), y(0) {}
-    Vector2(double x, double y) : x(x), y(y) {}
+    constexpr Vector2() = default;
+    constexpr Vector2(T x, T y) : x(x), y(y) {}
 
-    Vector2 operator+(const Vector2& other) const {
-        return Vector2(x + other.x, y + other.y);
-    }
+    template<typename U>
+    explicit constexpr Vector2(const Vector2<U>& other) : x(other.x), y(other.y) {}
 
-    Vector2 operator-(const Vector2& other) const {
-        return Vector2(x - other.x, y - other.y);
-    }
+    constexpr Vector2 operator+(const Vector2& other) const { return Vector2(x + other.x, y + other.y); }
+    constexpr Vector2 operator-(const Vector2& other) const { return Vector2(x - other.x, y - other.y); }
+    constexpr Vector2 operator*(T scale) const { return Vector2(x * scale, y * scale); }
+    constexpr Vector2 operator/(T scale) const { return Vector2(x / scale, y / scale); }
 
-    Vector2 operator*(double scale) const {
-        return Vector2(x * scale, y * scale);
-    }
-
-    Vector2 operator/(double scale) const {
-        return Vector2(x / scale, y / scale);
-    }
-
-    Vector2& operator+=(const Vector2& other) {
+    constexpr Vector2& operator+=(const Vector2& other) {
         x += other.x;
         y += other.y;
         return *this;
     }
 
-    Vector2& operator-=(const Vector2& other) {
+    constexpr Vector2& operator-=(const Vector2& other) {
         x -= other.x;
         y -= other.y;
         return *this;
     }
 
-    Vector2& operator*=(double scale) {
+    constexpr Vector2& operator*=(T scale) {
         x *= scale;
         y *= scale;
         return *this;
     }
 
-    Vector2& operator/=(double scale) {
+    constexpr Vector2& operator/=(T scale) {
         x /= scale;
         y /= scale;
         return *this;
     }
 
-    double dot(const Vector2& other) const {
-        return x * other.x + y * other.y;
-    }
+    constexpr bool operator==(const Vector2& other) const { return other.x==x && other.y==y; }
 
-    double cross(const Vector2& other) const {
-        return x * other.y - y * other.x;
-    }
-
-    double length() const {
-        return std::sqrt(x * x + y * y);
-    }
+    constexpr double dot(const Vector2& other) const { return x * other.x + y * other.y; }
+    constexpr double cross(const Vector2& other) const { return x * other.y - y * other.x; }
+    double length() const { return std::sqrt(x * x + y * y); }
 
     Vector2 normalized() const {
         double len = length();
         return Vector2(x / len, y / len);
     }
 
-    static Vector2 Zero() { return Vector2(0, 0); }
+    constexpr static Vector2 Zero() { return Vector2(); }
 };
 
+
+template <typename T>
+static std::ostream &operator<<(std::ostream &out, const Vector2<T> &d) {
+    out << " [" << d.x << "," << d.y << "] ";
+    return out;
+}
+
+template <typename T>
 struct Line {
-    Vector2 start;
-    Vector2 end;
+    Vector2<T> start;
+    Vector2<T> end;
 
-    Line() : start(Vector2::Zero()), end(Vector2::Zero()) {}
-    Line(const Vector2& start, const Vector2& end) : start(start), end(end) {}
+    constexpr Line() : start(Vector2<T>::Zero()), end(Vector2<T>::Zero()) {}
+    constexpr Line(const Vector2<T>& start, const Vector2<T>& end) : start(start), end(end) {}
 };
-
 
 // 2D向量和变换相关的类型定义
-// using Vector2 = Eigen::Vector2d;
-// using Matrix2 = Eigen::Matrix2d;
+using Vector2f = Vector2<float>;
+using Vector2i = Vector2<int>;
+using Linef = Line<float>;
+
+
+class Rotation2D {
+public:
+    Rotation2D(float angle = 0.0f)
+        : angle_(angle)
+        , s_(std::sin(angle))
+        , c_(std::cos(angle)) {}
+
+    Rotation2D mulRotation(const Rotation2D& rot) const {
+        return Rotation2D(
+            angle_ + rot.angle_,
+            s_ * rot.c_ + c_ * rot.s_,
+            c_ * rot.c_ - s_ * rot.s_
+        );
+    }
+
+    float angle() const { return angle_; }
+    float sin() const { return s_; }
+    float cos() const { return c_; }
+
+private:
+    Rotation2D(float angle, float s, float c)
+        : angle_(angle), s_(s), c_(c) {}
+
+    float angle_;
+    float s_;
+    float c_;
+};
+
+
+
+class Transform2D {
+public:
+    Transform2D(const Vector2f& position = Vector2f::Zero(),
+               const Rotation2D& rotation = Rotation2D())
+        : position_(position)
+        , rotation_(rotation) {}
+
+    Vector2f localPointTransform(const Vector2f& point) const {
+        Vector2f result;
+        result.x = point.x * rotation_.cos() - point.y * rotation_.sin();
+        result.y = point.x * rotation_.sin() + point.y * rotation_.cos();
+        result += position_;
+        return result;
+    }
+
+    Vector2f inverseTransformPoint(const Vector2f& point) const {
+        Vector2f centered = point - position_;
+        Vector2f result;
+        result.x = centered.x * rotation_.cos() + centered.y * rotation_.sin();
+        result.y = -centered.x * rotation_.sin() + centered.y * rotation_.cos();
+        return result;
+    }
+
+    Transform2D mulTransform(const Transform2D& transform) const {
+        return Transform2D(
+            position_ + transform.position_,
+            rotation_.mulRotation(transform.rotation_)
+        );
+    }
+
+    const Vector2f& pos() const { return position_; }
+    const Rotation2D& rot() const { return rotation_; }
+
+private:
+    Vector2f position_;
+    Rotation2D rotation_;
+};
+
 
 } // namespace geometry
 } // namespace core

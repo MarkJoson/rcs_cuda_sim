@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <boost/range/join.hpp>
+#include <cmath>
 #include <iostream>
 #include <list>
 #include <numeric>
@@ -10,46 +11,35 @@
 #include <unordered_set>
 #include <vector>
 
+#include "geometry/geometry_types.hh"
+
+
 namespace cuda_simulator {
 namespace map_gen {
 namespace impl {
 
 using namespace std::literals;
 
-template <typename T> struct Point {
-    T x;
-    T y;
-    bool operator==(const Point<T> &other) const {
-        return x == other.x && y == other.y;
-    }
-};
+using Array2i = std::vector<std::vector<uint8_t>>;
 
-using Pointd = Point<int>;
+template<typename T> using Point = core::geometry::Vector2<T>;
+using Pointi = Point<int>;
 using Pointf = Point<float>;
 
-template <typename T>
-static std::ostream &operator<<(std::ostream &out, const Point<T> &d) {
-    out << " [" << d.x << "," << d.y << "] ";
-    return out;
-}
+// template <typename T>
+// static std::ostream &operator<<(std::ostream &out, const Point<T> &d) {
+//     out << " [" << d.x << "," << d.y << "] ";
+//     return out;
+// }
 
-template <typename T> struct Edge {
-    Point<T> start;
-    Point<T> end;
-    bool operator==(const Edge<T> &other) const {
-        return start == other.start && end == other.end;
-    }
-};
-
-using Array2d = std::vector<std::vector<int>>;
-
+template <typename T> using Edge = core::geometry::Line<T>;
 template <typename T> using ArrayEdge = std::vector<Edge<T>>;
 
 using PtHash = uint64_t;
 template <typename T> using ArrayPt = std::vector<Point<T>>;
-template <typename T> using Poly = ArrayPt<T>;
-template <typename T> using ArrayPoly = std::vector<ArrayPt<T>>;
-template <typename T> using Shape = ArrayPoly<T>;
+template <typename T> using SimplePoly = ArrayPt<T>;
+template <typename T> using ComplexPoly = std::vector<ArrayPt<T>>;
+template <typename T> using Shape = ComplexPoly<T>;
 template <typename T> using ArrayShape = std::vector<Shape<T>>;
 
 struct PointHash {
@@ -73,8 +63,7 @@ public:
     // PointHash>()(pt); }
 
     // 提取所有的独立联通区域
-    static void extractAllRegions(const Array2d &map, int width, int height,
-                                                                ArrayPoly<int> &regions) {
+    static void extractAllRegions(const Array2i &map, int width, int height, ComplexPoly<int> &regions) {
         std::vector<std::vector<bool>> visited(width, std::vector<bool>(height, 0));
 
         // 标记空旷的区域为visited=1，无需遍历
@@ -134,7 +123,7 @@ public:
 
     // 提取region的边
     static ArrayEdge<float> extractRegionEdge(
-            const Array2d &map,
+            const Array2i &map,
             const ArrayPt<int> &region_pts,
             int width, int height,
             float grid_size) {
@@ -180,8 +169,8 @@ public:
     }
 
     // 将边集合拆分成顺时针的多边形
-    static ArrayPoly<float> mergeEdgeToShape(const ArrayEdge<float> &edges) {
-        ArrayPoly<float> polys;
+    static ComplexPoly<float> mergeEdgeToShape(const ArrayEdge<float> &edges) {
+        ComplexPoly<float> polys;
 
         std::unordered_map<Pointf, std::list<int>, PointHash> map_spt_idx;
         // std::unordered_map<PtHash, std::list<int>> map_ept_idx;
@@ -213,7 +202,7 @@ public:
                                                                                                              edges.end());
 
         while (!edge_set.empty()) {
-            Poly<float> poly;
+            SimplePoly<float> poly;
 
             // 从随机一个边的起点开始
             Pointf pt = edge_set.begin()->start;
@@ -329,7 +318,7 @@ public:
     }
 
     //
-    static ArrayShape<float> gridMapToLines(const Array2d &map, float grid_size) {
+    static ArrayShape<float> gridMapToLines(const Array2i &map, float grid_size) {
         // 提取连通域
         std::vector<ArrayPt<int>> regions;
         extractAllRegions(map, map.size(), map[0].size(), regions);
@@ -358,7 +347,7 @@ public:
                                          Shape<float> trim_shape;
                                          std::transform(shape.begin(), shape.end(),
                                                                         std::back_inserter(trim_shape),
-                                                                        [grid_size](const Poly<float> &poly) {
+                                                                        [grid_size](const SimplePoly<float> &poly) {
                                                                             return douglasPeukcer(poly, grid_size);
                                                                         });
                                          return trim_shape;
@@ -367,9 +356,9 @@ public:
         // 边计数
         auto total_points =
                 std::accumulate(trim_shapes.begin(), trim_shapes.end(), 0,
-                                                [](int a, ArrayPoly<float> ap) {
+                                                [](int a, ComplexPoly<float> ap) {
                                                     return a + std::accumulate(ap.begin(), ap.end(), 0,
-                                                                                                         [](int b, Poly<float> p) {
+                                                                                                         [](int b, SimplePoly<float> p) {
                                                                                                              return b + p.size();
                                                                                                          });
                                                 });

@@ -5,7 +5,6 @@
 #include <vector>
 #include <memory>
 #include "geometry_types.hh"
-#include "geometry/transform.hh"
 
 namespace cuda_simulator {
 namespace core {
@@ -27,11 +26,11 @@ struct ShapeDef {
 
 // ^--------------圆形--------------
 struct CircleShapeDef : public ShapeDef {
-    Vector2 center;
+    Vector2f center;
     float radius;
 
 // ==================== 代码实现 ====================
-    CircleShapeDef(const Vector2& center, float radius)
+    CircleShapeDef(const Vector2f& center, float radius)
         : ShapeDef(ShapeType::CIRCLE)
         , center(center)
         , radius(radius) {}
@@ -41,12 +40,12 @@ struct CircleShapeDef : public ShapeDef {
 // ^--------------简单多边形--------------
 // 即没有洞的多边形
 struct SimplePolyShapeDef : public ShapeDef {
-    std::vector<Vector2> vertices;
-    std::vector<Vector2> convex_hull;
-    Vector2 centroid;
+    std::vector<Vector2f> vertices;
+    std::vector<Vector2f> convex_hull;
+    Vector2f centroid;
     float radius;
 
-    SimplePolyShapeDef(const std::vector<Vector2>& vertices)
+    SimplePolyShapeDef(const std::vector<Vector2f>& vertices)
         : ShapeDef(ShapeType::SIMPLE_POLYGON)
     {
         this->vertices = vertices;
@@ -59,13 +58,13 @@ struct SimplePolyShapeDef : public ShapeDef {
         convex_hull = calcConvexHull(vertices);
     }
 
-    static Vector2 calcCentroid(const std::vector<Vector2> &vertices) {
+    static Vector2f calcCentroid(const std::vector<Vector2f> &vertices) {
                 float signedArea = 0.0f;
         float cx = 0.0f;
         float cy = 0.0f;
         for (size_t i = 0; i < vertices.size(); ++i) {
-            Vector2 v0 = vertices[i];
-            Vector2 v1 = vertices[(i + 1) % vertices.size()];
+            Vector2f v0 = vertices[i];
+            Vector2f v1 = vertices[(i + 1) % vertices.size()];
             float a = v0.x * v1.y - v1.x * v0.y;
             signedArea += a;
             cx += (v0.x + v1.x) * a;
@@ -74,10 +73,10 @@ struct SimplePolyShapeDef : public ShapeDef {
         signedArea *= 0.5f;
         cx /= (6.0f * signedArea);
         cy /= (6.0f * signedArea);
-        return Vector2(cx, cy);
+        return Vector2f(cx, cy);
     }
 
-    static float calcRadius(const std::vector<Vector2> &vertices, const Vector2 &centroid) {
+    static float calcRadius(const std::vector<Vector2f> &vertices, const Vector2f &centroid) {
         float radius = 0.0f;
         for (const auto& vertex : vertices) {
             float dist = (vertex - centroid).length();
@@ -88,12 +87,12 @@ struct SimplePolyShapeDef : public ShapeDef {
         return radius;
     }
 
-    static std::vector<Vector2> calcConvexHull(const std::vector<Vector2> &vertices) {
-        std::vector<Vector2> convex_hull = vertices; // 使用Graham扫描法或其他凸包算法
-        std::sort(convex_hull.begin(), convex_hull.end(), [](const Vector2& a, const Vector2& b) {
+    static std::vector<Vector2f> calcConvexHull(const std::vector<Vector2f> &vertices) {
+        std::vector<Vector2f> convex_hull = vertices; // 使用Graham扫描法或其他凸包算法
+        std::sort(convex_hull.begin(), convex_hull.end(), [](const Vector2f& a, const Vector2f& b) {
             return a.x < b.x || (a.x == b.x && a.y < b.y);
         });
-        std::vector<Vector2> hull;
+        std::vector<Vector2f> hull;
         for (const auto& point : convex_hull) {
             while (hull.size() >= 2 &&
                (hull[hull.size() - 1] - hull[hull.size() - 2]).cross(point - hull[hull.size() - 1]) <= 0) {
@@ -115,7 +114,7 @@ struct SimplePolyShapeDef : public ShapeDef {
 
     class LineIterator {
     public:
-        LineIterator(const std::vector<Vector2>& vertices, const Transform2D& transform, size_t index)
+        LineIterator(const std::vector<Vector2f>& vertices, const Transform2D& transform, size_t index)
             : vertices_(vertices), transform_(transform), index_(index) {}
 
         bool operator!=(const LineIterator& other) const {
@@ -127,18 +126,18 @@ struct SimplePolyShapeDef : public ShapeDef {
             return *this;
         }
 
-        Line operator*() const {
-            Vector2 start = transform_.localPointTransform(vertices_[index_]);
-            Vector2 end = transform_.localPointTransform(vertices_[(index_ + 1) % vertices_.size()]);
+        Linef operator*() const {
+            Vector2f start = transform_.localPointTransform(vertices_[index_]);
+            Vector2f end = transform_.localPointTransform(vertices_[(index_ + 1) % vertices_.size()]);
             return Line(start, end);
         }
 
-        Line operator->() const {
+        Linef operator->() const {
             return **this;
         }
 
     private:
-        const std::vector<Vector2>& vertices_;
+        const std::vector<Vector2f>& vertices_;
         const Transform2D& transform_;
         size_t index_;
     };
@@ -154,8 +153,8 @@ struct SimplePolyShapeDef : public ShapeDef {
 struct ComposedPolyShapeDef : public ShapeDef {
     std::vector<SimplePolyShapeDef> positive_polys;  // 正向多边形
     std::vector<SimplePolyShapeDef> negative_polys;  // 负向多边形（洞）
-    std::vector<Vector2> convex_hull;                // 凸包
-    Vector2 centroid;                                // 组合体的中心点
+    std::vector<Vector2f> convex_hull;                // 凸包
+    Vector2f centroid;                                // 组合体的中心点
     float radius;                                    // 外切圆半径
 
     ComposedPolyShapeDef(const std::vector<SimplePolyShapeDef>& positive_polys,
@@ -167,8 +166,8 @@ struct ComposedPolyShapeDef : public ShapeDef {
     }
 
     ComposedPolyShapeDef(
-        const std::vector<std::vector<Vector2>>& positive_vertices,
-        const std::vector<std::vector<Vector2>>& negative_vertices = {})
+        const std::vector<std::vector<Vector2f>>& positive_vertices,
+        const std::vector<std::vector<Vector2f>>& negative_vertices = {})
         : ShapeDef(ShapeType::COMPOSED_POLYGON) {
         // 创建正向多边形
         for (const auto& vertices : positive_vertices) {
@@ -232,14 +231,14 @@ struct ComposedPolyShapeDef : public ShapeDef {
             return *this;
         }
 
-        Line operator*() const {
+        Linef operator*() const {
             const auto& current_polys = is_positive_ ? positive_polys_ : negative_polys_;
             const auto& vertices = current_polys[poly_index_].vertices;
-            Vector2 start = transform_.localPointTransform(vertices[vertex_index_]);
-            Vector2 end = transform_.localPointTransform(vertices[(vertex_index_ + 1) % vertices.size()]);
+            Vector2f start = transform_.localPointTransform(vertices[vertex_index_]);
+            Vector2f end = transform_.localPointTransform(vertices[(vertex_index_ + 1) % vertices.size()]);
 
             // TODO. 当返回negetive_polys的时候，将start和end交换
-            return Line(start, end);
+            return Linef(start, end);
         }
 
     private:
@@ -263,7 +262,7 @@ private:
     void calcProperties() {
         // 计算加权中心点
         float total_area = 0.0f;
-        Vector2 weighted_center(0.0f, 0.0f);
+        Vector2f weighted_center(0.0f, 0.0f);
 
         // 处理正向多边形
         for (const auto& poly : positive_polys) {
@@ -306,11 +305,11 @@ private:
 
     }
 
-    static float calcArea(const std::vector<Vector2>& vertices) {
+    static float calcArea(const std::vector<Vector2f>& vertices) {
         float area = 0.0f;
         for (size_t i = 0; i < vertices.size(); ++i) {
-            const Vector2& v1 = vertices[i];
-            const Vector2& v2 = vertices[(i + 1) % vertices.size()];
+            const Vector2f& v1 = vertices[i];
+            const Vector2f& v2 = vertices[(i + 1) % vertices.size()];
             area += v1.cross(v2);
         }
         return std::abs(area) * 0.5f;

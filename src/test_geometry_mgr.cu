@@ -21,25 +21,25 @@ void testGeometryManager() {
 
 
         // 创建一些静态多边形
-        std::vector<Vector2> static_vertices = {
-            Vector2(0.0, 0.0),
-            Vector2(1.0, 0.0),
-            Vector2(1.0, 1.0),
-            Vector2(0.0, 1.0)
+        std::vector<Vector2f> static_vertices = {
+            Vector2f(0.0, 0.0),
+            Vector2f(1.0, 0.0),
+            Vector2f(1.0, 1.0),
+            Vector2f(0.0, 1.0)
         };
 
         SimplePolyShapeDef static_polygon(static_vertices);
 
         // 在环境组0中创建静态多边形
-        Transform2D static_pose(Vector2(2.0, 2.0), Rotation2D(M_PI/4));
+        Transform2D static_pose(Vector2f(2.0, 2.0), Rotation2D(M_PI/4));
         geom_manager->createStaticPolyObj(0, static_polygon, static_pose);
 
         // 创建一个动态多边形
-        std::vector<Vector2> dynamic_vertices = {
-            Vector2(-0.5, -0.5),
-            Vector2(0.5, -0.5),
-            Vector2(0.5, 0.5),
-            Vector2(-0.5, 0.5)
+        std::vector<Vector2f> dynamic_vertices = {
+            Vector2f(-0.5, -0.5),
+            Vector2f(0.5, -0.5),
+            Vector2f(0.5, 0.5),
+            Vector2f(-0.5, 0.5)
         };
 
         SimplePolyShapeDef dynamic_polygon(dynamic_vertices);
@@ -114,23 +114,23 @@ void testGeometryManagerEDF() {
         // 创建一些静态多边形进行测试
 
         // 1. 创建一个L形状的多边形
-        std::vector<Vector2> l_shape_vertices = {
-            Vector2(3.0, 3.0),
-            Vector2(7.0, 3.0),
-            Vector2(7.0, 4.0),
-            Vector2(4.0, 4.0),
-            Vector2(4.0, 7.0),
-            Vector2(3.0, 7.0)
+        std::vector<Vector2f> l_shape_vertices = {
+            Vector2f(3.0, 3.0),
+            Vector2f(7.0, 3.0),
+            Vector2f(7.0, 4.0),
+            Vector2f(4.0, 4.0),
+            Vector2f(4.0, 7.0),
+            Vector2f(3.0, 7.0)
         };
 
         SimplePolyShapeDef l_shape_polygon(l_shape_vertices);
 
         // 2. 创建一个小正方形
-        std::vector<Vector2> square_vertices = {
-            Vector2(1.0, 1.0),
-            Vector2(2.0, 1.0),
-            Vector2(2.0, 2.0),
-            Vector2(1.0, 2.0)
+        std::vector<Vector2f> square_vertices = {
+            Vector2f(1.0, 1.0),
+            Vector2f(2.0, 1.0),
+            Vector2f(2.0, 2.0),
+            Vector2f(1.0, 2.0)
         };
 
         SimplePolyShapeDef square_polygon(square_vertices);

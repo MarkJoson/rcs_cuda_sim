@@ -12,7 +12,7 @@
 
 #include "core/storage/GTensorConfig.hh"
 #include "shapes.hh"
-#include "transform.hh"
+
 
 namespace cuda_simulator {
 namespace core {
@@ -23,7 +23,7 @@ struct GridMapDescription {
     float2 origin = {0, 0};
     int2 grid_size = {0, 0};
 
-    std::pair<int, int> world2Grid(Vector2 point) {
+    Vector2i world2Grid(Vector2f point) {
         int grid_x = std::max(0, int((point.x - origin.x) / resolu));
         grid_x = std::min(grid_x, grid_size.x - 1);
         int grid_y = std::max(0, int((point.y - origin.y) / resolu));
@@ -31,7 +31,7 @@ struct GridMapDescription {
         return {grid_x, grid_y};
     }
 
-    GridMapDescription(float w, float h, Vector2 ori, float res) {
+    GridMapDescription(float w, float h, Vector2f ori, float res) {
         if (res <= 0)
             throw std::runtime_error("resolution must be positive");
         resolu = res;
@@ -83,7 +83,7 @@ public:
         auto pt_list = std::vector<cv::Point>();
 
         std::transform(poly.vertices.begin(), poly.vertices.end(), std::back_insert_iterator(pt_list),
-            [&](Vector2 pt) {
+            [&](Vector2f pt) {
                 auto new_pt = tf.localPointTransform(pt);
                 auto [x, y] = desc_.world2Grid(new_pt);
                 return cv::Point(x, y);

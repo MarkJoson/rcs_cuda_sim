@@ -49,6 +49,13 @@ public:
         return env_group_manager.get();
     }
 
+    geometry::GeometryManager* getGeometryManager() {
+        if(!geometry_manager) {
+            throw std::runtime_error("Context not initialized");
+        }
+        return geometry_manager.get();
+    }
+
     static inline void setDefaultCudaDeviceId(int device_id) {
         GTensor::setTensorDefaultDeviceId(device_id);
     }
@@ -111,6 +118,10 @@ static inline EnvGroupManager *getEnvGroupMgr(){
 
 static inline MessageBus *getMessageBus() {
     return SimulatorContext::getContext()->getMessageBus();
+}
+
+static inline geometry::GeometryManager *getGeometryManager() {
+    return SimulatorContext::getContext()->getGeometryManager();
 }
 
 } // namespace core

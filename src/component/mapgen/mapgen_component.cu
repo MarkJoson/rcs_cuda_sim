@@ -13,14 +13,15 @@ public:
     MapgenComponent(int map_width, int map_height, int grid_size)
         : core::Component("map_generator"), MAP_WIDTH(map_width), MAP_HEIGHT(map_height), GRID_SIZE(grid_size) {
 
-
     };
     ~MapgenComponent() = default;
 
     // void
     void onEnvironGroupInit() override{
+        // 生成地图
         auto map_generator = std::make_unique<CellularAutomataGenerator>(MAP_WIDTH, MAP_HEIGHT);
         // auto map_generator = std::make_unique<MessyBSPGenerator>(MAP_WIDTH, MAP_HEIGHT);
+
         map_generator->generate();
         auto map = map_generator->getMap();
         auto shapes = MapPostProcess::gridMapToLines(map, GRID_SIZE);
@@ -42,7 +43,8 @@ public:
             }
         });
 
-        // TODO.
+        // 将shape添加到GeometryManager中
+        // core::getGeometryManager()
     }
 private:
     const int MAP_WIDTH;
