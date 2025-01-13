@@ -6,6 +6,7 @@
 #include "geometry_types.hh"
 
 namespace cuda_simulator {
+namespace core {
 namespace geometry {
 
 class Rotation2D {
@@ -75,6 +76,7 @@ private:
 };
 
 } // namespace geometry
+} // namespace core
 } // namespace cuda_simulator
 
 #endif // CUDASIM_GEOMETRY_TRANSFORM_HH

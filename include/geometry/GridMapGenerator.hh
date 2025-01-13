@@ -15,6 +15,7 @@
 #include "transform.hh"
 
 namespace cuda_simulator {
+namespace core {
 namespace geometry {
 
 struct GridMapDescription {
@@ -254,6 +255,7 @@ private:
 
 
 } // namespace geometry
+} // namespace core
 } // namespace cuda_simulator
 
 #endif // CUDASIM_GEOMETRY_GRIDMAP_GENERATOR_HH

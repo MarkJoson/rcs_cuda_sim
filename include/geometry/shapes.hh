@@ -8,6 +8,7 @@
 #include "geometry/transform.hh"
 
 namespace cuda_simulator {
+namespace core {
 namespace geometry {
 
 // ^--------------基础形状定义--------------
@@ -317,6 +318,7 @@ private:
 };
 
 } // namespace geometry
+} // namespace core
 } // namespace cuda_simulator
 
 #endif // CUDASIM_GEOMETRY_SHAPES_HH

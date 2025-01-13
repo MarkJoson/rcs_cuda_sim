@@ -98,7 +98,6 @@ public:
         message_routes_[message_id].second.insert(input_des_id);
     }
 
-
     void registerOutput( ExecuteNode* component, ExecuteNode::NodeOutputInfo &info ) {
         // std::lock_guard<std::mutex> lock(mutex_);
         // TODO.
@@ -239,6 +238,7 @@ public:
         current_execute_order_ = 0;
     }
 
+    // 当前MessageBus的执行位次
     int getCurrentExecuteOrder() {
         return current_execute_order_;
     }
@@ -246,7 +246,6 @@ public:
     int getNodeOrder(NodeId node_id) {
         return node_order_[node_id];
     }
-
 
 private:    // ^---- 私有定义 -----
 

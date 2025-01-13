@@ -9,14 +9,20 @@
 #include <unordered_map>
 
 #include "Component.hh"
+#include "storage/GTensorConfig.hh"
+
 
 namespace cuda_simulator
 {
 namespace core
 {
+namespace geometry {
+    class GeometryManager;
+}
 
 class MessageBus;
 class EnvGroupManager;
+
 
 class SimulatorContext final
 {
@@ -71,6 +77,8 @@ public:
     // 初始化组件
     void setup(const std::vector<std::string> &entrances = {"default", "observe"});
 
+    void trigger(const std::string &name);
+
 protected:
     // 生成依赖序列
     void createDepSeq();
@@ -81,9 +89,9 @@ private:
     using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::bidirectionalS, ComponentId>;
 
     // using
-
     std::unique_ptr<MessageBus> message_bus;
     std::unique_ptr<EnvGroupManager> env_group_manager;
+    std::unique_ptr<geometry::GeometryManager> geometry_manager;
 
     std::vector<std::unique_ptr<Component>> components;
     std::unordered_map<ComponentName, ComponentId> component_map;

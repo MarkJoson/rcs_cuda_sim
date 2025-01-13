@@ -7,6 +7,7 @@ namespace core {
 void SimulatorContext::initialize()  {
     message_bus = std::make_unique<MessageBus>(this);
     env_group_manager = std::make_unique<EnvGroupManager>(1,2,1);
+    geometry_manager = std::make_unique<geometry::GeometryManager>();
 }
 
 void SimulatorContext::setup(const std::vector<std::string> &entrances) {
@@ -37,6 +38,9 @@ void SimulatorContext::setup(const std::vector<std::string> &entrances) {
     }
 }
 
+void SimulatorContext::trigger(const std::string &trigger_tag) {
+    message_bus->trigger(trigger_tag);
+}
 
 
 void SimulatorContext::createDepSeq()  {

@@ -9,7 +9,7 @@
 #include "core/MessageBus.hh"
 
 using namespace cuda_simulator;
-using namespace cuda_simulator::geometry;
+using namespace cuda_simulator::core::geometry;
 
 void testGeometryManager() {
     // try {

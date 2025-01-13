@@ -6,6 +6,7 @@
 #include <Eigen/Dense>
 
 namespace cuda_simulator {
+namespace core {
 namespace geometry {
 
 enum class ShapeType {
@@ -101,6 +102,7 @@ struct Line {
 // using Matrix2 = Eigen::Matrix2d;
 
 } // namespace geometry
+} // namespace core
 } // namespace cuda_simulator
 
 #endif // CUDA_SIMULATOR_GEOMETRY_TYPES_HH

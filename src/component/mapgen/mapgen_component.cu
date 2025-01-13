@@ -11,11 +11,14 @@ namespace map_gen {
 class MapgenComponent : public core::Component {
 public:
     MapgenComponent(int map_width, int map_height, int grid_size)
-        : core::Component("map_generator"), MAP_WIDTH(map_width), MAP_HEIGHT(map_height), GRID_SIZE(grid_size) {};
+        : core::Component("map_generator"), MAP_WIDTH(map_width), MAP_HEIGHT(map_height), GRID_SIZE(grid_size) {
+
+
+    };
     ~MapgenComponent() = default;
 
     // void
-    void onEnvironGroupInit(core::SimulatorContext* context) {
+    void onEnvironGroupInit() override{
         auto map_generator = std::make_unique<CellularAutomataGenerator>(MAP_WIDTH, MAP_HEIGHT);
         // auto map_generator = std::make_unique<MessyBSPGenerator>(MAP_WIDTH, MAP_HEIGHT);
         map_generator->generate();
