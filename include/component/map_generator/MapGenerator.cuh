@@ -15,15 +15,13 @@
 namespace cuda_simulator {
 namespace map_gen {
 
-
-
-class MapgenComponent : public core::Component {
+class MapGenerator : public core::Component {
 public:
-    MapgenComponent(int map_width, int map_height, int grid_size)
+    MapGenerator(int map_width, int map_height, int grid_size)
         : core::Component("map_generator"), MAP_WIDTH(map_width), MAP_HEIGHT(map_height), GRID_SIZE(grid_size) {
 
     };
-    ~MapgenComponent() = default;
+    ~MapGenerator() = default;
 
     // void
     void onEnvironGroupInit() override{
