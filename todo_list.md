@@ -9,20 +9,20 @@
 - ~~环境组在Kernel中的访问接口~~
 - ~~GridMap ESDF生成~~
 - ~~测试GeometryManager~~
-- 移植地图生成
+- ~~移植地图生成~~
 - ~~修改message queue创建shapes时的batch~~
 - 移植并测试激光雷达
 - 移植一个brax引擎测试
 - 移植原有初始pbd版本引擎
 - 移植Geniue引擎的相关实现
 
-- 什么时候sync_data?
+- ~~什么时候sync_data?~~
 
 - python接口
 - Node的onReset接口
 
-- ReducerComponent改名
-- onRegister -> onNodeRegister
+- ~~ReducerComponent改名~~
+- ~~onRegister -> onNodeRegister~~
 
 - 环境组数量，环境组生成的逻辑，环境组随机化的相关接口，运行配置？
 - ConfigurableObject类，以支持Config配置

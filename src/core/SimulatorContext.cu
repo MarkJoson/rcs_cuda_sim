@@ -34,7 +34,11 @@ void SimulatorContext::setup(const std::vector<std::string> &entrances) {
         components[com_id]->onEnvironGroupInit();
     }
 
+    // 组装环境，生成ESDF地图，生成动态物体边集合
     geometry_manager->assemble();
+
+    // 将环境组的活跃参数同步到GPU设备
+    env_group_manager->syncToDevice();
 
     // 调用组件的启动函数
     for(auto &com_id : dep_seq) {
@@ -44,6 +48,7 @@ void SimulatorContext::setup(const std::vector<std::string> &entrances) {
 }
 
 void SimulatorContext::trigger(const std::string &trigger_tag) {
+    // 调用计算图触发对应的启动节点
     message_bus->trigger(trigger_tag);
 }
 
