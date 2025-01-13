@@ -7,13 +7,12 @@ namespace cuda_simulator
 namespace core
 {
 
-void ReducerComponent::onRegister(SimulatorContext* context) {
-    auto* msg_bus = context->getMessageBus();
-    msg_bus->registerInput(this, message_name_, message_shape_, history_offset_);
-    msg_bus->registerOutput(this, output_message_name_, message_shape_);
+void ReducerNode::onNodeInit(SimulatorContext* context) {
+    addInput({message_name_, message_shape_, history_offset_});
+    addOutput({output_message_name_, message_shape_});
 }
 
-void ReducerComponent::onExecute( SimulatorContext* context, const NodeExecInputType &input, NodeExecOutputType &output ) {
+void ReducerNode::onNodeExecute( SimulatorContext* context, const NodeExecInputType &input, NodeExecOutputType &output ) {
     switch (reduce_method_) {
         case ReduceMethod::STACK:
             throw std::runtime_error("STACK method not supported in ReducerComponent");
@@ -35,7 +34,7 @@ void ReducerComponent::onExecute( SimulatorContext* context, const NodeExecInput
     }
 };
 
-void ReducerComponent::onReset( const TensorHandle& reset_flags, NodeExecStateType &state ) {
+void ReducerNode::onNodeReset( const TensorHandle& reset_flags, NodeExecStateType &state ) {
     // TODO. 处理MessageQueue
 }
 

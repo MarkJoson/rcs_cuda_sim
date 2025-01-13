@@ -32,7 +32,6 @@
 #include "console_style.h"
 #include "core_types.hh"
 #include "ExecuteNode.hh"
-#include "Component.hh"
 #include "MessageQueue.hh"
 #include "ReducerComponent.hh"
 
@@ -62,21 +61,15 @@ public:
         node->onRegister(context_);
     }
 
-    void registerInput(
-        Component* component,
-        const MessageNameRef &message_name,
-        const MessageShape &shape,
-        int history_offset = 0,
-        ReduceMethod reduce_method = ReduceMethod::STACK
-    ) {
+    void registerInput(ExecuteNode* component, const ExecuteNode::NodeInputInfo &info) {
         // std::lock_guard<std::mutex> lock(mutex_);
         // TODO.
 
-        if (history_offset < 0) {
+        if (info.history_offset < 0) {
             throw std::runtime_error("Invalid history offset");
         }
 
-        MessageId message_id = lookUpOrCreateMessageId(message_name, shape);
+        MessageId message_id = lookUpOrCreateMessageId(info.message_name, info.shape);
 
         NodeId node_id = node_id_map_[component->getName()];
 
@@ -90,10 +83,10 @@ public:
             node_id,
             component->getName(),
             message_id,
-            message_name,
-            shape,
-            history_offset,
-            reduce_method,
+            info.message_name,
+            info.shape,
+            info.history_offset,
+            info.reduce_method,
             {}, {}
             }
         );
@@ -106,16 +99,11 @@ public:
     }
 
 
-    void registerOutput(
-        Component* component,
-        const MessageNameRef &message_name,
-        const MessageShape &shape,
-        std::optional<TensorHandle> history_padding_val = std::nullopt
-    ) {
+    void registerOutput( ExecuteNode* component, ExecuteNode::NodeOutputInfo &info ) {
         // std::lock_guard<std::mutex> lock(mutex_);
         // TODO.
 
-        MessageId message_id = lookUpOrCreateMessageId(message_name, shape);
+        MessageId message_id = lookUpOrCreateMessageId(info.message_name, info.shape);
 
         NodeId node_id = node_id_map_[component->getName()];
 
@@ -129,9 +117,9 @@ public:
             node_id,
             component->getName(),
             message_id,
-            message_name,
-            shape,
-            history_padding_val,
+            info.message_name,
+            info.shape,
+            info.history_padding_val,
             INT_MAX
         });
 
@@ -418,18 +406,18 @@ private:    // ^---- 私有定义 -----
         return std::string(message_name) + "." + reduce_method_to_string(reduce_method);
     }
 
-    ReducerComponent* lookUpOrCreateReducerNode(
+    ReducerNode* lookUpOrCreateReducerNode(
         const NodeTagRef& sub_node_tag, const MessageNameRef& message_name,
         const ReduceMethod& reduce_method, int history_offset, const MessageShape &shape
     ) {
         // reducer 组件的命名规则为 messageName.reduceMethod
         // 新的消息id为 messageName.reduceMethod
         NodeName reducer_name = generateReducerNodeName(message_name, reduce_method);
-        ReducerComponent *p_com = nullptr;
+        ReducerNode *p_com = nullptr;
 
         auto finder = node_id_map_.find(reducer_name);
         if (finder == node_id_map_.end()) {
-            auto new_component = std::make_unique<ReducerComponent>(
+            auto new_component = std::make_unique<ReducerNode>(
                 reducer_name,
                 std::string(sub_node_tag),
                 message_name,
@@ -442,7 +430,7 @@ private:    // ^---- 私有定义 -----
             MessageNameRef reducer_output_message_name = p_com->getOutputMessageName();
             reducers_.insert(std::make_pair(reducer_output_message_name, std::move(new_component)));
         } else {
-            p_com = static_cast<ReducerComponent*>(node_descriptions_[ finder->second ].node);
+            p_com = static_cast<ReducerNode*>(node_descriptions_[ finder->second ].node);
         }
 
         return p_com;
@@ -835,7 +823,7 @@ private:    // ^---- 私有定义 -----
         }
 
         // 所有输入就绪时执行组件
-        node_ptr->onExecute(context_, input_data, output_data);
+        node_ptr->onNodeExecute(context_, input_data, output_data);
     }
 
     std::string generateGraphDot(const Graph& g, const std::string& graph_name, bool with_order=false) const {
@@ -919,7 +907,7 @@ private:
     std::unordered_map<NodeNameRef, NodeId> node_id_map_;
 
     // Reducer，由映射后的消息名到Reducer节点的映射
-    std::unordered_map<MessageNameRef, std::unique_ptr<ReducerComponent>> reducers_;
+    std::unordered_map<MessageNameRef, std::unique_ptr<ReducerNode>> reducers_;
 
     std::unordered_map<NodeTagRef, TriggerDescription> triggers_;
 

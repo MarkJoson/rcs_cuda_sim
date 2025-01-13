@@ -20,6 +20,12 @@ public:
     }
     virtual ~SimulatorContext() {}
 
+    template<typename T, typename ...Args>
+    T* createComponent(Args... args) {
+        components.push_back(std::make_unique<T>(args...));
+        return components.back().get();
+    }
+
     void registerComponent() {}
 
     MessageBus* getMessageBus() {
@@ -37,6 +43,7 @@ public:
     void initialize() {
     }
 
+
     EnvGroupManager* getEnvironGroupManager() {
         return env_group_manager.get();
     }
@@ -46,6 +53,7 @@ public:
 private:
     std::unique_ptr<MessageBus> message_bus;
     std::unique_ptr<EnvGroupManager> env_group_manager;
+    std::vector<std::unique_ptr<Component>> components;
 };
 
 } // namespace core

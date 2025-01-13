@@ -4,6 +4,7 @@
 #include <cassert>
 #include <optional>
 
+#include "core/ExecuteNode.hh"
 #include "core_types.hh"
 #include "Component.hh"
 
@@ -13,18 +14,18 @@ namespace core
 {
 
 // &---------------------------------------------- ReducerComponent -------------------------------------------------------
-class ReducerComponent : public Component {
+class ReducerNode final : public ExecuteNode {
 
 public:
-    ReducerComponent(
-        const NodeName &reducer_name,
-        const NodeTag &reducer_tag,
-        const MessageNameRef &message_name,
-        const MessageNameRef &message_output_name,
-        ReduceMethod reduce_method,
-        int history_offset,
-        const MessageShape &shape)
-        : Component(reducer_name, reducer_tag)
+    ReducerNode(
+            const NodeName &reducer_name,
+            const NodeTag &reducer_tag,
+            const MessageNameRef &message_name,
+            const MessageNameRef &message_output_name,
+            ReduceMethod reduce_method,
+            int history_offset,
+            const MessageShape &shape)
+        : ExecuteNode(reducer_name, reducer_tag)
         , message_name_(message_name)
         , output_message_name_(message_output_name)
         , reduce_method_(reduce_method)
@@ -32,10 +33,10 @@ public:
         , message_shape_(shape)
     { }
 
-    void onRegister(SimulatorContext* context) override;
-    void onEnvironGroupInit(SimulatorContext*) override { };
-    void onExecute( SimulatorContext* context, const NodeExecInputType &input, NodeExecOutputType &output) override;
-    void onReset( const TensorHandle& reset_flags, NodeExecStateType &state ) override;
+
+    void onNodeInit(SimulatorContext *context) override;
+    void onNodeExecute(SimulatorContext* context, const NodeExecInputType &input, NodeExecOutputType &output) override;
+    void onNodeReset(const TensorHandle& reset_flags, NodeExecStateType &state ) override;
 
     MessageNameRef getMessageName() { return message_name_; }
     MessageNameRef getOutputMessageName() { return output_message_name_; }
