@@ -1,5 +1,14 @@
-#include "core/Component.hh"
+
+#include <algorithm>
+#include <cstdlib>
+#include <vector>
+
+#include "geometry/geometry_types.hh"
+#include "geometry/shapes.hh"
+#include "geometry/GeometryManager.cuh"
 #include "core/SimulatorContext.hh"
+#include "core/Component.hh"
+
 #include "mapgen_generate.hh"
 #include "mapgen_postprocess.hh"
 
@@ -18,33 +27,35 @@ public:
 
     // void
     void onEnvironGroupInit() override{
+        const int num_group = core::getEnvGroupMgr()->getNumGroup();
         // 生成地图
-        auto map_generator = std::make_unique<CellularAutomataGenerator>(MAP_WIDTH, MAP_HEIGHT);
-        // auto map_generator = std::make_unique<MessyBSPGenerator>(MAP_WIDTH, MAP_HEIGHT);
+        CellularAutomataGenerator map_generator(MAP_WIDTH, MAP_HEIGHT);
 
-        map_generator->generate();
-        auto map = map_generator->getMap();
-        auto shapes = MapPostProcess::gridMapToLines(map, GRID_SIZE);
+        for (int i = 0; i < num_group; i++) {
+            map_generator.generate();
+            impl::GridMap map = map_generator.getMap();
+            auto shapes = MapPostProcess::gridMapToLines(map, GRID_SIZE);
 
-        std::vector<float2> lbegins, lends;
-        std::for_each(shapes.begin(), shapes.end(), [&lbegins, &lends](const auto& polygons){
-            for(size_t pgi=0; pgi<polygons.size(); pgi++) {
-                auto pg = polygons[pgi];
-                pg.push_back(pg.front());
-                // if(polygons.size() != 2 || (polygons.size() == 2 && pgi == 1)) continue;
-                for(size_t i=0; i<pg.size()-1; i++) {
-                    auto lb = make_float2(pg[i].x, pg[i].y);
-                    auto le = make_float2(pg[i+1].x, pg[i+1].y);
-                    // if(polygons.size() == 2)
-                    std::swap(lb, le);
-                    lbegins.push_back(lb);
-                    lends.push_back(le);
-                }
-            }
-        });
+            // 为每个形状生成ShapeDef并添加到GeometryManager
+            std::for_each(shapes.begin(), shapes.end(), [](const impl::Shape<float>& polygons){
+                // 外边界逆时针排列，按原顺序排布点
+                const impl::SimplePoly<float>& outter_shape = polygons.front();
+                core::geometry::SimplePolyShapeDef outter_shape_def{
+                    std::vector<core::geometry::Vector2f>(outter_shape.begin(), outter_shape.end())};
 
-        // 将shape添加到GeometryManager中
-        // core::getGeometryManager()
+                // 内边界顺时针排列，按逆顺序排布点
+                const impl::SimplePoly<float>& inner_shape = polygons.back();
+                core::geometry::SimplePolyShapeDef inner_shape_def{
+                    std::vector<core::geometry::Vector2f>(inner_shape.rbegin(), inner_shape.rend())};
+
+                core::geometry::ComposedPolyShapeDef composed_shape{
+                    {outter_shape_def},
+                    {inner_shape_def}
+                };
+
+                core::getGeometryManager()->createStaticPolyObj(0, composed_shape, {});
+            });
+        }
     }
 private:
     const int MAP_WIDTH;

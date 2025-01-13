@@ -150,6 +150,7 @@ struct SimplePolyShapeDef : public ShapeDef {
 
 // ^--------------多边形组合体--------------
 // 所有的正方向多边形 - 负方向多边形。可以有洞。每个连通边界都是一个简单多边形
+// ! 点集是按照逆时针排列。在遍历时，使用逆时针表示边界，顺时针表示孔洞
 struct ComposedPolyShapeDef : public ShapeDef {
     std::vector<SimplePolyShapeDef> positive_polys;  // 正向多边形
     std::vector<SimplePolyShapeDef> negative_polys;  // 负向多边形（洞）

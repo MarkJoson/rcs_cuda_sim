@@ -117,9 +117,10 @@ public:
     ~GeometryManager() = default;
 
     // 在指定环境组中创建静态物体
-    void createStaticPolyObj(int group_id, const SimplePolyShapeDef &polygon_def, const Transform2D &pose) {
+    template<typename ShapeType>
+    void createStaticPolyObj(int group_id, const ShapeType &polygon_def, const Transform2D &pose) {
         static_scene_descs_->at(group_id).push_back(
-            std::make_pair(std::make_unique<SimplePolyShapeDef>(polygon_def), pose));
+            std::make_pair(std::make_unique<ShapeType>(polygon_def), pose));
     }
 
     // 在所有环境组中创建动态物体
