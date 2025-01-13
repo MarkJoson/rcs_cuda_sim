@@ -17,7 +17,7 @@ namespace map_gen {
 
 class MapGenerator : public core::Component {
 public:
-    MapGenerator(int map_width, int map_height, int grid_size)
+    MapGenerator(float map_width, float map_height, float grid_size)
         : core::Component("map_generator"), MAP_WIDTH(map_width), MAP_HEIGHT(map_height), GRID_SIZE(grid_size) {
 
     };
@@ -27,7 +27,7 @@ public:
     void onEnvironGroupInit() override{
         const int num_group = core::getEnvGroupMgr()->getNumGroup();
         // 生成地图
-        CellularAutomataGenerator map_generator(MAP_WIDTH, MAP_HEIGHT);
+        CellularAutomataGenerator map_generator(MAP_WIDTH/GRID_SIZE, MAP_HEIGHT/GRID_SIZE);
 
         for (int i = 0; i < num_group; i++) {
             map_generator.generate();
@@ -40,6 +40,12 @@ public:
                 const impl::SimplePoly<float>& outter_shape = polygons.front();
                 core::geometry::SimplePolyShapeDef outter_shape_def{
                     std::vector<core::geometry::Vector2f>(outter_shape.begin(), outter_shape.end())};
+
+                // 当只有一个边界时，按照朴素多边形处理
+                if(polygons.size() == 1) {
+                    core::getGeometryManager()->createStaticPolyObj(i, outter_shape_def, {});
+                    continue;
+                }
 
                 // 内边界顺时针排列，按逆顺序排布点
                 const impl::SimplePoly<float>& inner_shape = polygons.back();
@@ -60,9 +66,9 @@ public:
     void onNodeExecute(const core::NodeExecInputType &input, core::NodeExecOutputType &output) override { }
     void onNodeReset(const core::TensorHandle& reset_flags, core::NodeExecStateType &state) override { }
 private:
-    const int MAP_WIDTH;
-    const int MAP_HEIGHT;
-    const int GRID_SIZE;
+    const float MAP_WIDTH;
+    const float MAP_HEIGHT;
+    const float GRID_SIZE;
 };
 
 

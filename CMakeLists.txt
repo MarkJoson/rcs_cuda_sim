@@ -68,6 +68,9 @@ include(thirdparty/eigen/eigen.cmake)
 # boost
 find_package(Boost REQUIRED COMPONENTS graph)
 
+# nanoflann
+include(thirdparty/nanoflann/nanoflann.cmake)
+
 # 使用python自带的库就不能使用新版ABI
 # add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=1)
 # set_target_properties(torch PROPERTIES INTERFACE_COMPILE_OPTIONS "-D_GLIBCXX_USE_CXX11_ABI=1")
@@ -137,7 +140,9 @@ set_target_properties(cudasim_test PROPERTIES
 )
 
 target_link_libraries(cudasim_test
-    cudasim_core
+    PUBLIC
+        cudasim_core
+        cuda_sim_nanoflann
 )
 
 # /////////////////////////////////////////////////////

@@ -2,6 +2,7 @@
 #include "core/MessageBus.hh"
 #include "component/map_generator/MapGenerator.cuh"
 
+
 using namespace cuda_simulator;
 using namespace cuda_simulator::core;
 

@@ -43,7 +43,7 @@ __global__ void transformDynamicLinesKernel(
 class GeometryManager {
     constexpr static uint32_t MAX_STATIC_LINES = 16384;
 
-    constexpr static float GRIDMAP_RESOLU = 0.05;
+    constexpr static float GRIDMAP_RESOLU = 0.01;
     constexpr static float GRIDMAP_WIDTH = 10;
     constexpr static float GRIDMAP_HEIGHT = 10;
     constexpr static uint32_t GRIDMAP_GRIDSIZE_X = GRIDMAP_WIDTH / GRIDMAP_RESOLU;
@@ -130,6 +130,11 @@ protected:
                 if (shape->type == ShapeType::SIMPLE_POLYGON) {
                     auto poly = reinterpret_cast<SimplePolyShapeDef *>(shape.get());
                     grid_map.drawPolygon(*poly, pose);
+                } else if(shape->type == ShapeType::COMPOSED_POLYGON) {
+                    auto poly = reinterpret_cast<ComposedPolyShapeDef *>(shape.get());
+                    grid_map.drawPolygon(*poly, pose);
+                } else {
+                    throw std::runtime_error("Shape Type Not Support at Present!");
                 }
             }
             TensorHandle map_tensor = static_esdf_->at(group_id);
@@ -149,35 +154,25 @@ protected:
                 throw std::runtime_error("static_line_tensor by every env is not contiguous!");
             float4* static_line_data = reinterpret_cast<float4*>(static_line_tensor.data());
 
+            auto poly_handle_fn = [&num_static_lines_in_group, &static_line_data]<typename T>(const T* shape, const Transform2D &transform) {
+                for(auto line_iter = shape->begin(transform); line_iter != shape->end(transform); ++line_iter) {
+
+                    if(num_static_lines_in_group >= MAX_STATIC_LINES)
+                        throw std::runtime_error("Number of Static Lines exceeds the container capacity!");
+
+                    static_line_data[num_static_lines_in_group++] = make_float4(
+                        (*line_iter).start.x, (*line_iter).start.y,
+                        (*line_iter).end.x, (*line_iter).end.y);
+                }
+            };
+
+
             for (auto &static_obj : static_scene_descs_->at(group_id)) {
                 const auto &shape = static_obj.first;
-                const auto &transform = static_obj.second;
-
-
                 if(shape->type == ShapeType::SIMPLE_POLYGON) {          // 简单多边形
-                    const SimplePolyShapeDef *simple_poly = reinterpret_cast<SimplePolyShapeDef *>(shape.get());
-                    for(auto line_iter = simple_poly->begin(transform);
-                            line_iter != simple_poly->end(transform); ++line_iter) {
-
-                        if(num_static_lines_in_group >= MAX_STATIC_LINES)
-                            throw std::runtime_error("Number of Static Lines exceeds the container capacity!");
-
-                        static_line_data[num_static_lines_in_group++] = make_float4(
-                            (*line_iter).start.x, (*line_iter).start.y,
-                            (*line_iter).end.x, (*line_iter).end.y);
-                    }
+                    poly_handle_fn(reinterpret_cast<SimplePolyShapeDef *>(shape.get()), static_obj.second);
                 } else if(shape->type == ShapeType::COMPOSED_POLYGON) {     // 复合多边形
-                    const ComposedPolyShapeDef *composed_poly = reinterpret_cast<ComposedPolyShapeDef *>(shape.get());
-                    for(auto line_iter = composed_poly->begin(transform);
-                            line_iter != composed_poly->end(transform); ++line_iter) {
-
-                        if(num_static_lines_in_group >= MAX_STATIC_LINES)
-                            throw std::runtime_error("Number of Static Lines exceeds the container capacity!");
-
-                        static_line_data[num_static_lines_in_group++] = make_float4(
-                            (*line_iter).start.x, (*line_iter).start.y,
-                            (*line_iter).end.x, (*line_iter).end.y);
-                    }
+                    poly_handle_fn(reinterpret_cast<ComposedPolyShapeDef *>(shape.get()), static_obj.second);
                 } else {
                     throw std::runtime_error("Shape Type Not Support at Present!");
                 }

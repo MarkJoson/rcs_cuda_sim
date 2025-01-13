@@ -120,26 +120,25 @@ public:
     }
 
     // 提取region的边
-    static ArrayEdge<float> extractRegionEdge(
+    static ArrayEdge<int> extractRegionEdge(
             const GridMap &map,
             const ArrayPt<int> &region_pts,
-            int width, int height,
-            float grid_size) {
+            int width, int height) {
         static constexpr std::array<Point<int>, 4> neighbors4{
                 {{-1, 0}, {0, -1}, {1, 0}, {0, 1}}};
-        const std::array<Edge<float>, 4> neighbor_edges{{       // 逆时针
-                {{0, grid_size}, {0, 0}},
-                {{0, 0}, {grid_size, 0}},
-                {{grid_size, 0}, {grid_size, grid_size}},
-                {{grid_size, grid_size}, {0, grid_size}},
+        const std::array<Edge<int>, 4> neighbor_edges{{       // 逆时针
+                {{0, 1}, {0, 0}},
+                {{0, 0}, {1, 0}},
+                {{1, 0}, {1, 1}},
+                {{1, 1}, {0, 1}},
         }};
 
-        ArrayEdge<float> edge_out;
+        ArrayEdge<int> edge_out;
         int edge_pixel = 0, edge_cnt = 0;
         for (auto &[x, y] : region_pts) {
             int n_degree = 0, n_flag = 0;
 
-            for (int i = 0; i < neighbors4.size(); i++) {
+            for (size_t i = 0; i < neighbors4.size(); i++) {
                 const auto &[dx, dy] = neighbors4[i];
                 if (x + dx < 0 || x + dx >= width || y + dy < 0 || y + dy >= height)
                     continue;
@@ -157,8 +156,8 @@ public:
                 if (!(n_flag & 1 << i)) {
                     edge_cnt++;
                     auto &[p1, p2] = neighbor_edges[i];
-                    edge_out.push_back({{x * grid_size + p1.x, y * grid_size + p1.y},
-                                                            {x * grid_size + p2.x, y * grid_size + p2.y}});
+                    edge_out.push_back({{x + p1.x, y + p1.y},
+                                                            {x + p2.x, y + p2.y}});
                 }
             }
         }
@@ -167,10 +166,10 @@ public:
     }
 
     // 将边集合拆分成逆时针的多边形
-    static ComplexPoly<float> mergeEdgeToShape(const ArrayEdge<float> &edges) {
-        ComplexPoly<float> polys;
+    static ComplexPoly<int> mergeEdgeToShape(const ArrayEdge<int> &edges) {
+        ComplexPoly<int> polys;
 
-        std::unordered_map<Pointf, std::list<int>, PointHash> map_spt_idx;
+        std::unordered_map<Pointi, std::list<int>, PointHash> map_spt_idx;
         // std::unordered_map<PtHash, std::list<int>> map_ept_idx;
 
         for (int i = 0; i < edges.size(); i++) {
@@ -196,14 +195,13 @@ public:
             // map_ept_idx[hash_ept] = i;
         }
 
-        std::unordered_set<Edge<float>, EdgeHash> edge_set(edges.begin(),
-                                                                                                             edges.end());
+        std::unordered_set<Edge<int>, EdgeHash> edge_set(edges.begin(), edges.end());
 
         while (!edge_set.empty()) {
-            SimplePoly<float> poly;
+            SimplePoly<int> poly;
 
             // 从随机一个边的起点开始
-            Pointf pt = edge_set.begin()->start;
+            Pointi pt = edge_set.begin()->start;
             while (true) {
                 // 寻找起始点spt点对应的边，获得线段的end
                 auto spt_vec_iter = map_spt_idx.find(pt);
@@ -224,7 +222,7 @@ public:
                 if (spt_vec.empty())
                     map_spt_idx.erase(pt);
 
-                const Edge<float> &edge = edges[edge_id];
+                const Edge<int> &edge = edges[edge_id];
                 edge_set.erase(edge);
 
                 // 如果点已经存在于点集
@@ -247,13 +245,13 @@ public:
     }
 
     // 将点集精简
-    static ArrayPt<float> douglasPeukcer(const ArrayPt<float> &pts, float grid_size) {
-        std::list<Pointf> ptlst; //(pts.begin(), pts.end());
+    static ArrayPt<int> douglasPeukcer(const ArrayPt<int> &pts) {
+        std::list<Pointi> ptlst; //(pts.begin(), pts.end());
 
         // !----- 粗精简，合并同一条直线上的点
         // 拼接首尾tail, head, ..., tail, head
-        auto tht_arr = boost::join(std::array<Pointf, 1>({*std::prev(pts.end())}),
-                                                             boost::join(pts, std::array<Pointf, 1>{pts[0]}));
+        auto tht_arr = boost::join(std::array<Pointi, 1>({*std::prev(pts.end())}),
+                                                             boost::join(pts, std::array<Pointi, 1>{pts[0]}));
         for (auto pt_iter = tht_arr.begin() + 1;
                  pt_iter != std::prev(tht_arr.end()); pt_iter++) {
             auto p1i = std::prev(pt_iter);
@@ -312,7 +310,7 @@ public:
         //                 std::endl;
         //         }
         // }
-        return ArrayPt<float>(ptlst.begin(), ptlst.end());
+        return ArrayPt<int>(ptlst.begin(), ptlst.end());
     }
 
     //
@@ -322,47 +320,51 @@ public:
         extractAllRegions(map, map.size(), map[0].size(), regions);
 
         // 提取边集
-        std::vector<ArrayEdge<float>> regions_edge;
-        std::transform(regions.begin(), regions.end(),
-                        std::back_inserter(regions_edge),
-                        [&](const auto &region_pts) {
-                            return extractRegionEdge(map, region_pts, map.size(),
-                                                                            map[0].size(), grid_size);
-                        });
+        std::vector<ArrayEdge<int>> regions_edge;
+        for(auto &region_pts: regions) {
+            regions_edge.push_back(extractRegionEdge(map, region_pts, map.size(), map[0].size()));
+        }
 
         // 逆时针排列
-        std::vector<Shape<float>> shapes_arr;
-        std::transform(regions_edge.begin(), regions_edge.end(),
-                        std::back_inserter(shapes_arr), [](const auto &edges) {
-                            return mergeEdgeToShape(edges);
-                        });
+        std::vector<Shape<int>> shapes_arr;
+        for(auto &edges: regions_edge) {
+            shapes_arr.push_back(mergeEdgeToShape(edges));
+        }
 
         // 修剪多余的边
-        std::vector<Shape<float>> trim_shapes;
-        std::transform(shapes_arr.begin(), shapes_arr.end(),
-                        std::back_inserter(trim_shapes),
-                        [grid_size](const auto &shape) {
-                            Shape<float> trim_shape;
-                            std::transform(shape.begin(), shape.end(),
-                                            std::back_inserter(trim_shape),
-                                            [grid_size](const SimplePoly<float> &poly) {
-                                                return douglasPeukcer(poly, grid_size);
-                                            });
-                            return trim_shape;
-                        });
+        std::vector<Shape<int>> trim_shapes;
+        for(auto &shape: shapes_arr) {
+            Shape<int> trim_shape;
+            for(auto &poly: shape) {
+                trim_shape.push_back(douglasPeukcer(poly));
+            }
+            trim_shapes.push_back(trim_shape);
+        }
 
-        // 边计数
-        auto total_points =
-                std::accumulate(trim_shapes.begin(), trim_shapes.end(), 0,
-                                [](int a, ComplexPoly<float> ap) {
-                                    return a + std::accumulate(ap.begin(), ap.end(), 0,
-                                                                [](int b, SimplePoly<float> p) {
-                                                                    return b + p.size();
-                                                                });
-                                });
+        // 缩放到gridsize
+        std::vector<Shape<float>> rescaled_shapes;
+        for(auto &shape: trim_shapes) {
+            Shape<float> rescaled_shape;
+            for(auto &poly: shape) {
+                SimplePoly<float> rescaled_poly;
+                for(auto &pt: poly) {
+                    rescaled_poly.push_back({pt.x*grid_size, pt.y*grid_size});
+                }
+                rescaled_shape.push_back(rescaled_poly);
+            }
+            rescaled_shapes.push_back(rescaled_shape);
+        }
+
+        // 点和边计数
+        int total_points = 0;
+        for(auto &shape: rescaled_shapes) {
+            for(auto &poly: shape) {
+                total_points += poly.size();
+            }
+        }
         printf("Total Point Num: %d\n", total_points);
 
-        return trim_shapes;
+        return rescaled_shapes;
     }
 };
 

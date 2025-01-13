@@ -1,9 +1,11 @@
 #ifndef CUDASIM_GEOMETRY_GRIDMAP_GENERATOR_HH
 #define CUDASIM_GEOMETRY_GRIDMAP_GENERATOR_HH
 
+#include <algorithm>
 #include <initializer_list>
 #include <opencv2/core.hpp>
 #include <opencv2/core/hal/interface.h>
+#include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
@@ -63,8 +65,15 @@ public:
         return img_color;
     }
 
-    static void showFloatImg(const cv::Mat& float_img) {
+    static void showFloatImg(const cv::Mat& float_img, const cv::Mat& addition_img) {
+        // float_img = float_img * (addition_img==255);
+        // cv::multiply(float_img, 0.1*(addition_img==255), float_img);
         cv::Mat img = floatMapToU8C3(float_img);
+        cv::Mat addition_img_color;
+        cv::cvtColor(addition_img, addition_img_color, cv::COLOR_GRAY2BGR);
+        cv::addWeighted(img, 0.7, addition_img_color, 0.3, 0, img);
+
+
         cv::resize(img, img, img.size()*IMG_SCALING_FACTOR, 0, 0, 0);
         cv::imshow("showFloatImg", img);
         cv::waitKey(0);
@@ -89,6 +98,29 @@ public:
                 return cv::Point(x, y);
             });
         cv::fillConvexPoly(occ_map_, pt_list, cv::Scalar(255));
+    }
+
+    void drawPolygon(const ComposedPolyShapeDef& poly, const Transform2D& tf) {
+        std::vector<std::vector<cv::Point>> cv_polys;
+        for(const auto& simple_poly : poly.positive_polys) {
+            std::vector<cv::Point> cv_poly;
+            for(const auto& vertex : simple_poly.vertices) {
+                Vector2i global_pt = desc_.world2Grid(tf.localPointTransform(vertex));
+                cv_poly.push_back(cv::Point(global_pt.x, global_pt.y));
+            }
+            cv_polys.push_back(cv_poly);
+        }
+
+        for(const auto& simple_poly : poly.negative_polys) {
+            std::vector<cv::Point> cv_poly;
+            for(auto iter=simple_poly.vertices.rbegin(); iter!= simple_poly.vertices.rend(); iter++) {
+                Vector2i global_pt = desc_.world2Grid(tf.localPointTransform(*iter));
+                cv_poly.push_back(cv::Point(global_pt.x, global_pt.y));
+            }
+            cv_polys.push_back(cv_poly);
+        }
+
+        cv::fillPoly(occ_map_, cv_polys, cv::Scalar(255));
     }
 
     void drawCircle(const CircleShapeDef& circle, const Transform2D& tf) {
@@ -238,10 +270,10 @@ public:
             }
         }
 
-        // cv::Mat blob_map = cv::Mat(desc_.grid_size.y, desc_.grid_size.x, CV_32FC4, output_ptr);
-        // std::vector<cv::Mat> dist_float_splited;
-        // cv::split(blob_map, dist_float_splited);
-        // CvMatViewer::showFloatImg(dist_float_splited[2]);
+        cv::Mat blob_map = cv::Mat(desc_.grid_size.y, desc_.grid_size.x, CV_32FC4, output_ptr);
+        std::vector<cv::Mat> dist_float_splited;
+        cv::split(blob_map, dist_float_splited);
+        CvMatViewer::showFloatImg(dist_float_splited[2], occ_map_);
     }
 
     GridMapDescription getGridMapDescritpion() const {
