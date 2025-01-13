@@ -27,16 +27,18 @@ namespace component {
 #define LIDAR_RESOLU_INV    (LIDAR_LINES/M_PI)
 
 
-__host__ __device__ bool prepareLine(float2 vs, float2 ve, float max_range)
+__host__ __device__ bool lineVisibleCheck(float2 vs, float2 ve, float max_range)
 {
+    // !边界按照逆时针排列
     float cdot = vs.x*ve.y - vs.y*ve.x;
+
     float dx = ve.x-vs.x;
     float dy = ve.y-vs.y;
     // float len = sqrtf(dx*dx+dy*dy);
     float invsqrt = rsqrtf(dx*dx+dy*dy);
     float dist = fabs(cdot)*invsqrt;
 
-    return dist < max_range && cdot>=0;
+    return dist < max_range && cdot<0;
 }
 
 
@@ -107,7 +109,7 @@ __global__ void rasterKernel(
             {
                 float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
                 float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
-                visibility = prepareLine(lb, le, LIDAR_MAX_RANGE);
+                visibility = lineVisibleCheck(lb, le, LIDAR_MAX_RANGE);
                 // if(visibility)
                 // {
                 //     const auto &vs=lb, &ve=le;
