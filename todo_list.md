@@ -10,7 +10,7 @@
 - ~~GridMap ESDF生成~~
 - ~~测试GeometryManager~~
 - 移植地图生成
-- 修改message queue创建shapes时的batch
+- ~~修改message queue创建shapes时的batch~~
 - 移植并测试激光雷达
 - 移植一个brax引擎测试
 - 移植原有初始pbd版本引擎

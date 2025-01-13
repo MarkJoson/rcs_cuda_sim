@@ -69,7 +69,7 @@ public:
     void initialize();
 
     // 初始化组件
-    void setup();
+    void setup(const std::vector<std::string> &entrances = {"default", "observe"});
 
 protected:
     // 生成依赖序列

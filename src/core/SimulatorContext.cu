@@ -1,4 +1,5 @@
 #include "core/SimulatorContext.hh"
+#include "core/MessageBus.hh"
 
 namespace cuda_simulator {
 namespace core {
@@ -8,7 +9,7 @@ void SimulatorContext::initialize()  {
     env_group_manager = std::make_unique<EnvGroupManager>(1,2,1);
 }
 
-void SimulatorContext::setup()  {
+void SimulatorContext::setup(const std::vector<std::string> &entrances) {
     // 创建所有节点的依赖列表
     createDepSeq();
 
@@ -16,6 +17,14 @@ void SimulatorContext::setup()  {
     for(auto &com_id : dep_seq) {
         components[com_id]->onNodeInit();
     }
+
+    // 添加计算图入口
+    for(const auto& ent : entrances) {
+        message_bus->addTrigger({ent});
+    }
+
+    // 创建计算图
+    message_bus->buildGraph();
 
     // 调用组件的环境组初始化函数
     for(auto &com_id : dep_seq) {
@@ -27,6 +36,8 @@ void SimulatorContext::setup()  {
         components[com_id]->onNodeStart();
     }
 }
+
+
 
 void SimulatorContext::createDepSeq()  {
     for(size_t com_id = 0; com_id < components.size(); com_id++) {

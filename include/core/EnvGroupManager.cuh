@@ -13,8 +13,10 @@
 #include "storage/ITensor.hh"
 #include "storage/TensorRegistry.hh"
 
+
 namespace cuda_simulator {
 namespace core {
+
 namespace env_group_impl {
 
 constexpr int CONST_MEM_WORD_SIZE = 8192;
