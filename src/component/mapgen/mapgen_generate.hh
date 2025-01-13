@@ -1141,6 +1141,7 @@ public:
         }
     }
 
+private:
     void addRooms(int mapWidth, int mapHeight) {
         std::vector<Room> rooms;
 
@@ -1183,8 +1184,6 @@ public:
         }
     }
 
-private:
-    void addRooms(int mapWidth, int mapHeight);
     void growMaze(std::pair<int, int> start, int mapWidth, int mapHeight) {
         std::vector<std::pair<int, int>> cells;
         std::pair<int, int> lastDir = {0, 0};

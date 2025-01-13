@@ -1,23 +1,26 @@
 #include "core/Component.hh"
 #include "core/SimulatorContext.hh"
+#include "mapgen_generate.hh"
+#include "mapgen_postprocess.hh"
 
 namespace cuda_simulator {
-namespace mapgen {
+namespace map_gen {
 
 
 
 class MapgenComponent : public core::Component {
 public:
-    MapgenComponent() = default;
+    MapgenComponent(int map_width, int map_height, int grid_size)
+        : core::Component("map_generator"), MAP_WIDTH(map_width), MAP_HEIGHT(map_height), GRID_SIZE(grid_size) {};
     ~MapgenComponent() = default;
 
     // void
     void onEnvironGroupInit(core::SimulatorContext* context) {
-        auto map_generator = std::make_unique<map_gen::CellularAutomataGenerator>(MAP_WIDTH, MAP_HEIGHT);
+        auto map_generator = std::make_unique<CellularAutomataGenerator>(MAP_WIDTH, MAP_HEIGHT);
         // auto map_generator = std::make_unique<MessyBSPGenerator>(MAP_WIDTH, MAP_HEIGHT);
         map_generator->generate();
         auto map = map_generator->getMap();
-        auto shapes = map_gen::processGridmap(map, GRID_SIZE);
+        auto shapes = MapPostProcess::gridMapToLines(map, GRID_SIZE);
 
         std::vector<float2> lbegins, lends;
         std::for_each(shapes.begin(), shapes.end(), [&lbegins, &lends](const auto& polygons){
@@ -34,10 +37,14 @@ public:
                     lends.push_back(le);
                 }
             }
-
         });
-    }
 
+        // TODO.
+    }
+private:
+    const int MAP_WIDTH;
+    const int MAP_HEIGHT;
+    const int GRID_SIZE;
 };
 
 
