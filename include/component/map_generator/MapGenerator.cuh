@@ -57,7 +57,7 @@ public:
                     {inner_shape_def}
                 };
 
-                core::getGeometryManager()->createStaticPolyObj(i, composed_shape, {});
+                // core::getGeometryManager()->createStaticPolyObj(i, composed_shape, {});
             }
         }
     }

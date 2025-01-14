@@ -16,27 +16,27 @@ namespace cuda_simulator {
 namespace map_gen {
 
 class MT19937Random {
-        class RandomDevicePrinter {
-        public:
+    class RandomDevicePrinter {
+    public:
         using RandomDeviceResultType = decltype(std::declval<std::random_device>()());
         RandomDevicePrinter() {
-                priv_ = rd();
+                priv_ = 4146188594;//rd();
                 std::cout << "************" << priv_ << "*************" << std::endl;
         }
         RandomDeviceResultType operator()() { return priv_; };
 
-        private:
+    private:
         RandomDeviceResultType priv_;
         std::random_device rd;
-        };
+    };
 
 public:
     using result_type = std::mt19937::result_type;
-        static std::mt19937& get() {
-                static RandomDevicePrinter rd;
-                static std::mt19937 gen(rd());
-                return gen;
-        }
+    static std::mt19937& get() {
+        static RandomDevicePrinter rd;
+        static std::mt19937 gen(rd());
+        return gen;
+    }
 };
 
 class Room {

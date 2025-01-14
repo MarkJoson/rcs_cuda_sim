@@ -130,9 +130,11 @@ protected:
                 if (shape->type == ShapeType::SIMPLE_POLYGON) {
                     auto poly = reinterpret_cast<SimplePolyShapeDef *>(shape.get());
                     grid_map.drawPolygon(*poly, pose);
+                    printf("Draw Simple Polygon\n");
                 } else if(shape->type == ShapeType::COMPOSED_POLYGON) {
                     auto poly = reinterpret_cast<ComposedPolyShapeDef *>(shape.get());
                     grid_map.drawPolygon(*poly, pose);
+                    printf("Draw Composed Polygon\n");
                 } else {
                     throw std::runtime_error("Shape Type Not Support at Present!");
                 }

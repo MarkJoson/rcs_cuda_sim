@@ -8,7 +8,7 @@ namespace core {
 
 void SimulatorContext::initialize()  {
     message_bus = std::make_unique<MessageBus>();
-    env_group_manager = std::make_unique<EnvGroupManager>(1,2,1);
+    env_group_manager = std::make_unique<EnvGroupManager>(1,1,1);
     geometry_manager = std::make_unique<geometry::GeometryManager>();
 }
 

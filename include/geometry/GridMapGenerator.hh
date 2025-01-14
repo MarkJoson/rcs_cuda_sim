@@ -46,7 +46,7 @@ struct GridMapDescription {
 
 class CvMatViewer {
 public:
-    static constexpr int IMG_SCALING_FACTOR = 1;
+    static constexpr int IMG_SCALING_FACTOR = 10;
 
     static cv::Mat floatMapToU8C3(const cv::Mat& float_map) {
         double min_val, max_val;
@@ -68,6 +68,8 @@ public:
     static void showFloatImg(const cv::Mat& float_img, const cv::Mat& addition_img) {
         // float_img = float_img * (addition_img==255);
         // cv::multiply(float_img, 0.1*(addition_img==255), float_img);
+
+        cv::imshow("additionimg", addition_img);
         cv::Mat img = floatMapToU8C3(float_img);
         cv::Mat addition_img_color;
         cv::cvtColor(addition_img, addition_img_color, cv::COLOR_GRAY2BGR);
@@ -90,13 +92,18 @@ public:
 
     void drawPolygon(const SimplePolyShapeDef& poly, const Transform2D& tf) {
         auto pt_list = std::vector<cv::Point>();
+        printf("Gridmap Simple Polygon\n");
 
-        std::transform(poly.vertices.begin(), poly.vertices.end(), std::back_insert_iterator(pt_list),
-            [&](Vector2f pt) {
-                auto new_pt = tf.localPointTransform(pt);
-                auto [x, y] = desc_.world2Grid(new_pt);
-                return cv::Point(x, y);
-            });
+        static int count = 0;
+
+        if (count++ != 2) return;
+
+        for(const auto& vertex : poly.vertices) {
+            auto new_pt = tf.localPointTransform(vertex);
+            auto [x, y] = desc_.world2Grid(new_pt);
+            pt_list.push_back(cv::Point(x, y));
+        }
+
         cv::fillConvexPoly(occ_map_, pt_list, cv::Scalar(255));
     }
 
