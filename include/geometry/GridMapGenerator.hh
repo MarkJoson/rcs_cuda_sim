@@ -46,7 +46,7 @@ struct GridMapDescription {
 
 class CvMatViewer {
 public:
-    static constexpr int IMG_SCALING_FACTOR = 10;
+    static constexpr int IMG_SCALING_FACTOR = 1;
 
     static cv::Mat floatMapToU8C3(const cv::Mat& float_map) {
         double min_val, max_val;
@@ -91,20 +91,15 @@ public:
     }
 
     void drawPolygon(const SimplePolyShapeDef& poly, const Transform2D& tf) {
-        auto pt_list = std::vector<cv::Point>();
-        printf("Gridmap Simple Polygon\n");
-
-        static int count = 0;
-
-        if (count++ != 2) return;
+        std::vector<std::vector<cv::Point>> pt_list(1);
 
         for(const auto& vertex : poly.vertices) {
             auto new_pt = tf.localPointTransform(vertex);
             auto [x, y] = desc_.world2Grid(new_pt);
-            pt_list.push_back(cv::Point(x, y));
+            pt_list[0].push_back(cv::Point(x, y));
         }
 
-        cv::fillConvexPoly(occ_map_, pt_list, cv::Scalar(255));
+        cv::fillPoly(occ_map_, pt_list, cv::Scalar(255));
     }
 
     void drawPolygon(const ComposedPolyShapeDef& poly, const Transform2D& tf) {

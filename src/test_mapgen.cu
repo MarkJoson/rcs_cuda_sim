@@ -9,7 +9,7 @@ using namespace cuda_simulator::core;
 
 int main() {
     getContext()->initialize();
-    map_gen::MapGenerator *map_generator = getContext()->createComponent<map_gen::MapGenerator>(10, 10, 0.1);
+    map_gen::MapGenerator *map_generator = getContext()->createComponent<map_gen::MapGenerator>(3, 3, 0.05);
     // todo. 统一地图尺寸
     getContext()->setup();
 

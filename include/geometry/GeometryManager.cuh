@@ -43,9 +43,9 @@ __global__ void transformDynamicLinesKernel(
 class GeometryManager {
     constexpr static uint32_t MAX_STATIC_LINES = 16384;
 
-    constexpr static float GRIDMAP_RESOLU = 0.01;
-    constexpr static float GRIDMAP_WIDTH = 10;
-    constexpr static float GRIDMAP_HEIGHT = 10;
+    constexpr static float GRIDMAP_RESOLU = 0.002;
+    constexpr static float GRIDMAP_WIDTH = 3;
+    constexpr static float GRIDMAP_HEIGHT = 3;
     constexpr static uint32_t GRIDMAP_GRIDSIZE_X = GRIDMAP_WIDTH / GRIDMAP_RESOLU;
     constexpr static uint32_t GRIDMAP_GRIDSIZE_Y = GRIDMAP_HEIGHT / GRIDMAP_RESOLU;
 
@@ -75,7 +75,14 @@ public:
         // 静态物体，环境组参数
         num_static_lines_ = group_mgr->registerConfigItem<uint32_t, MemoryType::CONSTANT_GPU_MEM>("num_static_lines");
         static_lines_ = group_mgr->registerConfigTensor<float>("static_lines", {MAX_STATIC_LINES, 4});
-        static_esdf_ = group_mgr->registerConfigTensor<float>("static_esdf",{GRIDMAP_GRIDSIZE_Y, GRIDMAP_GRIDSIZE_X, 4});
+        GridMapDescription grid_map_desc = GridMapGenerator(
+        {
+                GRIDMAP_WIDTH,
+                GRIDMAP_HEIGHT,
+                {0, 0},
+                GRIDMAP_RESOLU
+            }).getGridMapDescritpion();
+        static_esdf_ = group_mgr->registerConfigTensor<float>("static_esdf",{grid_map_desc.grid_size.y, grid_map_desc.grid_size.x, 4});
     }
     ~GeometryManager() = default;
 
@@ -130,11 +137,9 @@ protected:
                 if (shape->type == ShapeType::SIMPLE_POLYGON) {
                     auto poly = reinterpret_cast<SimplePolyShapeDef *>(shape.get());
                     grid_map.drawPolygon(*poly, pose);
-                    printf("Draw Simple Polygon\n");
                 } else if(shape->type == ShapeType::COMPOSED_POLYGON) {
                     auto poly = reinterpret_cast<ComposedPolyShapeDef *>(shape.get());
                     grid_map.drawPolygon(*poly, pose);
-                    printf("Draw Composed Polygon\n");
                 } else {
                     throw std::runtime_error("Shape Type Not Support at Present!");
                 }

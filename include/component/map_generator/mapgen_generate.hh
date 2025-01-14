@@ -20,7 +20,7 @@ class MT19937Random {
     public:
         using RandomDeviceResultType = decltype(std::declval<std::random_device>()());
         RandomDevicePrinter() {
-                priv_ = 4146188594;//rd();
+                priv_ = rd();
                 std::cout << "************" << priv_ << "*************" << std::endl;
         }
         RandomDeviceResultType operator()() { return priv_; };
