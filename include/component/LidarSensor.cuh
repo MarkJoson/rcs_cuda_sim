@@ -1,6 +1,7 @@
 #ifndef CUDASIM_COMPONENT_LIDAR_HH
 #define CUDASIM_COMPONENT_LIDAR_HH
 
+#include <__clang_cuda_runtime_wrapper.h>
 #include <cub/cub.cuh>
 #include "core/Component.hh"
 
@@ -19,7 +20,7 @@ namespace component {
 #define EMIT_PER_THREAD     (2)
 #define TOTAL_EMITION       (EMIT_PER_THREAD * CTA_SIZE)
 
-#define LIDAR_LINES_LOG2    (10)         // 128lines
+#define LIDAR_LINES_LOG2    (7)         // 128lines
 #define LIDAR_LINES         (1<<LIDAR_LINES_LOG2)
 
 #define LIDAR_MAX_RANGE     (8.0f)
@@ -63,32 +64,64 @@ __forceinline__ __host__ __device__ uint32_t genMask(int start, int end)
     // int pop = __builtin_popcount(mask);
 }
 
+__forceinline__ __device__ float4 readLine(
+        int num_dyn_lines,
+        const float4 *__restrict__ static_lines,
+        const float4 *__restrict__ dyn_lines,
+        int lineIdx) {
+
+    // 动态线段的数量固定，先处理动态线段
+    if(lineIdx < num_dyn_lines)
+        return dyn_lines[lineIdx];      // dyn_lines: [group, env, lines, 4]
+    else
+        return static_lines[lineIdx-num_dyn_lines];
+}
+
 
 __global__ void rasterKernel(
-    int                         num_lines,           // 场景中的线段数量
-    const float2 * __restrict__ line_begins,        // 线段的起点
-    const float2 * __restrict__ line_ends,          // 线段的终点
+    const int    * __restrict__ num_static_lines,   // 每个场景中的静态线段数量
+    const float4 * __restrict__ static_lines,       // 线段的起点
+
+    int                         num_dyn_lines,      // 场景中的动态线段数量，所有场景统一
+    const float4 * __restrict__ dyn_lines,          // 动态线段数组
+
     const float3 * __restrict__ poses,              // 机器人的位姿
     int          * __restrict__ lidar_response      // 激光雷达的响应
-)
-{
+) {
+
+
     using BlockScan = cub::BlockScan<uint32_t, CTA_SIZE>;
     using BlockRunLengthDecodeT = cub::BlockRunLengthDecode<uint32_t, CTA_SIZE, 1, EMIT_PER_THREAD>;
 
     volatile __shared__ uint32_t s_lineBuf[LINE_BUF_SIZE];           // 1K
     volatile __shared__ uint32_t s_frLineIdxBuf[FR_BUF_SIZE];        // 1K
     volatile __shared__ uint32_t s_frLineSGridFragsBuf[FR_BUF_SIZE]; // 1K
-    __shared__ uint32_t s_lidarResponse[LIDAR_LINES];            // 1K
+    __shared__ uint32_t s_lidarResponse[LIDAR_LINES];                // 1K
     __shared__ union {
         typename BlockScan::TempStorage scan_temp_storage;
         typename BlockRunLengthDecodeT::TempStorage decode_temp_storage;
     } temp_storage;
 
+    /// Grid: (num_lidars, num_envs, num_groups)
+    //  Block: (CTA_SIZE, 1, 1)
+    int group_id = blockIdx.z;
+    int env_inst_id = blockIdx.z * gridDim.y + blockIdx.y;
+    int lidar_inst_id = env_inst_id * gridDim.x + blockIdx.x;
+
+    // 每个场景有其对应的动态线段（由所有动态物体的位姿计算）
+    const float4* __restrict__ dyn_lines_in_env = env_inst_id * num_dyn_lines + dyn_lines;
+    // 每个场景组有对应的静态线段
+    const float4* __restrict__ static_lines_in_group = static_lines + group_id;
+    // 每个场景组静态线段的数量不同
+    int num_static_line_in_group = num_static_lines[group_id];
+    // static line在前，dynamic line在后
+    int num_lines = num_static_line_in_group + num_dyn_lines;
+
     uint32_t tid = threadIdx.x;
     uint32_t totalLineRead = 0;
     uint32_t lineBufRead=0, lineBufWrite=0;
     uint32_t frLineBufRead=0, frLineBufWrite=0;
-    float3 pose = poses[blockIdx.x];
+    float3 pose = poses[lidar_inst_id];
 
     /********* 初始化lidar数据 *********/
     for(int i=tid; i<LIDAR_LINES; i+=CTA_SIZE)
@@ -99,16 +132,17 @@ __global__ void rasterKernel(
     for(;;)
     {
         /********* Load Lines to Buffer *********/
-
-        while(lineBufWrite-lineBufRead < CTA_SIZE && totalLineRead < num_lines)
-        {
+        while(lineBufWrite-lineBufRead < CTA_SIZE && totalLineRead < num_lines) {
             // if(tid == 0) printf("[READ] LINE RANGE: %d~%d.\n", totalLineRead, totalLineRead+CTA_SIZE);
             uint32_t visibility = false;
             int lineIdx = totalLineRead+tid;
-            if(lineIdx < num_lines)
-            {
-                float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
-                float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
+            if(lineIdx < num_lines) {
+                // float4 line = lines[lineIdx];
+
+                float4 line = readLine(num_static_line_in_group, num_dyn_lines,
+                    static_lines_in_group, dyn_lines_in_env, lineIdx);
+                float2 lb = make_float2(line.x-pose.x, line.y-pose.y);
+                float2 le = make_float2(line.z-pose.x, line.w-pose.y);
                 visibility = lineVisibleCheck(lb, le, LIDAR_MAX_RANGE);
                 // if(visibility)
                 // {
@@ -147,11 +181,13 @@ __global__ void rasterKernel(
             int lineIdx = -1;
             int frag = 0;
             int s_grid = -1;
-            if(lineBufRead + tid < lineBufWrite)
-            {
+            if(lineBufRead + tid < lineBufWrite) {
                 lineIdx = s_lineBuf[(lineBufRead + tid) % LINE_BUF_SIZE];
-                float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
-                float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
+
+                float4 line = readLine(num_static_line_in_group, num_dyn_lines,
+                    static_lines_in_group, dyn_lines_in_env, lineIdx);
+                float2 lb = make_float2(line.x-pose.x, line.y-pose.y);
+                float2 le = make_float2(line.z-pose.x, line.w-pose.y);
 
                 auto s_angle = vec_atan2_0_360(lb);
                 auto e_angle = vec_atan2_0_360(le);
@@ -165,12 +201,10 @@ __global__ void rasterKernel(
             // 压缩到FR_BUF队列中
             uint32_t scan, scan_sum;
             BlockScan(temp_storage.scan_temp_storage).ExclusiveSum(frag>0, scan, scan_sum);
-            if(frag > 0)
-            {
+            if(frag > 0) {
                 uint32_t idx = (frLineBufWrite+scan) % FR_BUF_SIZE;
                 s_frLineIdxBuf[idx] = lineIdx;
                 s_frLineSGridFragsBuf[idx] = (s_grid << 16) | (frag & 0xffff);
-
             }
             frLineBufWrite += scan_sum;
             __syncthreads();
@@ -191,14 +225,12 @@ __global__ void rasterKernel(
         // if(tid == 0) printf("[RASTER] FINISHED!\n");
 
         /********* Count and Emit *********/
-        do
-        {
+        do {
             // if(tid == 0) printf("[EMIT] LOAD LINE [%d-%d]\n", frLineBufRead, frLineBufWrite);
             // 加载CTA_SIZE个到缓冲区，准备进行Decode
             uint32_t runValue[1] = {0}, runLength[1] = {0};
             int frLineBufIdx = frLineBufRead + tid;
-            if(frLineBufIdx < frLineBufWrite)
-            {
+            if(frLineBufIdx < frLineBufWrite) {
                 frLineBufIdx = frLineBufIdx % FR_BUF_SIZE;
                 runValue[0] = frLineBufIdx;
                 runLength[0] = s_frLineSGridFragsBuf[frLineBufIdx] & 0xffff;        // 取低16位的frag
@@ -211,8 +243,7 @@ __global__ void rasterKernel(
 
             // 将本次读取的 CTA_SIZE*EMIT_PER_LINE 个frag全部发射
             uint32_t decoded_window_offset = 0;
-            while(decoded_window_offset < total_decoded_size)
-            {
+            while(decoded_window_offset < total_decoded_size) {
                 uint32_t relative_offsets[2];
                 uint32_t decoded_items[2];
                 uint32_t num_valid_items = min(total_decoded_size - decoded_window_offset, CTA_SIZE * EMIT_PER_THREAD);
@@ -220,8 +251,7 @@ __global__ void rasterKernel(
                 decoded_window_offset += num_valid_items;
 
                 #pragma unroll
-                for(int i=0; i<2; i++)
-                {
+                for(int i=0; i<2; i++) {
                     if(tid*EMIT_PER_THREAD + i >= num_valid_items)
                         break;
 
@@ -230,8 +260,11 @@ __global__ void rasterKernel(
                     uint32_t lineIdx = s_frLineIdxBuf[frLineBufIdx];
                     int s_grid = s_frLineSGridFragsBuf[frLineBufIdx] >> 16;
 
-                    float2 lb = make_float2(line_begins[lineIdx].x-pose.x, line_begins[lineIdx].y-pose.y);
-                    float2 le = make_float2(line_ends[lineIdx].x-pose.x, line_ends[lineIdx].y-pose.y);
+                    float4 line = readLine(num_static_line_in_group, num_dyn_lines,
+                    static_lines_in_group, dyn_lines_in_env, lineIdx);
+                    float2 lb = make_float2(line.x-pose.x, line.y-pose.y);
+                    float2 le = make_float2(line.z-pose.x, line.w-pose.y);
+
                     int grid = (s_grid + fragIdx + 1) % LIDAR_LINES;
                     uint16_t response = getR(lb, le, grid*LIDAR_RESOLU) * 1024;        // 10位定点小数表示，最大距离64m
                     uint32_t resp_idx = response << 16 | lineIdx & 0xffff;
@@ -256,20 +289,23 @@ class LidarSensor : public core::Component {
 public:
     LidarSensor() : Component("LidarSensor") {}
 
-    void onEnvironGroupInit(core::SimulatorContext* context) override {
+    void onEnvironGroupInit() override {
         // 初始化LidarSensor
     }
 
-    void onReset(core::TensorHandle reset_flags, core::NodeExecStateType &state) override {
+    void onNodeReset(
+        const core::TensorHandle& reset_flags,
+        core::NodeExecStateType &state) override {
         // 重置LidarSensor
     }
 
-    virtual void onRegister(core::SimulatorContext* context) {
+    void onRegister(core::SimulatorContext* context) {
 
     }
 
-    virtual void onExecute( core::SimulatorContext* context, const core::NodeExecInputType &input, const core::NodeExecOutputType &output) {
-        //
+    void onNodeExecute(
+        const core::NodeExecInputType &input,
+        core::NodeExecOutputType &output) override {
         // rasterKernel, block大小 == 128, 1个block处理1个机器人. grid大小 == (环境组数,环境数,机器人数)
         // rasterKernel: Input:[poses], Output:[lidar_response]
         // 线段数据：储存在全局内存，numLines, 储存在 constant 内存
