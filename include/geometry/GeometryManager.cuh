@@ -119,8 +119,21 @@ public:
         transformDynamicLines();
     }
 
-    TensorHandle getDynamicLines() { return dyn_lines_; }
-    TensorHandle getDynamicPoses() { return dyn_poses_; }
+    const TensorHandle& getDynamicLines() {
+        return dyn_lines_;
+    }
+    uint32_t getNumDynLines() {
+        return num_dyn_shape_lines_;
+    }
+    const TensorHandle& getStaticLines() {
+        return static_lines_->getDeviceTensor();
+    }
+    EGConstMemConfigItem<uint32_t> * getNumStaticLines() {
+        return num_static_lines_;
+    }
+    const TensorHandle& getDynamicPoses() {
+        return dyn_poses_;
+    }
     TensorHandle getStaticESDF(int group_id) {
         return static_esdf_->at(group_id);
     }
@@ -298,12 +311,12 @@ private:
     // 动态物体
     DynamicSceneDescription dyn_scene_desc_;                        // 动态物体定义（仅支持多边形）
     uint32_t                num_dyn_shape_lines_ = 0;               // 多边形线段数量
-    TensorHandle      dyn_shape_line_ids_;                    // 点集合对应的物体id: [line] -> {16位物体id, 16位内部点id}
-    TensorHandle      dyn_shape_lines_;                       // 多边形线段集合（局部坐标系）: [line, 4]
+    TensorHandle            dyn_shape_line_ids_;                    // 点集合对应的物体id: [line] -> {16位物体id, 16位内部点id}
+    TensorHandle            dyn_shape_lines_;                       // 多边形线段集合（局部坐标系）: [line, 4]
 
     // 为每个环境准备的数据
-    TensorHandle      dyn_poses_;                             // 动态物体位姿集合: [obj, group, env, 4]
-    TensorHandle      dyn_lines_;                             // 动态物体线段集合: [group, env, lines, 4]
+    TensorHandle            dyn_poses_;                             // 动态物体位姿集合: [obj, group, env, 4]
+    TensorHandle            dyn_lines_;                             // 动态物体线段集合: [group, env, lines, 4]
 
     // TODO. 动态物体的初始位姿，放到onReset中初始化
 

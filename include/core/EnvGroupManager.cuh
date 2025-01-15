@@ -132,7 +132,7 @@ public:
         offset_ = env_group_impl::allocate<T>();
     }
 
-    __device__ inline const T operator[](int idx) {
+    __device__ inline const T operator[](int idx) const {
         if(idx >= env_group_impl::d_num_active_group) {
             printf("index out of range: %d\n", idx);
             return T();
@@ -215,6 +215,10 @@ public:
             // reflect_data.push_back(EGHostMemConfigItem<T>::host_data_[group_id]);
             device_data_.set(group_id, EGHostMemConfigItem<T>::host_data_[group_id]);
         }
+    }
+
+    const ConstantMemoryVector<T>& getDeviceData() {
+        return device_data_;
     }
 };
 

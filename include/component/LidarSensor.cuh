@@ -3,8 +3,13 @@
 
 #include <__clang_cuda_runtime_wrapper.h>
 #include <cub/cub.cuh>
-#include "core/Component.hh"
 
+#include "core/Component.hh"
+#include "core/SimulatorContext.hh"
+#include "core/EnvGroupManager.cuh"
+#include "core/MessageBus.hh"
+#include "geometry/GeometryManager.cuh"
+#include "core/core_types.hh"
 
 namespace cuda_simulator {
 namespace component {
@@ -79,17 +84,13 @@ __forceinline__ __device__ float4 readLine(
 
 
 __global__ void rasterKernel(
-    const int    * __restrict__ num_static_lines,   // 每个场景中的静态线段数量
-    const float4 * __restrict__ static_lines,       // 线段的起点
-
-    int                         num_dyn_lines,      // 场景中的动态线段数量，所有场景统一
-    const float4 * __restrict__ dyn_lines,          // 动态线段数组
-
-    const float3 * __restrict__ poses,              // 机器人的位姿
-    int          * __restrict__ lidar_response      // 激光雷达的响应
+    const core::ConstantMemoryVector<uint32_t>& num_static_lines,   // 每个场景中的静态线段数量
+    const float4 * __restrict__ static_lines,                       // 线段的起点
+    int                         num_dyn_lines,                      // 场景中的动态线段数量，所有场景统一
+    const float4 * __restrict__ dyn_lines,                          // 动态线段数组
+    const float4 * __restrict__ poses,                              // 机器人的位姿
+    float        * __restrict__ lidar_response                      // 激光雷达的响应
 ) {
-
-
     using BlockScan = cub::BlockScan<uint32_t, CTA_SIZE>;
     using BlockRunLengthDecodeT = cub::BlockRunLengthDecode<uint32_t, CTA_SIZE, 1, EMIT_PER_THREAD>;
 
@@ -121,7 +122,7 @@ __global__ void rasterKernel(
     uint32_t totalLineRead = 0;
     uint32_t lineBufRead=0, lineBufWrite=0;
     uint32_t frLineBufRead=0, frLineBufWrite=0;
-    float3 pose = poses[lidar_inst_id];
+    float4 pose = poses[lidar_inst_id];
 
     /********* 初始化lidar数据 *********/
     for(int i=tid; i<LIDAR_LINES; i+=CTA_SIZE)
@@ -139,8 +140,7 @@ __global__ void rasterKernel(
             if(lineIdx < num_lines) {
                 // float4 line = lines[lineIdx];
 
-                float4 line = readLine(num_static_line_in_group, num_dyn_lines,
-                    static_lines_in_group, dyn_lines_in_env, lineIdx);
+                float4 line = readLine(num_dyn_lines, static_lines_in_group, dyn_lines_in_env, lineIdx);
                 float2 lb = make_float2(line.x-pose.x, line.y-pose.y);
                 float2 le = make_float2(line.z-pose.x, line.w-pose.y);
                 visibility = lineVisibleCheck(lb, le, LIDAR_MAX_RANGE);
@@ -184,8 +184,7 @@ __global__ void rasterKernel(
             if(lineBufRead + tid < lineBufWrite) {
                 lineIdx = s_lineBuf[(lineBufRead + tid) % LINE_BUF_SIZE];
 
-                float4 line = readLine(num_static_line_in_group, num_dyn_lines,
-                    static_lines_in_group, dyn_lines_in_env, lineIdx);
+                float4 line = readLine(num_dyn_lines, static_lines_in_group, dyn_lines_in_env, lineIdx);
                 float2 lb = make_float2(line.x-pose.x, line.y-pose.y);
                 float2 le = make_float2(line.z-pose.x, line.w-pose.y);
 
@@ -260,8 +259,7 @@ __global__ void rasterKernel(
                     uint32_t lineIdx = s_frLineIdxBuf[frLineBufIdx];
                     int s_grid = s_frLineSGridFragsBuf[frLineBufIdx] >> 16;
 
-                    float4 line = readLine(num_static_line_in_group, num_dyn_lines,
-                    static_lines_in_group, dyn_lines_in_env, lineIdx);
+                    float4 line = readLine(num_dyn_lines, static_lines_in_group, dyn_lines_in_env, lineIdx);
                     float2 lb = make_float2(line.x-pose.x, line.y-pose.y);
                     float2 le = make_float2(line.z-pose.x, line.w-pose.y);
 
@@ -287,7 +285,16 @@ __global__ void rasterKernel(
 
 class LidarSensor : public core::Component {
 public:
-    LidarSensor() : Component("LidarSensor") {}
+    LidarSensor() : Component("LidarSensor") {
+        // [group, env, inst, 4]
+        const auto& input_shape = core::getMessageBus()->getMessageShape("pose");
+        num_inst_ = input_shape[input_shape.size()-2];
+        output_shape_ = input_shape;
+        output_shape_[output_shape_.size()-1] = LIDAR_LINES;
+
+        addInput({"pose",input_shape});
+        addOutput({"lidar", output_shape_});
+    }
 
     void onEnvironGroupInit() override {
         // 初始化LidarSensor
@@ -299,13 +306,38 @@ public:
         // 重置LidarSensor
     }
 
-    void onRegister(core::SimulatorContext* context) {
+    void onNodeStart() override {
 
     }
 
-    void onNodeExecute(
-        const core::NodeExecInputType &input,
+    void onNodeExecute( const core::NodeExecInputType &input,
         core::NodeExecOutputType &output) override {
+
+        /// Grid: (num_lidars, num_envs, num_groups)
+        //  Block: (CTA_SIZE, 1, 1)
+        dim3 block_dim{CTA_SIZE, 1, 1};
+        uint32_t num_group = core::getEnvGroupMgr()->getNumActiveGroup();
+        uint32_t num_envs = core::getEnvGroupMgr()->getNumEnvPerGroup();
+        dim3 grid_dim{num_inst_, num_envs, num_group};
+
+        uint32_t num_dyn_lines = core::getGeometryManager()->getNumDynLines();
+
+        const float4* dyn_lines = core::getGeometryManager()->getDynamicLines().typed_data<float4>();
+        const float4* static_lines = core::getGeometryManager()->getStaticLines().typed_data<float4>();
+        const float4* pose = input.at("pose").begin()->typed_data<float4>();
+        const core::ConstantMemoryVector<uint32_t>& num_static_lines = core::getGeometryManager()->getNumStaticLines()->getDeviceData();
+
+        float *lidar = output.at("lidar").typed_data<float>();
+
+        rasterKernel<<<grid_dim, block_dim>>>(
+            num_static_lines,
+            static_lines,
+            num_dyn_lines,
+            dyn_lines,
+            pose,
+            lidar
+        );
+
         // rasterKernel, block大小 == 128, 1个block处理1个机器人. grid大小 == (环境组数,环境数,机器人数)
         // rasterKernel: Input:[poses], Output:[lidar_response]
         // 线段数据：储存在全局内存，numLines, 储存在 constant 内存
@@ -313,9 +345,10 @@ public:
         // 2. 计算机器人的位姿poses
         // 3. 发布激光雷达的响应lidar_response
     }
+private:
+    uint32_t num_inst_;
+    core::MessageShape output_shape_;
 };
-
-
 
 } // namespace component
 } // namespace cuda_simulator
