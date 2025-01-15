@@ -130,7 +130,7 @@ target_link_libraries(cudasim_core
 
 # /////////////////////////////////////////////////////
 add_executable(cudasim_test
-    src/test_mapgen.cu
+    src/test_lidar.cu
 
 )
 

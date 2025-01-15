@@ -23,8 +23,14 @@ using DescriptionId = std::int32_t;
 // &---------------------------------------------- MessageQueue -------------------------------------------------------
 class MessageQueue {
 public:
-    explicit MessageQueue(NodeId pub_node_id, NodeNameRef pub_node_name, MessageId message_id, MessageNameRef message_name,
-        MessageShapeRef shape, size_t max_history_len, std::optional<TensorHandle> history_padding_val = std::nullopt)
+    explicit MessageQueue(
+            NodeId pub_node_id,
+            NodeNameRef pub_node_name,
+            MessageId message_id,
+            MessageNameRef message_name,
+            MessageShapeRef shape,
+            size_t max_history_len,
+            std::optional<TensorHandle> history_padding_val = std::nullopt)
         : pub_node_id_(pub_node_id)
         , pub_node_name_(pub_node_name)
         , message_id_(message_id)

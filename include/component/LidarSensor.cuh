@@ -1,7 +1,6 @@
-#ifndef CUDASIM_COMPONENT_LIDAR_HH
-#define CUDASIM_COMPONENT_LIDAR_HH
+#ifndef CUDASIM_LIDAR_SENSOR_HH
+#define CUDASIM_LIDAR_SENSOR_HH
 
-#include <__clang_cuda_runtime_wrapper.h>
 #include <cub/cub.cuh>
 
 #include "core/Component.hh"
@@ -12,7 +11,7 @@
 #include "core/core_types.hh"
 
 namespace cuda_simulator {
-namespace component {
+namespace lidar_sensor {
 
 
 #define CTA_SIZE            (128)
@@ -287,15 +286,9 @@ __global__ void rasterKernel(
 
 class LidarSensor : public core::Component {
 public:
-    LidarSensor() : Component("LidarSensor") {
-        // [group, env, inst, 4]
-        const auto& input_shape = core::getMessageBus()->getMessageShape("pose");
-        num_inst_ = input_shape[input_shape.size()-2];
-        output_shape_ = input_shape;
-        output_shape_[output_shape_.size()-1] = LIDAR_LINES;
-
-        addInput({"pose",input_shape});
-        addOutput({"lidar", output_shape_});
+    LidarSensor() : Component("lidar_sensor") {
+        addDependence({"map_generator"});
+        addDependence({"robot_entry"});
     }
 
     void onEnvironGroupInit() override {
@@ -310,6 +303,21 @@ public:
 
     void onNodeStart() override {
 
+    }
+
+    void onNodeInit() override {
+        // [group, env, inst, 4]
+        std::optional<Component::NodeOutputInfo> pose_info = core::getContext()->getOutputInfo("robot_entry", "pose");
+        if(!pose_info.has_value()) {
+            throw std::runtime_error("LidarSensor: robot_entry::pose not found.");
+        }
+        core::MessageShapeRef input_shape(pose_info.value().shape);
+        num_inst_ = input_shape[input_shape.size()-2];
+        input_shape.copyTo(output_shape_);
+        output_shape_[output_shape_.size()-1] = LIDAR_LINES;
+
+        addInput({"pose", input_shape});
+        addOutput({"lidar", output_shape_});
     }
 
     void onNodeExecute( const core::NodeExecInputType &input,
@@ -352,9 +360,9 @@ private:
     core::MessageShape output_shape_;
 };
 
-} // namespace component
+} // namespace lidar_sensor
 } // namespace cuda_simulator
 
 
 
-#endif // CUDASIM_COMPONENT_LIDAR_HH
+#endif // CUDASIM_LIDAR_SENSOR_HH

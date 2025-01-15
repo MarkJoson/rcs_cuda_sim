@@ -68,7 +68,7 @@ public:
     MessageNameRef getMessageName() { return message_name_; }
     MessageNameRef getOutputMessageName() { return output_message_name_; }
     ReduceMethod getReduceMethod() { return reduce_method_; }
-    MessageShapeRef getMessageShape() { return message_shape_; }
+    MessageShapeRef getMessageShape() { return MessageShapeRef(message_shape_); }
 
 private:
     MessageName message_name_;

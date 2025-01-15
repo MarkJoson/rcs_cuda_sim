@@ -2,6 +2,7 @@
 #define CUDASIM_EXECUTENODE_HH
 
 #include <optional>
+#include <unordered_map>
 #include "core_types.hh"
 
 namespace cuda_simulator {
@@ -11,16 +12,17 @@ class SimulatorContext;
 
 class ExecuteNode {
 public:
+    // NodeInputInfo保留原始数据（message name字符串， shape数组）
     struct NodeInputInfo {
-        const MessageNameRef &message_name;
-        const MessageShape &shape;
+        const MessageName message_name;
+        const MessageShape shape;
         int history_offset;
         ReduceMethod reduce_method = ReduceMethod::STACK;
     };
 
     struct NodeOutputInfo {
-        const MessageNameRef &message_name;
-        const MessageShape &shape;
+        const MessageName message_name;
+        const MessageShape shape;
         std::optional<TensorHandle> history_padding_val = std::nullopt;
     };
 
@@ -42,21 +44,29 @@ public:
     NodeNameRef getName() const { return name_; }
     NodeTagRef getTag() const { return tag_; }
 
+    const NodeInputInfo &getInputInfo(const MessageNameRef &message_name) const {
+        return input_info_.at(message_name);
+    }
+
+    const NodeOutputInfo &getOutputInfo(const MessageNameRef &message_name) const {
+        return output_info_.at(message_name);
+    }
+
 protected:
     void addInput(const NodeInputInfo &info) {
-        input_info_.push_back(info);
+        input_info_.insert({info.message_name, info});
     }
 
     void addOutput(const NodeOutputInfo &info) {
-        output_info_.push_back(info);
+        output_info_.insert({info.message_name, info});
     }
 
 protected:
     NodeName name_;
     NodeTag tag_;
 
-    std::vector<NodeInputInfo> input_info_;
-    std::vector<NodeOutputInfo> output_info_;
+    std::unordered_map<MessageNameRef, NodeInputInfo> input_info_;
+    std::unordered_map<MessageNameRef, NodeOutputInfo> output_info_;
 };
 
 } // namespace core

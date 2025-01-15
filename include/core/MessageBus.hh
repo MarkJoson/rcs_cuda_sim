@@ -63,7 +63,7 @@ public:
 
     const MessageShape& getMessageShape(const MessageNameRef& message_name) {
         int message_id = message_id_map_[message_name];
-        return messages_[message_id].second;
+        return messages_.at(message_id).second;
     }
 
     void registerInput(ExecuteNode* component, const ExecuteNode::NodeInputInfo &info) {

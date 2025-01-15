@@ -11,16 +11,15 @@
 - ~~测试GeometryManager~~
 - ~~移植地图生成~~
 - ~~修改message queue创建shapes时的batch~~
+
+- Node的onReset接口
 - 移植并测试激光雷达
-- 移植一个brax引擎测试
+- python接口
 - 移植原有初始pbd版本引擎
+- 移植一个brax引擎测试
 - 移植Geniue引擎的相关实现
 
 - ~~什么时候sync_data?~~
-
-- python接口
-- Node的onReset接口
-
 - ~~ReducerComponent改名~~
 - ~~onRegister -> onNodeRegister~~
 

@@ -78,6 +78,24 @@ public:
         return dynamic_cast<T*>(components[com_id].get());
     }
 
+    std::optional<Component::NodeInputInfo> getInputInfo(const std::string &component_name, const std::string &message_name) {
+        auto com_id = component_map.find(component_name);
+        if(com_id == component_map.end()) {
+            return std::nullopt;
+        }
+
+        return components[com_id->second]->getInputInfo(message_name);
+    }
+
+    std::optional<Component::NodeOutputInfo> getOutputInfo(const std::string &component_name, const std::string &message_name) {
+        auto com_id = component_map.find(component_name);
+        if(com_id == component_map.end()) {
+            return std::nullopt;
+        }
+
+        return components[com_id->second]->getOutputInfo(message_name);
+    }
+
     // 初始化子系统: MessageBus, EnvGroupManager
     void initialize();
 
