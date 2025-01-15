@@ -81,7 +81,7 @@ public:
                 GRIDMAP_HEIGHT,
                 {0, 0},
                 GRIDMAP_RESOLU
-            }).getGridMapDescritpion();
+            }).getGridMapDescription();
         static_esdf_ = group_mgr->registerConfigTensor<float>("static_esdf",{grid_map_desc.grid_size.y, grid_map_desc.grid_size.x, 4});
     }
     ~GeometryManager() = default;
@@ -96,7 +96,7 @@ public:
     // 在所有环境组中创建动态物体
     DynamicObjectProxy createDynamicPolyObj(const SimplePolyShapeDef &polygon_def) {
         // 累加动态物体的边数
-        num_dyn_shape_lines_ += polygon_def.vertices.size();
+        num_dyn_lines_ += polygon_def.vertices.size();
         int obj_id = dyn_scene_desc_.size();
         dyn_scene_desc_.push_back(std::make_unique<SimplePolyShapeDef>(polygon_def));
         return DynamicObjectProxy(obj_id, this);
@@ -123,7 +123,7 @@ public:
         return dyn_lines_;
     }
     uint32_t getNumDynLines() {
-        return num_dyn_shape_lines_;
+        return num_dyn_lines_;
     }
     const TensorHandle& getStaticLines() {
         return static_lines_->getDeviceTensor();
@@ -204,8 +204,8 @@ protected:
     void assembleDynamicWorld() {
         /// Dynamic Object 仅保留多边形的凸包
 
-        std::vector<float4> h_dyn_shape_lines(num_dyn_shape_lines_);
-        std::vector<uint32_t> h_dyn_shape_line_ids(num_dyn_shape_lines_);
+        std::vector<float4> h_dyn_shape_lines(num_dyn_lines_);
+        std::vector<uint32_t> h_dyn_shape_line_ids(num_dyn_lines_);
 
         int line_idx = 0;
 
@@ -235,7 +235,7 @@ protected:
         // 拷贝dyn_shape_lines_
         TensorRegistry::getInstance().createTensor<float>(dyn_shape_lines_, "dyn_obj_lines", {});
         dyn_shape_lines_.fromHostArray(h_dyn_shape_lines.data(), NumericalDataType::kFloat32, h_dyn_shape_lines.size() * 4);
-        dyn_shape_lines_.reshape({num_dyn_shape_lines_, 4});
+        dyn_shape_lines_.reshape({num_dyn_lines_, 4});
 
         // 拷贝dyn_shape_line_ids_
         TensorRegistry::getInstance().createTensor<uint32_t>(dyn_shape_line_ids_, "dyn_obj_line_ids", {});
@@ -247,7 +247,7 @@ protected:
             dyn_lines_, "scene_lines", {
                 EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
                 EnvGroupManager::SHAPE_PLACEHOLDER_ENV,
-                num_dyn_shape_lines_,
+                num_dyn_lines_,
                 4
             }
         );
@@ -271,16 +271,16 @@ protected:
         const uint32_t num_group = getEnvGroupMgr()->getNumGroup();
         const uint32_t num_env_per_group = getEnvGroupMgr()->getNumEnvPerGroup();
 
-        if (num_dyn_shape_lines_ == 0) return;
+        if (num_dyn_lines_ == 0) return;
 
         uint32_t num_envs = num_group*num_env_per_group;
         uint32_t blocksize_y = std::min(num_envs, static_cast<uint32_t>(DUMP_DYM_LINES_CTA_SIZE/2));
         uint32_t grid_x = std::max((num_envs+blocksize_y-1) / blocksize_y, static_cast<uint32_t>(1u));
         dim3 block(2, blocksize_y, 1);
-        dim3 grid(grid_x, num_dyn_shape_lines_, 1);
+        dim3 grid(grid_x, num_dyn_lines_, 1);
 
         transformDynamicLinesKernel<<<grid, block>>>(
-                num_dyn_shape_lines_,
+                num_dyn_lines_,
                 num_envs,
                 dyn_shape_lines_.typed_data<float>(),
                 dyn_shape_line_ids_.typed_data<uint32_t>(),
@@ -310,7 +310,7 @@ private:
 
     // 动态物体
     DynamicSceneDescription dyn_scene_desc_;                        // 动态物体定义（仅支持多边形）
-    uint32_t                num_dyn_shape_lines_ = 0;               // 多边形线段数量
+    uint32_t                num_dyn_lines_ = 0;               // 多边形线段数量
     TensorHandle            dyn_shape_line_ids_;                    // 点集合对应的物体id: [line] -> {16位物体id, 16位内部点id}
     TensorHandle            dyn_shape_lines_;                       // 多边形线段集合（局部坐标系）: [line, 4]
 
@@ -330,4 +330,4 @@ private:
 } // namespace core
 } // namespace cuda_simulator
 
-#endif // CUDASIM_GEOMETRY_WORLD_MANAGER_HH
+#endif // CUDASIM_GEOMETRY_GEOMGETRY_MANAGER_HH

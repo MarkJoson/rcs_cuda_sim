@@ -278,7 +278,7 @@ public:
         CvMatViewer::showFloatImg(dist_float_splited[2], occ_map_);
     }
 
-    GridMapDescription getGridMapDescritpion() const {
+    GridMapDescription getGridMapDescription() const {
         return desc_;
     }
 

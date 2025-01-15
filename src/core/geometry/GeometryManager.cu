@@ -3,6 +3,8 @@
 
 /**
  * @brief 依据动态形状的位置，将动态形状的多边形边，转换到世界坐标系下
+ block_dim: <2, min(128, num_env_lo), 1>
+ grid_dim: <num_env_hi, num_dyn_lines_, 1>
  * @param num_dynobj_lines 动态物体边的数量总和
  * @param dyn_obj_lines 动态物体边外形
  * @param dyn_obj_line_ids 动态物体边对应的object id
