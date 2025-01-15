@@ -35,7 +35,9 @@ namespace component {
 
 __host__ __device__ bool lineVisibleCheck(float2 vs, float2 ve, float max_range)
 {
-    // !边界按照逆时针排列
+    // 粗过滤可见边，使用距离+朝向的判定
+
+    // !假定多边形按照逆时针排列
     float cdot = vs.x*ve.y - vs.y*ve.x;
 
     float dx = ve.x-vs.x;
@@ -84,7 +86,7 @@ __forceinline__ __device__ float4 readLine(
 
 
 __global__ void rasterKernel(
-    const core::ConstantMemoryVector<uint32_t>& num_static_lines,   // 每个场景中的静态线段数量
+    const core::ConstantMemoryVector<uint32_t> num_static_lines,   // 每个场景中的静态线段数量
     const float4 * __restrict__ static_lines,                       // 线段的起点
     int                         num_dyn_lines,                      // 场景中的动态线段数量，所有场景统一
     const float4 * __restrict__ dyn_lines,                          // 动态线段数组
@@ -97,7 +99,7 @@ __global__ void rasterKernel(
     volatile __shared__ uint32_t s_lineBuf[LINE_BUF_SIZE];           // 1K
     volatile __shared__ uint32_t s_frLineIdxBuf[FR_BUF_SIZE];        // 1K
     volatile __shared__ uint32_t s_frLineSGridFragsBuf[FR_BUF_SIZE]; // 1K
-    __shared__ uint32_t s_lidarResponse[LIDAR_LINES];                // 1K
+    __shared__ uint32_t s_lidarResponse[LIDAR_LINES];                // 256B
     __shared__ union {
         typename BlockScan::TempStorage scan_temp_storage;
         typename BlockRunLengthDecodeT::TempStorage decode_temp_storage;
@@ -115,8 +117,8 @@ __global__ void rasterKernel(
     const float4* __restrict__ static_lines_in_group = static_lines + group_id;
     // 每个场景组静态线段的数量不同
     int num_static_line_in_group = num_static_lines[group_id];
-    // static line在前，dynamic line在后
-    int num_lines = num_static_line_in_group + num_dyn_lines;
+    // dynamic line在前，static line在后
+    int num_lines = num_dyn_lines + num_static_line_in_group;
 
     uint32_t tid = threadIdx.x;
     uint32_t totalLineRead = 0;

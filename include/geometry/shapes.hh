@@ -2,6 +2,7 @@
 #define CUDASIM_GEOMETRY_SHAPES_HH
 
 
+#include <algorithm>
 #include <vector>
 #include <memory>
 #include "geometry_types.hh"
@@ -21,11 +22,13 @@ struct ShapeDef {
         : type(type)
         , restitution(restitution)
         , friction(friction) {}
+
+    virtual ~ShapeDef() = default;
 };
 
 
 // ^--------------圆形--------------
-struct CircleShapeDef : public ShapeDef {
+struct CircleShapeDef final: public ShapeDef {
     Vector2f center;
     float radius;
 
@@ -39,7 +42,7 @@ struct CircleShapeDef : public ShapeDef {
 
 // ^--------------简单多边形--------------
 // 即没有洞的多边形
-struct SimplePolyShapeDef : public ShapeDef {
+struct SimplePolyShapeDef final: public ShapeDef {
     std::vector<Vector2f> vertices;
     std::vector<Vector2f> convex_hull;
     Vector2f centroid;
@@ -151,7 +154,7 @@ struct SimplePolyShapeDef : public ShapeDef {
 // ^--------------多边形组合体--------------
 // 所有的正方向多边形 - 负方向多边形。可以有洞。每个连通边界都是一个简单多边形
 // ! 点集是按照逆时针排列。在遍历时，使用逆时针表示边界，顺时针表示孔洞
-struct ComposedPolyShapeDef : public ShapeDef {
+struct ComposedPolyShapeDef final: public ShapeDef {
     std::vector<SimplePolyShapeDef> positive_polys;  // 正向多边形
     std::vector<SimplePolyShapeDef> negative_polys;  // 负向多边形（洞）
     std::vector<Vector2f> convex_hull;                // 凸包

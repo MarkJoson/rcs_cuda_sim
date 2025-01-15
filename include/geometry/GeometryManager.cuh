@@ -30,7 +30,7 @@ namespace cuda_simulator {
 namespace core {
 namespace geometry {
 
-#define DUMP_DYM_LINES_CTA_SIZE (256u)
+#define TRANS_DYN_LINES_CTA_SIZE (256u)
 
 __global__ void transformDynamicLinesKernel(
         const uint32_t num_dynobj_lines,
@@ -42,6 +42,7 @@ __global__ void transformDynamicLinesKernel(
 
 class GeometryManager {
     constexpr static uint32_t MAX_STATIC_LINES = 16384;
+    constexpr static uint32_t MAX_DYN_LINES = 65536;
 
     constexpr static float GRIDMAP_RESOLU = 0.002;
     constexpr static float GRIDMAP_WIDTH = 3;
@@ -148,10 +149,10 @@ protected:
                 auto &pose = static_obj.second;
 
                 if (shape->type == ShapeType::SIMPLE_POLYGON) {
-                    auto poly = reinterpret_cast<SimplePolyShapeDef *>(shape.get());
+                    auto poly = dynamic_cast<SimplePolyShapeDef *>(shape.get());
                     grid_map.drawPolygon(*poly, pose);
                 } else if(shape->type == ShapeType::COMPOSED_POLYGON) {
-                    auto poly = reinterpret_cast<ComposedPolyShapeDef *>(shape.get());
+                    auto poly = dynamic_cast<ComposedPolyShapeDef *>(shape.get());
                     grid_map.drawPolygon(*poly, pose);
                 } else {
                     throw std::runtime_error("Shape Type Not Support at Present!");
@@ -190,9 +191,9 @@ protected:
             for (auto &static_obj : static_scene_descs_->at(group_id)) {
                 const auto &shape = static_obj.first;
                 if(shape->type == ShapeType::SIMPLE_POLYGON) {          // 简单多边形
-                    poly_handle_fn(reinterpret_cast<SimplePolyShapeDef *>(shape.get()), static_obj.second);
+                    poly_handle_fn(dynamic_cast<SimplePolyShapeDef *>(shape.get()), static_obj.second);
                 } else if(shape->type == ShapeType::COMPOSED_POLYGON) {     // 复合多边形
-                    poly_handle_fn(reinterpret_cast<ComposedPolyShapeDef *>(shape.get()), static_obj.second);
+                    poly_handle_fn(dynamic_cast<ComposedPolyShapeDef *>(shape.get()), static_obj.second);
                 } else {
                     throw std::runtime_error("Shape Type Not Support at Present!");
                 }
@@ -209,6 +210,11 @@ protected:
 
         int line_idx = 0;
 
+        if(dyn_scene_desc_.size() >= MAX_DYN_LINES) {
+            // 由于当前kernel的限制，最多支持65536个线段，这在实际应用中应该足够了
+            throw std::runtime_error("Number of Dynamic Lines exceeds the container capacity!");
+        }
+
         auto poly_handle_fn = [&h_dyn_shape_line_ids, &h_dyn_shape_lines, &line_idx]<typename T>(const T* shape, int shape_id) {
             for(auto line_iter = shape->begin({}); line_iter != shape->end({}); ++line_iter) {
                 // 线段信息
@@ -224,9 +230,9 @@ protected:
             const std::unique_ptr<ShapeDef>& shape = dyn_scene_desc_[dyn_shape_id];
 
             if(shape->type == ShapeType::SIMPLE_POLYGON) {          // 简单多边形
-                poly_handle_fn(reinterpret_cast<SimplePolyShapeDef *>(shape.get()), dyn_shape_id);
+                poly_handle_fn(dynamic_cast<SimplePolyShapeDef *>(shape.get()), dyn_shape_id);
             } else if(shape->type == ShapeType::COMPOSED_POLYGON) {     // 复合多边形
-                poly_handle_fn(reinterpret_cast<ComposedPolyShapeDef *>(shape.get()), dyn_shape_id);
+                poly_handle_fn(dynamic_cast<ComposedPolyShapeDef *>(shape.get()), dyn_shape_id);
             } else {
                 throw std::runtime_error("Shape Type Not Support at Present!");
             }
@@ -274,7 +280,7 @@ protected:
         if (num_dyn_lines_ == 0) return;
 
         uint32_t num_envs = num_group*num_env_per_group;
-        uint32_t blocksize_y = std::min(num_envs, static_cast<uint32_t>(DUMP_DYM_LINES_CTA_SIZE/2));
+        uint32_t blocksize_y = std::min(num_envs, static_cast<uint32_t>(TRANS_DYN_LINES_CTA_SIZE/2));
         uint32_t grid_x = std::max((num_envs+blocksize_y-1) / blocksize_y, static_cast<uint32_t>(1u));
         dim3 block(2, blocksize_y, 1);
         dim3 grid(grid_x, num_dyn_lines_, 1);
@@ -310,7 +316,7 @@ private:
 
     // 动态物体
     DynamicSceneDescription dyn_scene_desc_;                        // 动态物体定义（仅支持多边形）
-    uint32_t                num_dyn_lines_ = 0;               // 多边形线段数量
+    uint32_t                num_dyn_lines_ = 0;                     // 多边形线段数量
     TensorHandle            dyn_shape_line_ids_;                    // 点集合对应的物体id: [line] -> {16位物体id, 16位内部点id}
     TensorHandle            dyn_shape_lines_;                       // 多边形线段集合（局部坐标系）: [line, 4]
 
