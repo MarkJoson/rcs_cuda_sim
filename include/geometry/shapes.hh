@@ -141,7 +141,7 @@ struct SimplePolyShapeDef final: public ShapeDef {
 
     private:
         const std::vector<Vector2f>& vertices_;
-        const Transform2D& transform_;
+        Transform2D transform_; // 使用值传递避免引用失效问题
         size_t index_;
     };
 
@@ -248,7 +248,7 @@ struct ComposedPolyShapeDef final: public ShapeDef {
     private:
         const std::vector<SimplePolyShapeDef>& positive_polys_;
         const std::vector<SimplePolyShapeDef>& negative_polys_;
-        const Transform2D& transform_;
+        Transform2D transform_;
         size_t poly_index_;
         size_t vertex_index_;
         bool is_positive_;

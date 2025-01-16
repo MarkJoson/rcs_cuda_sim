@@ -172,7 +172,7 @@ public:
         std::unordered_map<Pointi, std::list<int>, PointHash> map_spt_idx;
         // std::unordered_map<PtHash, std::list<int>> map_ept_idx;
 
-        for (int i = 0; i < edges.size(); i++) {
+        for (size_t i = 0; i < edges.size(); i++) {
             const auto &[spt, ept] = edges[i];
 
             if (map_spt_idx.find(spt) == map_spt_idx.end())

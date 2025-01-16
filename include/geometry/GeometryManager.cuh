@@ -216,7 +216,7 @@ protected:
         }
 
         auto poly_handle_fn = [&h_dyn_shape_line_ids, &h_dyn_shape_lines, &line_idx]<typename T>(const T* shape, int shape_id) {
-            for(auto line_iter = shape->begin({}); line_iter != shape->end({}); ++line_iter) {
+            for(auto line_iter = shape->begin(Transform2D()); line_iter != shape->end(Transform2D()); ++line_iter) {
                 // 线段信息
                 h_dyn_shape_lines[line_idx] = make_float4((*line_iter).start.x, (*line_iter).start.y,
                                                             (*line_iter).end.x, (*line_iter).end.y);
