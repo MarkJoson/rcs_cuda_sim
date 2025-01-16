@@ -183,6 +183,10 @@ std::vector<int64_t> GTensorTorchWrapper::shape() const
     return ret_shape;
 }
 
+DeviceType GTensorTorchWrapper::device() const {
+    return impl_->device_type;
+}
+
 size_t GTensorTorchWrapper::elemCount() const
 {
     return impl_->tensor.numel();

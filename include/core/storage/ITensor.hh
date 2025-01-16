@@ -40,6 +40,7 @@ public:
     virtual size_t elemSize() const = 0;
     virtual size_t dim() const = 0;
     virtual NumericalDataType dtype() const = 0;
+    virtual DeviceType device() const = 0;
     virtual bool is_contiguous() const = 0;
 
     // raw data access

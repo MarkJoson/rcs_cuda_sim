@@ -77,6 +77,7 @@ public:
     size_t elemSize() const override;
     size_t dim() const override;
     NumericalDataType dtype() const override;
+    DeviceType device() const override;
     bool is_contiguous() const override;
 
     void* data() override;
