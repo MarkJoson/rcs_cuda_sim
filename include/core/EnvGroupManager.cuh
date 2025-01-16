@@ -151,7 +151,6 @@ public:
     }
 };
 
-
 class EGConfigItemBase {
 protected:
     MemoryType mem_type_;
@@ -376,7 +375,6 @@ public:
                 shape.push_back(s);
             }
         }
-
         TensorRegistry::getInstance().createTensor<T>(target, name, shape, device_type);
     }
 

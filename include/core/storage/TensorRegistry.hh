@@ -1,5 +1,5 @@
-#ifndef __TENSOR_REGISTRY_H__
-#define __TENSOR_REGISTRY_H__
+#ifndef TENSOR_REGISTRY_H
+#define TENSOR_REGISTRY_H
 
 #include <memory>
 #include <string>
@@ -116,4 +116,4 @@ private:
 } // namespace core
 } // namespace cuda_simulator
 
-#endif
+#endif // TENSOR_REGISTRY_H

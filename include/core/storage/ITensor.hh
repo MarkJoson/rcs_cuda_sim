@@ -6,10 +6,8 @@
 #include <iostream>
 #include "Scalar.hh"
 
-namespace cuda_simulator
-{
-namespace core
-{
+namespace cuda_simulator {
+namespace core {
 
 template<typename T>
 inline constexpr bool always_false_v = false;

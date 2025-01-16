@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <vector>
-#include <memory>
 #include "geometry_types.hh"
 
 namespace cuda_simulator {

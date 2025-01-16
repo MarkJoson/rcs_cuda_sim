@@ -6,14 +6,10 @@
 #include "ITensor.hh"
 #include "Scalar.hh"
 
-namespace cuda_simulator
-{
-namespace core
-{
+namespace cuda_simulator {
+namespace core {
 
-
-namespace internal
-{
+namespace internal {
     class TorchTensorImpl;
     std::shared_ptr<TorchTensorImpl> shareTorchTensorImpl(const std::shared_ptr<TorchTensorImpl> &impl);
 }

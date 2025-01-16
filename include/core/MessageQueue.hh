@@ -11,14 +11,11 @@
 #include "EnvGroupManager.cuh"
 #include "SimulatorContext.hh"
 
-namespace cuda_simulator
-{
-namespace core
-{
+namespace cuda_simulator {
+namespace core {
 
 using MessageQueueId = std::uint32_t;
 using DescriptionId = std::int32_t;
-
 
 // &---------------------------------------------- MessageQueue -------------------------------------------------------
 class MessageQueue {
