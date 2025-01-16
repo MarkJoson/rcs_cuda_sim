@@ -1,5 +1,6 @@
 #include <cub/cub.cuh>
 
+#include "core/storage/Scalar.hh"
 #include "cuda_helper.h"
 
 #include "component/LidarSensor.hh"
@@ -315,7 +316,7 @@ void LidarSensor::onNodeInit() {
 
   addInput({"pose", input_shape, 0, ReduceMethod::STACK});
 
-  addOutput({"lidar", output_shape_});
+  addOutput({"lidar", output_shape_, NumericalDataType::kUInt32});
 }
 
 void LidarSensor::onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output) {
@@ -341,7 +342,7 @@ void LidarSensor::onNodeExecute(const NodeExecInputType &input, NodeExecOutputTy
   checkCudaErrors(cudaDeviceSynchronize());
   // TODO. 删除自己的dynamic_line
 
-  std::cout << "LidarSensor: "<< output.at("lidar") << std::endl;
+  std::cout << "LidarSensor: "<< output.at("lidar")/65536/1024.f << std::endl;
 
   // rasterKernel, block大小 == 128, 1个block处理1个机器人. grid大小 ==
   // (环境组数,环境数,机器人数) rasterKernel: Input:[poses],

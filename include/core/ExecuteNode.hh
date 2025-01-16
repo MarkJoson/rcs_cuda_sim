@@ -3,6 +3,7 @@
 
 #include <optional>
 #include <unordered_map>
+#include "core/storage/Scalar.hh"
 #include "core_types.hh"
 
 namespace cuda_simulator {
@@ -23,6 +24,7 @@ public:
     struct NodeOutputInfo {
         const MessageName message_name;
         const MessageShape shape;
+        NumericalDataType dtype = NumericalDataType::kFloat32;
         std::optional<TensorHandle> history_padding_val = std::nullopt;
     };
 
@@ -47,11 +49,11 @@ public:
     NodeNameRef getName() const { return name_; }
     NodeTagRef getTag() const { return tag_; }
 
-    const NodeInputInfo &getInputInfo(const MessageNameRef &message_name) const {
+    const NodeInputInfo &getInputInfo(const MessageName &message_name) const {
         return input_info_.at(message_name);
     }
 
-    const NodeOutputInfo &getOutputInfo(const MessageNameRef &message_name) const {
+    const NodeOutputInfo &getOutputInfo(const MessageName &message_name) const {
         return output_info_.at(message_name);
     }
 
@@ -72,8 +74,8 @@ protected:
     NodeName name_;
     NodeTag tag_;
 
-    std::unordered_map<MessageNameRef, NodeInputInfo> input_info_;
-    std::unordered_map<MessageNameRef, NodeOutputInfo> output_info_;
+    std::unordered_map<MessageName, NodeInputInfo> input_info_;
+    std::unordered_map<MessageName, NodeOutputInfo> output_info_;
 };
 
 } // namespace core

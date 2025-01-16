@@ -11,6 +11,7 @@ MessageQueue::MessageQueue(
             MessageId message_id,
             MessageNameRef message_name,
             MessageShapeRef shape,
+            NumericalDataType dtype,
             size_t max_history_len,
             std::optional<TensorHandle> history_padding_val)
     : pub_node_id_(pub_node_id)
@@ -18,6 +19,7 @@ MessageQueue::MessageQueue(
     , message_id_(message_id)
     , message_name_(message_name)
     , shape_(shape)
+    , dtype_(dtype)
     , max_history_len_(max_history_len)
     , history_padding_val_(history_padding_val)
     , write_index_(0)
@@ -34,9 +36,11 @@ void MessageQueue::allocate() {
         std::string tensor_uri = generateTensorUri(i);
 
         // 根据shape创建对应的tensor
-        std::vector<int64_t> tensor_shape(shape_.begin(), shape_.end());
+        std::vector<int64_t> tensor_shape = {
+            EnvGroupManager::SHAPE_PLACEHOLDER_GROUP, EnvGroupManager::SHAPE_PLACEHOLDER_ENV};
+        tensor_shape.insert(tensor_shape.end(), shape_.begin(), shape_.end());
         history_.push_back(
-            core::getEnvGroupMgr()->createTensor<float>(tensor_uri, tensor_shape));
+            core::getEnvGroupMgr()->createTensor(tensor_uri, tensor_shape, dtype_));
 
         if(history_padding_val_.has_value()) {
             // 填充历史数据

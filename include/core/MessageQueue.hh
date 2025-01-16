@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 
+#include "core/storage/Scalar.hh"
 #include "core_types.hh"
 
 
@@ -25,8 +26,12 @@ public:
             MessageId message_id,
             MessageNameRef message_name,
             MessageShapeRef shape,
+            NumericalDataType dtype,
             size_t max_history_len,
             std::optional<TensorHandle> history_padding_val = std::nullopt);
+
+    MessageQueue(const MessageQueue&) = delete;
+    MessageQueue& operator=(const MessageQueue&) = delete;
 
     void allocate();
 
@@ -48,9 +53,8 @@ private:
     MessageId   message_id_;
     MessageNameRef message_name_;
 
-    // TODO. batchsize
-
     MessageShapeRef shape_;
+    NumericalDataType dtype_;
     size_t max_history_len_;
     std::optional<TensorHandle> history_padding_val_;
 

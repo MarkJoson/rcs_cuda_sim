@@ -15,13 +15,6 @@ namespace core {
 
 // 单例模式
 class TensorRegistry {
-protected:
-    // 创建张量接口，返回刚刚创建Tensor的引用
-    TensorHandle& createTensor(const std::string& uri, const std::vector<int64_t>& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
-        tensors.insert(std::make_pair(uri, TensorHandle(shape, dtype, device_type)));
-        return tensors.at(uri);
-    }
-
 public:
     // 删除拷贝和移动操作
     TensorRegistry(const TensorRegistry&) = delete;
@@ -29,10 +22,20 @@ public:
     TensorRegistry(TensorRegistry&&) = delete;
     TensorRegistry& operator=(TensorRegistry&&) = delete;
 
+    // 创建张量接口，返回刚刚创建Tensor的引用
+    TensorHandle& createTensor(const std::string& uri, const std::vector<int64_t>& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
+        tensors.insert(std::make_pair(uri, TensorHandle(shape, dtype, device_type)));
+        return tensors.at(uri);
+    }
+
     template<typename T>
     TensorHandle& createTensor(const std::string& uri, const std::vector<int64_t>& shape, DeviceType device_type=DeviceType::kCUDA) {
         auto dtype = TensorHandle::convertTypeToTensorType<T>();
         return createTensor(uri, shape, dtype, device_type);
+    }
+
+    void createTensor(TensorHandle& target, const std::string& uri, const std::vector<int64_t>& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
+        target.bindTensorRef(createTensor(uri, shape, dtype, device_type));
     }
 
     // 对已经定义的TensorHandle直接使用赋值运算符，不会使新TensorHandle的内部impl指针指向在TensorRegistry中的真实数据

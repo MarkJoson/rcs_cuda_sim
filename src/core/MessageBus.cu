@@ -32,6 +32,7 @@
 #include "core/MessageQueue.hh"
 
 #include "core/ReducerNode.hh"
+#include "core/storage/Scalar.hh"
 
 namespace cuda_simulator {
 namespace core {
@@ -109,6 +110,7 @@ public:
             message_id,
             info.message_name,
             info.shape,
+            info.dtype,
             info.history_padding_val,
             INT_MAX
         });
@@ -301,6 +303,8 @@ private:    // ^---- 私有定义 -----
         MessageNameRef message_name;
         // 消息形状
         MessageShape shape;
+        // 数值数据类型
+        NumericalDataType dtype;
         // 无效历史数据的填充值
         std::optional<TensorHandle> history_padding_val;
         // 消息队列ID
@@ -645,6 +649,7 @@ private:    // ^---- 私有定义 -----
                     message_id,
                     message_name,
                     pub.shape,
+                    pub.dtype,
                     max_mq_history_offset+1));
             }
         }

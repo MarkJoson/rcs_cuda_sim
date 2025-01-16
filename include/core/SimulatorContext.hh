@@ -53,9 +53,9 @@ public:
     // 获得GeometryManager实例
     geometry::GeometryManager* getGeometryManager();
     // 获得InputInfo
-    Component::NodeInputInfo getInputInfo(const NodeNameRef &component_name, const MessageNameRef &message_name);
+    Component::NodeInputInfo getInputInfo(const NodeNameRef &component_name, const MessageName &message_name);
     // 获得OutputInfo
-    Component::NodeOutputInfo getOutputInfo(const NodeNameRef &component_name, const MessageNameRef &message_name);
+    Component::NodeOutputInfo getOutputInfo(const NodeNameRef &component_name, const MessageName &message_name);
     void initialize();
     // 初始化组件
     void setup(const std::vector<NodeTagRef> &entrances = {"default", "observe"});

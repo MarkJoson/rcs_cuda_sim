@@ -49,7 +49,7 @@ public:
         return geometry_manager.get();
     }
 
-    Component::NodeInputInfo getInputInfo(const NodeNameRef &component_name, const MessageNameRef &message_name) {
+    Component::NodeInputInfo getInputInfo(const NodeNameRef &component_name, const MessageName &message_name) {
         auto com_id = component_map.find(component_name);
         if(com_id == component_map.end()) {
             throw std::runtime_error("Component not found");
@@ -58,7 +58,7 @@ public:
         return components.at(com_id->second)->getInputInfo(message_name);
     }
 
-    Component::NodeOutputInfo getOutputInfo(const NodeNameRef &component_name, const MessageNameRef &message_name) {
+    Component::NodeOutputInfo getOutputInfo(const NodeNameRef &component_name, const MessageName &message_name) {
         auto com_id = component_map.find(component_name);
         if(com_id == component_map.end()) {
             throw std::runtime_error("Component not found");
@@ -180,11 +180,11 @@ Component* SimulatorContext::pushComponent(std::unique_ptr<Component> &&componen
     return impl->pushComponent(std::move(component));
 }
 
-Component::NodeInputInfo SimulatorContext::getInputInfo(const NodeNameRef &component_name, const MessageNameRef &message_name) {
+Component::NodeInputInfo SimulatorContext::getInputInfo(const NodeNameRef &component_name, const MessageName &message_name) {
     return impl->getInputInfo(component_name, message_name);
 }
 
-Component::NodeOutputInfo SimulatorContext::getOutputInfo(const NodeNameRef &component_name, const MessageNameRef &message_name) {
+Component::NodeOutputInfo SimulatorContext::getOutputInfo(const NodeNameRef &component_name, const MessageName &message_name) {
     return impl->getOutputInfo(component_name, message_name);
 }
 
