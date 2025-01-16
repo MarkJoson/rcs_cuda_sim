@@ -52,6 +52,10 @@ public:
         return output_info_.at(message_name);
     }
 
+    const auto& getInputs() const { return input_info_; }
+    const auto& getOutputs() const { return output_info_; }
+
+
 protected:
     void addInput(const NodeInputInfo &info) {
         input_info_.insert({info.message_name, info});
