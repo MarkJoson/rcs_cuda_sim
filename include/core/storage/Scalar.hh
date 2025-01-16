@@ -18,7 +18,6 @@ enum class NumericalDataType
 
 class Scalar {
 public:
-
     using Type = NumericalDataType;
 
     // Constructors
@@ -31,16 +30,16 @@ public:
     Scalar(uint32_t v) : type_(Type::kUInt32), uint32_value_(v) {}
 
     // NumericalDataType checking
-    bool isFloatingPoint() const {
+    inline bool isFloatingPoint() const {
         return type_ == Type::kFloat32 || type_ == Type::kFloat64;
     }
 
-    bool isIntegral() const {
+    inline bool isIntegral() const {
         return type_ == Type::kInt32 || type_ == Type::kInt64;
     }
 
     // Value getters
-    float toFloat() const {
+    inline float toFloat() const {
         switch (type_) {
             case Type::kFloat32: return float_value_;
             case Type::kFloat64: return static_cast<float>(double_value_);
@@ -52,7 +51,7 @@ public:
         return 0.0f;
     }
 
-    double toDouble() const {
+    inline double toDouble() const {
         switch (type_) {
             case Type::kFloat32: return static_cast<double>(float_value_);
             case Type::kFloat64: return double_value_;
@@ -64,7 +63,7 @@ public:
         return 0.0;
     }
 
-    int32_t toInt32() const {
+    inline int32_t toInt32() const {
         switch (type_) {
             case Type::kFloat32: return static_cast<int32_t>(float_value_);
             case Type::kFloat64: return static_cast<int32_t>(double_value_);
@@ -76,7 +75,7 @@ public:
         return 0;
     }
 
-    int64_t toInt64() const {
+    inline int64_t toInt64() const {
         switch (type_) {
             case Type::kFloat32: return static_cast<int64_t>(float_value_);
             case Type::kFloat64: return static_cast<int64_t>(double_value_);
@@ -88,7 +87,7 @@ public:
         return 0;
     }
 
-    uint8_t toUInt8() const {
+    inline uint8_t toUInt8() const {
         switch (type_) {
             case Type::kFloat32: return static_cast<uint8_t>(float_value_);
             case Type::kFloat64: return static_cast<uint8_t>(double_value_);
@@ -100,7 +99,7 @@ public:
         return 0;
     }
 
-    uint32_t toUInt32() const {
+    inline uint32_t toUInt32() const {
         switch (type_) {
             case Type::kFloat32: return static_cast<uint32_t>(float_value_);
             case Type::kFloat64: return static_cast<uint32_t>(double_value_);
@@ -112,7 +111,7 @@ public:
         return 0;
     }
 
-    Type type() const {
+    inline Type type() const {
         return type_;
     }
 

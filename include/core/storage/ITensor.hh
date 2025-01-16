@@ -69,7 +69,7 @@ public:
     inline T item() const { return derived().template item_impl<T>(); }
 
     template<typename T>
-    void fromHostVector(const std::vector<T>& vec) {
+    inline void fromHostVector(const std::vector<T>& vec) {
         derived().fromHostVectorImpl(vec);
     }
 

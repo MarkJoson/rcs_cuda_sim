@@ -181,6 +181,7 @@ public:
     EGHostMemConfigItem(int64_t num_group, MemoryType alternative=MemoryType::HOST_MEM)
         : EGConfigItemBase(num_group, alternative), host_data_(num_group)
     { }
+    virtual ~EGHostMemConfigItem() = default;
 
     T& at(int64_t idx) {
         return host_data_[idx];
@@ -290,6 +291,9 @@ public:
         if(num_active_group > num_group) {
             throw std::runtime_error("num_active_group should be less than or equal to num_group");
         }
+        if(num_env_per_group <= 0 || num_group <= 0 || num_active_group <= 0) {
+            throw std::runtime_error("num_env_per_group, num_group, num_active_group should be greater than 0");
+        }
         env_group_impl::setNumActiveGroup(num_active_group);
     }
 
@@ -376,8 +380,16 @@ public:
         TensorRegistry::getInstance().createTensor<T>(target, name, shape, device_type);
     }
 
+    void sampleActiveGroupIndices() {
+        // TODO. 目前是顺序取，后续可以考虑随机取
+        active_group_indices_.clear();
+        for(int i = 0; i < num_active_group_; i++) {
+            active_group_indices_.push_back(i);
+        }
+    }
+
     int getNumGroup() const { return num_group_; }
-    int getNumActiveGroup() const { return active_group_indices_.size(); }
+    int getNumActiveGroup() const { return num_active_group_; }
     int getNumEnvPerGroup() const { return num_env_per_group_; }
 
     void syncToDevice() {
@@ -399,6 +411,7 @@ private:
     // 当前活跃环境组的数量
     const int num_active_group_;
     // 活跃环境组的索引
+    // TODO. 移动到全局变量
     std::vector<int> active_group_indices_;
     // 环境组配置项注册表
     std::unordered_map<std::string, std::unique_ptr<EGConfigItemBase>> registry_;

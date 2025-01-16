@@ -29,6 +29,9 @@ public:
     ExecuteNode(const NodeName &name, const NodeTag &tag = "default")
         : name_(name), tag_(tag) {}
 
+    ExecuteNode(const NodeNameRef &name, const NodeTag &tag = "default")
+        : name_(name), tag_(tag) {}
+
     virtual ~ExecuteNode() = default;
 
     // 初始化输入输出

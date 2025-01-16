@@ -272,10 +272,10 @@ public:
             }
         }
 
-        cv::Mat blob_map = cv::Mat(desc_.grid_size.y, desc_.grid_size.x, CV_32FC4, output_ptr);
-        std::vector<cv::Mat> dist_float_splited;
-        cv::split(blob_map, dist_float_splited);
-        CvMatViewer::showFloatImg(dist_float_splited[2], occ_map_);
+        // cv::Mat blob_map = cv::Mat(desc_.grid_size.y, desc_.grid_size.x, CV_32FC4, output_ptr);
+        // std::vector<cv::Mat> dist_float_splited;
+        // cv::split(blob_map, dist_float_splited);
+        // CvMatViewer::showFloatImg(dist_float_splited[2], occ_map_);
     }
 
     GridMapDescription getGridMapDescription() const {

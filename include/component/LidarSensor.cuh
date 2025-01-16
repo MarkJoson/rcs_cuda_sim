@@ -7,6 +7,7 @@
 #include "core/SimulatorContext.hh"
 #include "core/EnvGroupManager.cuh"
 #include "core/MessageBus.hh"
+#include "cuda_helper.h"
 #include "geometry/GeometryManager.cuh"
 #include "core/core_types.hh"
 
@@ -90,7 +91,7 @@ __global__ void rasterKernel(
     int                         num_dyn_lines,                      // 场景中的动态线段数量，所有场景统一
     const float4 * __restrict__ dyn_lines,                          // 动态线段数组
     const float4 * __restrict__ poses,                              // 机器人的位姿
-    float        * __restrict__ lidar_response                      // 激光雷达的响应
+    uint32_t     * __restrict__ lidar_response                      // 激光雷达的响应
 ) {
     using BlockScan = cub::BlockScan<uint32_t, CTA_SIZE>;
     using BlockRunLengthDecodeT = cub::BlockRunLengthDecode<uint32_t, CTA_SIZE, 1, EMIT_PER_THREAD>;
@@ -123,7 +124,8 @@ __global__ void rasterKernel(
     uint32_t totalLineRead = 0;
     uint32_t lineBufRead=0, lineBufWrite=0;
     uint32_t frLineBufRead=0, frLineBufWrite=0;
-    float4 pose = poses[lidar_inst_id];
+    // float4 pose = poses[lidar_inst_id];
+    float4 pose = {0.5,0.5,0,0};
 
     /********* 初始化lidar数据 *********/
     for(int i=tid; i<LIDAR_LINES; i+=CTA_SIZE)
@@ -281,6 +283,7 @@ __global__ void rasterKernel(
 
     for(int i=tid; i<LIDAR_LINES; i+=CTA_SIZE)
         lidar_response[i] = s_lidarResponse[i];
+    printf("[LIDAR] FINISHED! %f\n", (lidar_response[tid] >> 16)/1024.f);
 }
 
 
@@ -321,6 +324,7 @@ public:
             input_shape,
             0,
             core::ReduceMethod::STACK});
+
         addOutput({"lidar", output_shape_});
     }
 
@@ -341,7 +345,7 @@ public:
         const float4* pose = input.at("pose").begin()->typed_data<float4>();
         const core::ConstantMemoryVector<uint32_t>& num_static_lines = core::getGeometryManager()->getNumStaticLines()->getDeviceData();
 
-        float *lidar = output.at("lidar").typed_data<float>();
+        uint32_t *lidar = output.at("lidar").typed_data<uint32_t>();
 
         rasterKernel<<<grid_dim, block_dim>>>(
             num_static_lines,
@@ -351,6 +355,12 @@ public:
             pose,
             lidar
         );
+
+        checkCudaErrors(cudaDeviceSynchronize());
+
+        // TODO. 删除自己的dynamic_line
+
+        // std::cout << "LidarSensor: "<< output.at("lidar") << std::endl;
 
         // rasterKernel, block大小 == 128, 1个block处理1个机器人. grid大小 == (环境组数,环境数,机器人数)
         // rasterKernel: Input:[poses], Output:[lidar_response]

@@ -95,8 +95,6 @@ public:
         return std::vector<int64_t>(shape_, shape_ + dim_);
     }
 
-
-
     int64_t operator[](int index) const {
         return shape_[index];
     }
