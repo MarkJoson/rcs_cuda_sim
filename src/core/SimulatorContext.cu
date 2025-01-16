@@ -21,6 +21,17 @@ void SimulatorContext::setup(const std::vector<std::string> &entrances) {
         components[com_id]->onNodeInit();
     }
 
+    for(auto &com_id : dep_seq) {
+        //components[com_id]->onEnvironInit();
+        message_bus->registerComponent(components[com_id].get());
+        for(auto &input : components[com_id]->getInputs()) {
+            message_bus->registerInput(components[com_id].get(), input.second);
+        }
+        for(auto &output : components[com_id]->getOutputs()) {
+            message_bus->registerOutput(components[com_id].get(), output.second);
+        }
+    }
+
     // 添加计算图入口
     for(const auto& ent : entrances) {
         message_bus->addTrigger({ent});
@@ -33,6 +44,8 @@ void SimulatorContext::setup(const std::vector<std::string> &entrances) {
     for(auto &com_id : dep_seq) {
         components[com_id]->onEnvironGroupInit();
     }
+
+    // TODO. 修改GeometryManager和EnvGroupManager的标志位，禁止再次添加、修改或删除任何配置
 
     // 组装环境，生成ESDF地图，生成动态物体边集合
     geometry_manager->assemble();
