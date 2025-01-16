@@ -9,6 +9,8 @@
 #include "geometry_types.hh"
 #include "shapes.hh"
 
+#include "core/EnvGroupManager.cuh"
+
 namespace cuda_simulator {
 namespace core {
 namespace geometry {
@@ -33,6 +35,7 @@ protected:
 class GeometryManager {
 public:
     GeometryManager();
+    ~GeometryManager();
 
     // 在指定环境组中创建静态物体
     template<typename ShapeType>
@@ -40,9 +43,7 @@ public:
         pushStaticPolyObj(group_id, std::make_unique<ShapeType>(polygon_def), pose);
     }
 
-    void pushStaticPolyObj(int group_id,
-                           const std::unique_ptr<ShapeDef> &shape_def,
-                           const Transform2D &pose);
+    void pushStaticPolyObj(int group_id, std::unique_ptr<ShapeDef> &&shape_def,const Transform2D &pose);
 
     DynamicObjectProxy createDynamicPolyObj(const SimplePolyShapeDef &polygon_def);
 

@@ -36,8 +36,7 @@
 namespace cuda_simulator {
 namespace core {
 
-class MessageBus::Impl
-{
+class MessageBus::Impl {
 public:
     Impl()  {};
 
@@ -938,6 +937,8 @@ private:
 };
 
 MessageBus::MessageBus() : impl_(std::make_unique<Impl>()) {}
+
+MessageBus::~MessageBus() = default;
 
 void MessageBus::registerComponent(ExecuteNode* node) {
     impl_->registerComponent(node);

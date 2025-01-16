@@ -5,7 +5,9 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 
-#include "shapes.hh"
+#include <cuda_runtime_api.h>
+
+#include "geometry/shapes.hh"
 #include "geometry/GridMapGenerator.hh"
 #include "core/storage/GTensorConfig.hh"
 
@@ -260,6 +262,8 @@ private:
 GridMapGenerator::GridMapGenerator(const GridMapDescription& desc) {
     impl_ = std::make_unique<Impl>(desc);
 }
+
+GridMapGenerator::~GridMapGenerator() = default;
 
 void GridMapGenerator::drawPolygon(const SimplePolyShapeDef& poly, const Transform2D& tf) {
     impl_->drawPolygon(poly, tf);

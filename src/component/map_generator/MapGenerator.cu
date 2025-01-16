@@ -1,15 +1,11 @@
-
 #include <algorithm>
 #include <cstdlib>
 #include <vector>
 
-#include "component/MapGenerator.hh"
-#include "geometry/geometry_types.hh"
-#include "geometry/shapes.hh"
 #include "geometry/GeometryManager.cuh"
-// #include "core/EnvGroupManager.hh"
 #include "core/SimulatorContext.hh"
-#include "core/Component.hh"
+
+#include "component/MapGenerator.hh"
 
 #include "mapgen_generate.hh"
 #include "mapgen_postprocess.hh"

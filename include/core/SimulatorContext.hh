@@ -21,7 +21,7 @@ class SimulatorContext final
 {
 public:
     SimulatorContext();
-    ~SimulatorContext() {}
+    ~SimulatorContext();
 
     static SimulatorContext* getContext() {
         static SimulatorContext context;
@@ -45,7 +45,7 @@ public:
     }
 
     // 添加component到注册表
-    Component* pushComponent(const std::unique_ptr<Component>& component);
+    Component* pushComponent(std::unique_ptr<Component>&& component);
     // 获得MessageBus实例
     MessageBus* getMessageBus();
     // 获得EnvGroupMgr实例
@@ -56,7 +56,6 @@ public:
     Component::NodeInputInfo getInputInfo(const NodeNameRef &component_name, const MessageNameRef &message_name);
     // 获得OutputInfo
     Component::NodeOutputInfo getOutputInfo(const NodeNameRef &component_name, const MessageNameRef &message_name);
-    // 初始化子系统: MessageBus, EnvGroupManager
     void initialize();
     // 初始化组件
     void setup(const std::vector<NodeTagRef> &entrances = {"default", "observe"});

@@ -3,6 +3,7 @@
 
 #include "core/core_types.hh"
 #include "core/ExecuteNode.hh"
+#include "core/MessageQueue.hh"
 
 namespace cuda_simulator
 {
@@ -18,6 +19,8 @@ using DescriptionId = std::int32_t;
 class MessageBus {
 public:
     MessageBus();
+
+    ~MessageBus();
 
     void registerComponent(ExecuteNode* node);
 

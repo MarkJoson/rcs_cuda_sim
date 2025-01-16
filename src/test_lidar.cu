@@ -1,8 +1,8 @@
 #include "core/SimulatorContext.hh"
 #include "core/MessageBus.hh"
-#include "component/map_generator/MapGenerator.cuh"
-#include "component/LidarSensor.cuh"
-#include "component/RobotEntry.cuh"
+#include "component/MapGenerator.hh"
+#include "component/LidarSensor.hh"
+#include "component/RobotEntry.hh"
 
 using namespace cuda_simulator;
 using namespace cuda_simulator::core;

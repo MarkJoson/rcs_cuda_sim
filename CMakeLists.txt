@@ -97,9 +97,13 @@ target_link_libraries(cudasim_torch_dep
 
 # /////////////////////////////////////////////////////
 add_library(cudasim_core
+    src/core/MessageQueue.cu
+    src/core/MessageBus.cu
+    src/core/ReducerNode.cu
     src/core/EnvGroupManager.cu
     src/core/SimulatorContext.cu
     src/core/geometry/GeometryManager.cu
+    src/core/geometry/GridMapGenerator.cu
 )
 
 # 设置目标属性
@@ -131,7 +135,9 @@ target_link_libraries(cudasim_core
 # /////////////////////////////////////////////////////
 add_executable(cudasim_test
     src/test_lidar.cu
-
+    src/component/map_generator/MapGenerator.cu
+    src/component/LidarSensor.cu
+    src/component/RobotEntry.cu
 )
 
 set_target_properties(cudasim_test PROPERTIES

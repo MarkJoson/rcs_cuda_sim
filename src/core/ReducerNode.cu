@@ -4,13 +4,13 @@ namespace cuda_simulator {
 namespace core {
 
 ReducerNode::ReducerNode(
-                                           const NodeName &reducer_name,
-                                           const NodeTag &reducer_tag,
-                                           const MessageNameRef &message_name,
-                                           const MessageNameRef &message_output_name,
-                                           ReduceMethod reduce_method,
-                                           int history_offset,
-                                           const MessageShape &shape)
+                        const NodeName &reducer_name,
+                        const NodeTag &reducer_tag,
+                        const MessageNameRef &message_name,
+                        const MessageNameRef &message_output_name,
+                        ReduceMethod reduce_method,
+                        int history_offset,
+                        const MessageShape &shape)
     : ExecuteNode(reducer_name, reducer_tag)
     , message_name_(message_name)
     , output_message_name_(message_output_name)

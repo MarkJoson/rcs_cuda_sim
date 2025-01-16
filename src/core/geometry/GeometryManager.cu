@@ -92,16 +92,10 @@ public:
     Impl() {
         EnvGroupManager *group_mgr = getEnvGroupMgr();
         // 主机内存，环境组参数
-        static_scene_descs_ =
-            group_mgr
-                ->registerConfigItem<StaticSceneDescription, MemoryType::HOST_MEM>(
-                    "scene_desc");
+        static_scene_descs_ = group_mgr ->registerConfigItem<StaticSceneDescription, MemoryType::HOST_MEM>("scene_desc");
         // 静态物体，环境组参数
-        num_static_lines_ =
-            group_mgr->registerConfigItem<uint32_t, MemoryType::CONSTANT_GPU_MEM>(
-                "num_static_lines");
-        static_lines_ = group_mgr->registerConfigTensor<float>("static_lines",
-                                                                {MAX_STATIC_LINES, 4});
+        num_static_lines_ = group_mgr->registerConfigItem<uint32_t, MemoryType::CONSTANT_GPU_MEM>("num_static_lines");
+        static_lines_ = group_mgr->registerConfigTensor<float>("static_lines", {MAX_STATIC_LINES, 4});
         GridMapDescription grid_map_desc =
             GridMapGenerator({GRIDMAP_WIDTH, GRIDMAP_HEIGHT, {0, 0}, GRIDMAP_RESOLU})
                 .getGridMapDescription();
@@ -109,7 +103,7 @@ public:
             "static_esdf", {grid_map_desc.grid_size.y, grid_map_desc.grid_size.x, 4});
         }
 
-    void pushStaticPolyObj(int group_id, const std::unique_ptr<ShapeDef>& shape_def, const Transform2D &pose) {
+    void pushStaticPolyObj(int group_id, std::unique_ptr<ShapeDef>&& shape_def, const Transform2D &pose) {
         static_scene_descs_->at(group_id).push_back(std::make_pair(std::move(shape_def), pose));
     }
 
@@ -170,8 +164,7 @@ protected:
         // 为所有的场景组生成静态物体的SDF
         for (int64_t group_id = 0; group_id < static_scene_descs_->getNumEnvGroup();
             group_id++) {
-            GridMapGenerator grid_map(
-                {GRIDMAP_WIDTH, GRIDMAP_HEIGHT, {0, 0}, GRIDMAP_RESOLU});
+            GridMapGenerator grid_map( {GRIDMAP_WIDTH, GRIDMAP_HEIGHT, {0, 0}, GRIDMAP_RESOLU});
             for (auto &static_obj : static_scene_descs_->at(group_id)) {
             auto &shape = static_obj.first;
             auto &pose = static_obj.second;
@@ -195,46 +188,42 @@ protected:
     void assembleStaticWorld() {
         /// 将所有静态多边形转换为线段
         // 遍历所有env group的数据
-        for (int64_t group_id = 0; group_id < static_scene_descs_->getNumEnvGroup();
-            group_id++) {
+        for (int64_t group_id = 0; group_id < static_scene_descs_->getNumEnvGroup(); group_id++) {
             // 本group的场景中 static线段的数量
             uint32_t num_static_lines_in_group = 0;
             // 获得当前场景的写入地址
-            TensorHandle static_line_tensor =
-                static_lines_->at(group_id, num_static_lines_in_group, 0);
+            TensorHandle static_line_tensor = static_lines_->at(group_id, num_static_lines_in_group, 0);
             if (!static_line_tensor.is_contiguous())
-            throw std::runtime_error(
-                "static_line_tensor by every env is not contiguous!");
+                throw std::runtime_error("static_line_tensor by every env is not contiguous!");
+
             float4 *static_line_data =
                 reinterpret_cast<float4 *>(static_line_tensor.data());
 
-            auto poly_handle_fn = [&num_static_lines_in_group,
-                                &static_line_data]<typename T>(
+            auto poly_handle_fn = [&num_static_lines_in_group, &static_line_data]<typename T>(
                                     const T *shape, const Transform2D &transform) {
-            for (auto line_iter = shape->begin(transform);
-                line_iter != shape->end(transform); ++line_iter) {
+                for (auto line_iter = shape->begin(transform); line_iter != shape->end(transform); ++line_iter) {
 
-                if (num_static_lines_in_group >= MAX_STATIC_LINES)
-                throw std::runtime_error(
-                    "Number of Static Lines exceeds the container capacity!");
+                    if (num_static_lines_in_group >= MAX_STATIC_LINES)
+                    throw std::runtime_error(
+                        "Number of Static Lines exceeds the container capacity!");
 
-                static_line_data[num_static_lines_in_group++] =
-                    make_float4((*line_iter).start.x, (*line_iter).start.y,
-                                (*line_iter).end.x, (*line_iter).end.y);
-            }
+                    static_line_data[num_static_lines_in_group++] =
+                        make_float4((*line_iter).start.x, (*line_iter).start.y,
+                                    (*line_iter).end.x, (*line_iter).end.y);
+                }
             };
 
             for (auto &static_obj : static_scene_descs_->at(group_id)) {
-            const auto &shape = static_obj.first;
-            if (shape->type == ShapeType::SIMPLE_POLYGON) { // 简单多边形
-                poly_handle_fn(dynamic_cast<SimplePolyShapeDef *>(shape.get()),
-                            static_obj.second);
-            } else if (shape->type == ShapeType::COMPOSED_POLYGON) { // 复合多边形
-                poly_handle_fn(dynamic_cast<ComposedPolyShapeDef *>(shape.get()),
-                            static_obj.second);
-            } else {
-                throw std::runtime_error("Shape Type Not Support at Present!");
-            }
+                const auto &shape = static_obj.first;
+                if (shape->type == ShapeType::SIMPLE_POLYGON) { // 简单多边形
+                    poly_handle_fn(dynamic_cast<SimplePolyShapeDef *>(shape.get()),
+                                static_obj.second);
+                } else if (shape->type == ShapeType::COMPOSED_POLYGON) { // 复合多边形
+                    poly_handle_fn(dynamic_cast<ComposedPolyShapeDef *>(shape.get()),
+                                static_obj.second);
+                } else {
+                    throw std::runtime_error("Shape Type Not Support at Present!");
+                }
             }
             num_static_lines_->at(group_id) = num_static_lines_in_group;
         }
@@ -392,6 +381,8 @@ GeometryManager::GeometryManager() {
     impl_ = std::make_unique<Impl>();
 }
 
+GeometryManager::~GeometryManager() = default;
+
 const TensorHandle &GeometryManager::getDynamicLines() {
   return impl_->getDynamicLines();
 }
@@ -426,14 +417,9 @@ DynamicObjectProxy GeometryManager::createDynamicPolyObj(const SimplePolyShapeDe
   return DynamicObjectProxy(impl_->createDynamicPolyObj(polygon_def), this);
 }
 
-void GeometryManager::pushStaticPolyObj(
-    int group_id, const std::unique_ptr<ShapeDef> &shape_def,
-    const Transform2D &pose) {
-  impl_->pushStaticPolyObj(group_id, shape_def, pose);
+void GeometryManager::pushStaticPolyObj(int group_id, std::unique_ptr<ShapeDef> &&shape_def, const Transform2D &pose) {
+  impl_->pushStaticPolyObj(group_id, std::move(shape_def), pose);
 }
-
-
-
 
 
 } // namespace geometry

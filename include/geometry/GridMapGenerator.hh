@@ -41,6 +41,7 @@ struct GridMapDescription {
 class GridMapGenerator {
 public:
     GridMapGenerator(const GridMapDescription& desc = {0,0,{},1});
+    ~GridMapGenerator();
     void drawPolygon(const SimplePolyShapeDef& poly, const Transform2D& tf);
     void drawPolygon(const ComposedPolyShapeDef& poly, const Transform2D& tf);
     void drawCircle(const CircleShapeDef& circle, const Transform2D& tf);

@@ -9,17 +9,15 @@
 
 #include "geometry/GeometryManager.cuh"
 
-
 namespace cuda_simulator {
 namespace core {
 
 
 class SimulatorContext::Impl {
 public:
-    Impl() { }
-    ~Impl() {}
+    Impl() {}
 
-    Component* pushComponent(const std::unique_ptr<Component>& component) {
+    Component* pushComponent(std::unique_ptr<Component>&& component) {
         if(component_map.find(component->getName()) != component_map.end()) {
             throw std::runtime_error("Component has been registered!");
         }
@@ -176,7 +174,9 @@ private:
 
 SimulatorContext::SimulatorContext() : impl(std::make_unique<Impl>()) { }
 
-Component* SimulatorContext::pushComponent(std::unique_ptr<Component> component) {
+SimulatorContext::~SimulatorContext() = default;
+
+Component* SimulatorContext::pushComponent(std::unique_ptr<Component> &&component) {
     return impl->pushComponent(std::move(component));
 }
 
@@ -186,6 +186,21 @@ Component::NodeInputInfo SimulatorContext::getInputInfo(const NodeNameRef &compo
 
 Component::NodeOutputInfo SimulatorContext::getOutputInfo(const NodeNameRef &component_name, const MessageNameRef &message_name) {
     return impl->getOutputInfo(component_name, message_name);
+}
+
+// 获得EnvGroupMgr实例
+EnvGroupManager* SimulatorContext::getEnvGroupMgr() {
+    return impl->getEnvGroupMgr();
+}
+
+// 获得GeometryManager实例
+geometry::GeometryManager* SimulatorContext::getGeometryManager() {
+    return impl->getGeometryManager();
+}
+
+// 初始化子系统: MessageBus, EnvGroupManager
+void SimulatorContext::initialize() {
+    impl->initialize();
 }
 
 void SimulatorContext::setup(const std::vector<NodeTagRef> &entrances) {

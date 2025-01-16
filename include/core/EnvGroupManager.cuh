@@ -397,11 +397,6 @@ public:
     }
 
 private:
-    // 最大环境组的数量
-    // int max_num_group_;
-    // 最大活跃环境组的数量
-    // int max_num_active_group_;
-
     // 每个环境组的环境数量
     const int num_env_per_group_;
     // 当前环境组的数量
