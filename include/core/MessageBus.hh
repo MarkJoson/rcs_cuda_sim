@@ -56,9 +56,6 @@ public:
         // TODO. 增加锁
 
         createNodeId(node->getName(), node->getTag(), node);
-
-        // TODO. 调用注册回调函数，初始化输入输出
-        // node->onRegister(context_);
     }
 
     const MessageShape& getMessageShape(const MessageNameRef& message_name) {
@@ -103,7 +100,7 @@ public:
         message_routes_[message_id].second.insert(input_des_id);
     }
 
-    void registerOutput( ExecuteNode* component, ExecuteNode::NodeOutputInfo &info ) {
+    void registerOutput( ExecuteNode* component, const ExecuteNode::NodeOutputInfo &info ) {
         // std::lock_guard<std::mutex> lock(mutex_);
         // TODO.
 
@@ -133,7 +130,7 @@ public:
         message_routes_[message_id].first.insert(output_des_id);
     }
 
-    MessageQueue* getMessageQueue(const NodeNameRef &node_name, const MessageNameRef &message_name) {
+    MessageQueue* getMessageQueue(const NodeNameRef &node_name, const MessageNameRef &message_name){
         NodeId node_id = node_id_map_[node_name];
         try {
             MessageQueueId mq_id = node_descriptions_[node_id].active_output_map[message_name];
@@ -182,6 +179,7 @@ public:
         updateNodeDescription();
 
         // 6. 构建活动图
+        // TODO. 有一些图仅仅是一个初始化环境的节点，没有输入与输出，这些节点应该被删除
         pruneGraphToOneStepIter();
         exportGraphVisualization(active_graph_, "ActiveGraph", "active_graph.dot");
 
@@ -231,7 +229,7 @@ public:
             if (node_order < current_execute_order_)
                 continue;
 
-            // TODO. 下述节点可以并行执行
+            // TODO. 并行执行，引入cudaStream
             for (NodeId node_id : node_ids) {
                 executeNode(node_id);
             }
@@ -244,12 +242,12 @@ public:
     }
 
     // 当前MessageBus的执行位次
-    int getCurrentExecuteOrder() {
+    int getCurrentExecuteOrder() const {
         return current_execute_order_;
     }
 
-    int getNodeOrder(NodeId node_id) {
-        return node_order_[node_id];
+    int getNodeOrder(NodeId node_id) const {
+        return node_order_.at(node_id);
     }
 
 private:    // ^---- 私有定义 -----
@@ -621,29 +619,33 @@ private:    // ^---- 私有定义 -----
             sub_ids.insert(edge_properties.sub_des_id);
         }
 
-        // 遍历每一个节点的出边，建立消息队列
+        // 有一些节点的消息可能并没有使用，尽管如此，我们仍然需要建立消息队列，否则execute时无法获得数据地址
+        // 将所有的output_desc都填充到active_outputs_desc
         for(auto [vi, vend] = boost::vertices(active_graph_); vi!=vend; vi++) {
             NodeId node_id = active_graph_[*vi].node_id;
             NodeNameRef node_name = active_graph_[*vi].node_name;
             VertexOutEdgeIterator ei, eind;
-            for(std::tie(ei, eind) = boost::out_edges(*vi, active_graph_); ei!=eind; ei++) {
-                const EdgeProperties &edge_props = active_graph_[*ei];
-                MessageId message_id = edge_props.message_id;
+            // for(std::tie(ei, eind) = boost::out_edges(*vi, active_graph_); ei!=eind; ei++) {
+            for(auto [message_id, pub_id] : node_descriptions_[node_id].output_map) {
+                // const EdgeProperties &edge_props = active_graph_[*ei];
+                // MessageId message_id = edge_props.message_id;
                 const MessageNameRef& message_name = messages_.at(message_id).first;
-                OutputDescription &pub = output_descriptions_[ edge_props.pub_des_id ];
+                OutputDescription &pub = output_descriptions_.at( pub_id );
 
                 int max_mq_history_offset = 0;
 
-                // 遍历当前消息的所有接收者，得到最大历史长度
-                for(auto sub_id : active_messages_routes_.at(message_id).second) {
-                    const auto &sub = input_descriptions_[sub_id];
+                // 遍历当前消息的所有接收者，得到最大历史长度，没有接收者的消息时，offset长度为0
+                if(active_messages_routes_.find(message_id) != active_messages_routes_.end()) {
+                    for(auto sub_id : active_messages_routes_.at(message_id).second) {
+                        const auto &sub = input_descriptions_[sub_id];
 
-                    if(pub.shape != sub.shape) {
-                        throw std::runtime_error("Shape mismatch for subscriber of message " + std::string(message_name));
+                        if(pub.shape != sub.shape) {
+                            throw std::runtime_error("Shape mismatch for subscriber of message " + std::string(message_name));
+                        }
+
+                        if (sub.history_offset > max_mq_history_offset)
+                            max_mq_history_offset = sub.history_offset;
                     }
-
-                    if (sub.history_offset > max_mq_history_offset)
-                        max_mq_history_offset = sub.history_offset;
                 }
 
                 // 创建MQ_Id, 修改OutputDescription，注明MessageQueueId
@@ -666,17 +668,23 @@ private:    // ^---- 私有定义 -----
         for(auto [vi, vend] = boost::vertices(active_graph_); vi!=vend; vi++) {
             NodeDescription &node_des = node_descriptions_.at( active_graph_[*vi].node_id );
 
+            // 填充active_input, active_output
             VertexInEdgeIterator ein_i, ein_ind;
             for(std::tie(ein_i, ein_ind) = boost::in_edges(*vi, active_graph_); ein_i!=ein_ind; ein_i++) {
                 const EdgeProperties &edge_props = active_graph_[*ein_i];
                 node_des.active_input_desc.insert({edge_props.message_id, edge_props.sub_des_id});
             }
 
-            // 填充active_input, active_output
-            VertexOutEdgeIterator eout_i, eout_ind;
-            for(std::tie(eout_i, eout_ind) = boost::out_edges(*vi, active_graph_); eout_i!=eout_ind; eout_i++) {
-                const EdgeProperties &edge_props = active_graph_[*eout_i];
-                node_des.active_outputs_desc.insert({edge_props.message_id, edge_props.pub_des_id});
+            // VertexOutEdgeIterator eout_i, eout_ind;
+            // for(std::tie(eout_i, eout_ind) = boost::out_edges(*vi, active_graph_); eout_i!=eout_ind; eout_i++) {
+            //     const EdgeProperties &edge_props = active_graph_[*eout_i];
+            //     node_des.active_outputs_desc.insert({edge_props.message_id, edge_props.pub_des_id});
+            // }
+
+            // 有一些节点的消息可能并没有使用，尽管如此，我们仍然需要将其填充到active_outputs_desc，否则execute时无法获得数据地址
+            // 将所有的output_desc都填充到active_outputs_desc
+            for(auto [message_id, pub_id] : node_des.output_map) {
+                node_des.active_outputs_desc.insert({message_id, pub_id});
             }
 
             // 填充active_output_map
@@ -687,8 +695,8 @@ private:    // ^---- 私有定义 -----
 
             // 对于所有的active_input, 根据stack order的顺序查找对应消息的pub, 得到message_queue_id, 填充input_map
             for(auto [message_id, sub_id] : node_des.active_input_desc) {
-                const MessageNameRef &message_name = input_descriptions_[sub_id].message_name;
-                InputDescription &sub = input_descriptions_[sub_id];
+                const MessageNameRef &message_name = input_descriptions_.at(sub_id).message_name;
+                InputDescription &sub = input_descriptions_.at(sub_id);
 
                 auto &active_pubs = active_messages_routes_.at(message_id).first;
 
@@ -723,7 +731,7 @@ private:    // ^---- 私有定义 -----
         auto [ei, eind] = boost::edges(active_graph_);
         while (ei != eind) {
             auto current = ei++;
-            const auto &sub = input_descriptions_[ active_graph_[*current].sub_des_id ];
+            const auto &sub = input_descriptions_.at( active_graph_[*current].sub_des_id );
             if (sub.history_offset > 0)
                 boost::remove_edge(*current, active_graph_);
         }
@@ -815,7 +823,7 @@ private:    // ^---- 私有定义 -----
             // input_data[message_name] = {};
             std::vector<TensorHandle> input_data_list;
             for (auto [mq_id, hist_off] : sub_mq_ids) {
-                input_data_list.push_back(message_queues_[mq_id]->getHistoryTensorHandle(hist_off));
+                input_data_list.push_back(message_queues_.at(mq_id)->getHistoryTensorHandle(hist_off));
             }
             input_data.insert(std::make_pair(message_name, input_data_list));
         }
@@ -823,7 +831,7 @@ private:    // ^---- 私有定义 -----
         NodeExecOutputType output_data;
 
         for (const auto& [message_name, mq_id] : node_des.active_output_map) {
-            output_data.insert(std::make_pair(message_name, message_queues_[mq_id]->getWriteTensorPtr()));
+            output_data.insert(std::make_pair(message_name, message_queues_.at(mq_id)->getWriteTensorPtr()));
         }
 
         // 所有输入就绪时执行组件
