@@ -11,7 +11,7 @@
 - ~~测试GeometryManager~~
 - ~~移植地图生成~~
 - ~~修改message queue创建shapes时的batch~~
-
+- 环境组采样
 - Node的onReset接口
 - 移植并测试激光雷达
 - python接口

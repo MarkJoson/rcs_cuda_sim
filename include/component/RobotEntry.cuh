@@ -21,7 +21,12 @@ public:
         : Component("robot_entry"), num_robot_per_env_(robot_per_env) { }
 
     void onEnvironGroupInit() override {
-
+        core::getGeometryManager()->createDynamicPolyObj(
+            core::geometry::SimplePolyShapeDef({
+                {0,0.5},
+                {0.5,0},
+                {-0.5,0},
+                {0, -0.5}}));
     }
 
     void onNodeReset(
@@ -31,12 +36,7 @@ public:
     }
 
     void onNodeStart() override {
-        core::getGeometryManager()->createDynamicPolyObj(
-            core::geometry::SimplePolyShapeDef({
-                {0,0.5},
-                {0.5,0},
-                {-0.5,0},
-                {0, -0.5}}));
+
     }
 
     void onNodeInit() override {

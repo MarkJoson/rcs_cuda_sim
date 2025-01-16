@@ -316,7 +316,11 @@ public:
         input_shape.copyTo(output_shape_);
         output_shape_[output_shape_.size()-1] = LIDAR_LINES;
 
-        addInput({"pose", input_shape});
+        addInput({
+            "pose",
+            input_shape,
+            0,
+            core::ReduceMethod::STACK});
         addOutput({"lidar", output_shape_});
     }
 
