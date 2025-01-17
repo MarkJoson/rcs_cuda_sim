@@ -138,19 +138,18 @@ __global__ void rasterKernel(const ConstantMemoryVector<uint32_t> num_static_lin
         float2 lb = make_float2(line.x - pose.x, line.y - pose.y);
         float2 le = make_float2(line.z - pose.x, line.w - pose.y);
         visibility = lineVisibleCheck(lb, le, LIDAR_MAX_RANGE);
-        // if(visibility)
-        // {
-        //     const auto &vs=lb, &ve=le;
-        //     float cdot = vs.x*ve.y - vs.y*ve.x;
-        //     float dx = ve.x-vs.x;
-        //     float dy = ve.y-vs.y;
-        //     float len = sqrtf(dx*dx+dy*dy);
-        //     float dist = fabs(cdot)/len;
-        //     printf("[READ] PASS:%03d, \t[%.2f,%.2f]->[%.2f,%.2f], \t[%.2f,%.2f]->[%.2f,%.2f], \tarea:%.2f,
-        //     \tdist%.2f\n", lineIdx,
-        //         line_begins[lineIdx].x, line_begins[lineIdx].y, line_ends[lineIdx].x, line_ends[lineIdx].y,
-        //         lb.x, lb.y, le.x, le.y, cdot, dist);
-        // }
+        if(visibility)
+        {
+            const auto &vs=lb, &ve=le;
+            float cdot = vs.x*ve.y - vs.y*ve.x;
+            float dx = ve.x-vs.x;
+            float dy = ve.y-vs.y;
+            float len = sqrtf(dx*dx+dy*dy);
+            float dist = fabs(cdot)/len;
+            // printf("[READ] PASS:%03d, \t[%.2f,%.2f]->[%.2f,%.2f], \t[%.2f,%.2f]->[%.2f,%.2f], \tarea:%.2f,\tdist%.2f\n", lineIdx,
+            //     line.x, line.y, line.z, line.w,
+            //     lb.x, lb.y, le.x, le.y, cdot, dist);
+        }
       }
 
       uint32_t scan, scan_reduce;
@@ -209,7 +208,7 @@ __global__ void rasterKernel(const ConstantMemoryVector<uint32_t> num_static_lin
     }
 
     // 此时要么 读取了128个，要么 lineBuf处理完了
-    // if(tid == 0) printf("[RASTER] FRBuf:[R:%d,W:%d] VALID: %d\n", frLineBufRead, frLineBufWrite, frLineBufWrite -
+    // if(tid == 0) printf("[RASTER] LineBuf:[R:%d, W:%d] FRBuf:[R:%d,W:%d] VALID: %d\n", lineBufRead, lineBufWrite, frLineBufRead, frLineBufWrite, frLineBufWrite -
     // frLineBufRead);
 
     // 第三部分继续的条件：读取到128个，或未读取到128个，但是已经无法再读取新的线段；
@@ -267,14 +266,13 @@ __global__ void rasterKernel(const ConstantMemoryVector<uint32_t> num_static_lin
         }
       }
       __syncthreads();
-    } while (frLineBufWrite != frLineBufRead &&
-             totalLineRead >=
-                 num_lines); // 继续的条件：已经没有办法读取更多的frag线段，则需要将剩余的frlineBufWrite处理完
+    } while (frLineBufWrite != frLineBufRead &&   // 还有未处理的frag
+             totalLineRead >= num_lines); // 已经没有办法读取更多的frag线段，则需要将剩余的frlineBufWrite处理完
 
     // if(tid == 0) printf("[EMIT] FINISHED!\n");
 
     // 全部线段已经处理完
-    if (totalLineRead >= num_lines)
+    if (totalLineRead >= num_lines && lineBufRead == lineBufWrite)
       break;
   }
 

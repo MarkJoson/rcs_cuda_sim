@@ -11,11 +11,11 @@
 using namespace cuda_simulator;
 using namespace cuda_simulator::core;
 
-constexpr int MAP_WIDTH = 80;
-constexpr int MAP_HEIGHT = 60;
-constexpr int GRID_SIZE = 1;
+// constexpr int MAP_WIDTH = 80;
+// constexpr int MAP_HEIGHT = 60;
+// constexpr int GRID_SIZE = 1;
 
-constexpr float SCALING = 100;
+constexpr float SCALING = 200;
 constexpr float OFFSET = 20;
 
 template <typename T> sf::Vector2<T> convertPoint(sf::RenderWindow &window_, sf::Vector2<T> v) {
@@ -25,8 +25,8 @@ template <typename T> sf::Vector2<T> convertPoint(sf::RenderWindow &window_, sf:
 
 template <typename T> sf::Vector2<T> invConvertPoint(sf::RenderWindow &window_, sf::Vector2<T> v) {
   auto size = window_.getSize();
-  return sf::Vector2<T>((v.x - OFFSET) / (size.x / 800.f) / SCALING,
-                        ((size.y - v.y) - OFFSET) / (size.y / 600.f) / SCALING);
+  return sf::Vector2<T>((v.x - OFFSET) / (size.x / 1280.f) / SCALING,
+                        ((size.y - v.y) - OFFSET) / (size.y / 1024.f) / SCALING);
 }
 
 class TestLidar {
@@ -43,7 +43,7 @@ class TestLidar {
   lidar_sensor::LidarSensor *lidar_sensor;
 
 public:
-  TestLidar() : window_(sf::VideoMode(800, 600), "SFML Draw Lines") {
+  TestLidar() : window_(sf::VideoMode(1280, 1024), "SFML Draw Lines") {
     window_.setVerticalSyncEnabled(true); // call it once, after creating the window_
 
     // sf::Font font;
@@ -58,7 +58,7 @@ public:
     // mouse_pos_text_.setPosition(10, 10);            // 设置文字位置
 
     getContext()->initialize();
-    // map_generator = getContext()->createComponent<map_gen::MapGenerator>(3, 3, 0.05);
+    map_generator = getContext()->createComponent<map_gen::MapGenerator>(3, 3, 0.05);
     robot_entry = getContext()->createComponent<robot_entry::RobotEntry>(1);
     lidar_sensor = getContext()->createComponent<lidar_sensor::LidarSensor>();
 

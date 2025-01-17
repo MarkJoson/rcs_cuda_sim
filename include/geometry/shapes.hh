@@ -237,11 +237,19 @@ struct ComposedPolyShapeDef final: public ShapeDef {
         Linef operator*() const {
             const auto& current_polys = is_positive_ ? positive_polys_ : negative_polys_;
             const auto& vertices = current_polys[poly_index_].vertices;
-            Vector2f start = transform_.localPointTransform(vertices[vertex_index_]);
-            Vector2f end = transform_.localPointTransform(vertices[(vertex_index_ + 1) % vertices.size()]);
 
-            // TODO. 当返回negetive_polys的时候，将start和end交换
-            return Linef(start, end);
+            // 当返回negetive_polys的时候，将start和end交换
+            if(is_positive_) {
+                // 正向多边形
+                Vector2f start = transform_.localPointTransform(vertices[vertex_index_]);
+                Vector2f end = transform_.localPointTransform(vertices[(vertex_index_ + 1) % vertices.size()]);
+                return Linef(start, end);
+            } else {
+                // 负向多边形（洞）
+                Vector2f start = transform_.localPointTransform(vertices[(vertex_index_ + 1) % vertices.size()]);
+                Vector2f end = transform_.localPointTransform(vertices[vertex_index_]);
+                return Linef(start, end);
+            }
         }
 
     private:
