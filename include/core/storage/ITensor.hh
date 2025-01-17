@@ -71,7 +71,20 @@ public:
         derived().fromHostVectorImpl(vec);
     }
 
+    template<typename T>
+    inline static Derived fromHostVectorNew(const std::vector<T>& vec) {
+        Derived t = Derived();
+        t.fromHostVector(vec);
+        return t;
+    }
+
+    template<typename T>
+    inline void toHostVector(std::vector<T>& vec) const {
+        derived().toHostVectorImpl(vec);
+    }
+
     virtual void fromHostArray(const void* data, NumericalDataType type, int64_t numel) = 0;
+    virtual void toHostArray(void* data, NumericalDataType type, int64_t numel) const = 0;
 
 
     static inline void setTensorDefaultDeviceId(int device_id) {

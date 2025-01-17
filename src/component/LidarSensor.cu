@@ -116,8 +116,7 @@ __global__ void rasterKernel(const ConstantMemoryVector<uint32_t> num_static_lin
   uint32_t totalLineRead = 0;
   uint32_t lineBufRead = 0, lineBufWrite = 0;
   uint32_t frLineBufRead = 0, frLineBufWrite = 0;
-  // float4 pose = poses[lidar_inst_id];
-  float4 pose = {0.5, 0.5, 0, 0};
+  float4 pose = poses[lidar_inst_id];
 
   /********* 初始化lidar数据 *********/
   for (int i = tid; i < LIDAR_LINES; i += CTA_SIZE)
@@ -288,18 +287,42 @@ void LidarSensor::onNodeReset(const TensorHandle &reset_flags, NodeExecStateType
 
 void LidarSensor::onEnvironGroupInit() {
   // 初始化LidarSensor
-  // getGeometryManager()->createStaticPolyObj(0,
-  //                                           geometry::SimplePolyShapeDef({
-  //                                               {1.0, 0.0},
-  //                                               {1.0, 1.0},
-  //                                               {0.0, 1.0},
-  //                                               {0.0, 0.0},
-  //                                           }),
-  //                                           {{2, 0}, 0});
+  getGeometryManager()->createStaticPolyObj(0,
+                                            geometry::SimplePolyShapeDef({
+                                                {1.0, 0.0},
+                                                {1.0, 1.0},
+                                                {0.0, 1.0},
+                                                {0.0, 0.0},
+                                            }),
+                                            {{2, 0}, 0});
+  getGeometryManager()->createStaticPolyObj(0,
+                                            geometry::SimplePolyShapeDef({
+                                                {1.0, 0.0},
+                                                {1.0, 1.0},
+                                                {0.0, 1.0},
+                                                {0.0, 0.0},
+                                            }),
+                                            {{4, 2}, 0});
+  getGeometryManager()->createStaticPolyObj(0,
+                                            geometry::SimplePolyShapeDef({
+                                                {1.0, 0.0},
+                                                {1.0, 1.0},
+                                                {0.0, 1.0},
+                                                {0.0, 0.0},
+                                            }),
+                                            {{2, 4}, 0});
+  getGeometryManager()->createStaticPolyObj(0,
+                                            geometry::SimplePolyShapeDef({
+                                                {1.0, 0.0},
+                                                {1.0, 1.0},
+                                                {0.0, 1.0},
+                                                {0.0, 0.0},
+                                            }),
+                                            {{4, 0}, 0});
 }
 
 LidarSensor::LidarSensor() : Component("lidar_sensor") {
-  addDependence({"map_generator"});
+  // addDependence({"map_generator"});
   addDependence({"robot_entry"});
 }
 
@@ -331,7 +354,7 @@ void LidarSensor::onNodeExecute(const NodeExecInputType &input, NodeExecOutputTy
   uint32_t num_dyn_lines = getGeometryManager()->getNumDynLines();
 
   const float4 *dyn_lines = getGeometryManager()->getDynamicLines().typed_data<float4>();
-  const float4 *static_lines = getGeometryManager()->getStaticLines().typed_data<float4>();
+  const float4 *static_lines = getGeometryManager()->getStaticLinesDeviceTensor().typed_data<float4>();
   const float4 *pose = input.at("pose").begin()->typed_data<float4>();
   const ConstantMemoryVector<uint32_t> &num_static_lines = getGeometryManager()->getNumStaticLines()->getDeviceData();
 
@@ -342,7 +365,7 @@ void LidarSensor::onNodeExecute(const NodeExecInputType &input, NodeExecOutputTy
   checkCudaErrors(cudaDeviceSynchronize());
   // TODO. 删除自己的dynamic_line
 
-  std::cout << "LidarSensor: "<< output.at("lidar")/65536/1024.f << std::endl;
+  // std::cout << "LidarSensor: "<< output.at("lidar")/65536/1024.f << std::endl;
 
   // rasterKernel, block大小 == 128, 1个block处理1个机器人. grid大小 ==
   // (环境组数,环境数,机器人数) rasterKernel: Input:[poses],
@@ -351,6 +374,18 @@ void LidarSensor::onNodeExecute(const NodeExecInputType &input, NodeExecOutputTy
   // 1. 从场景管理器中获得所有线段的数据：line_begins, line_ends
   // 2. 计算机器人的位姿poses
   // 3. 发布激光雷达的响应lidar_response
+}
+
+float LidarSensor::getLidarRange() const {
+  return LIDAR_MAX_RANGE;
+}
+
+float LidarSensor::getLidarResolution() const {
+  return LIDAR_RESOLU;
+}
+
+float LidarSensor::getLidarRayNum() const {
+  return LIDAR_LINES;
 }
 
 } // namespace lidar_sensor

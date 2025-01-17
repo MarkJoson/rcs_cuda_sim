@@ -60,7 +60,7 @@ const TensorHandle& MessageQueue::getHistoryTensorHandle(size_t offset) {
 }
 
 // 获取当前的写入Tensor
-TensorHandle& MessageQueue::getWriteTensorPtr() {
+TensorHandle& MessageQueue::getWriteTensorRef() {
     auto& result = history_[write_index_];
     write_index_ = (write_index_ + 1) % max_history_len_;
     return result;

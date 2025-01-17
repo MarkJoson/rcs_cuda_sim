@@ -85,6 +85,7 @@ static inline geometry::GeometryManager *getGeometryManager() {
     return SimulatorContext::getContext()->getGeometryManager();
 }
 
+
 } // namespace core
 } // namespace cuda_simulator
 

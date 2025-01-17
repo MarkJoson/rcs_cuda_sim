@@ -53,7 +53,9 @@ public:
 
     uint32_t getNumDynLines();
 
-    const TensorHandle &getStaticLines();
+    const TensorHandle &getStaticLinesDeviceTensor();
+
+    const float4* getStaticLinesHostData(int64_t group_id);
 
     EGConstMemConfigItem<uint32_t> *getNumStaticLines();
 

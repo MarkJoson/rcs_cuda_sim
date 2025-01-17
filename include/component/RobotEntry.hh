@@ -2,6 +2,7 @@
 #define CUDASIM_ROBOT_ENTRY_HH
 
 #include "core/Component.hh"
+#include <cuda_runtime.h>
 
 namespace cuda_simulator {
 namespace robot_entry {
@@ -23,9 +24,13 @@ public:
     void onNodeExecute(const core::NodeExecInputType &input,
                        core::NodeExecOutputType &output) override;
 
+    void setRobotPose(float4 robot_pose);
+
   private:
     uint32_t num_robot_per_env_;
 };
+
+
 
 
 } // namespace robot_entry

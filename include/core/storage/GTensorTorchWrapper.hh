@@ -14,6 +14,8 @@ namespace internal {
     std::shared_ptr<TorchTensorImpl> shareTorchTensorImpl(const std::shared_ptr<TorchTensorImpl> &impl);
 }
 
+
+
 // PyTorch后端的基类实现
 class GTensorTorchWrapper final : public ITensor<GTensorTorchWrapper> {
     friend class ITensor<GTensorTorchWrapper>;
@@ -101,6 +103,7 @@ public:
 
     // 从主机数组创建张量
     void fromHostArray(const void* data, NumericalDataType type, int64_t numel) override;
+    void toHostArray(void* data, NumericalDataType type, int64_t numel) const override;
 
     GTensorTorchWrapper clone() const override;
     GTensorTorchWrapper move() override;
@@ -179,6 +182,27 @@ protected:
             fromHostArray(vec.data(), NumericalDataType::kUInt8, vec.size());
         } else if constexpr (std::is_same_v<T, uint32_t>) {
             fromHostArray(vec.data(), NumericalDataType::kUInt32, vec.size());
+        } else {
+            // print what type is not supported
+            static_assert(always_false_v<T>, "Unsupported data type");
+        }
+    }
+
+    template<typename T>
+    void toHostVectorImpl(std::vector<T>& vec) const {
+        vec.resize(elemCount());
+        if constexpr (std::is_same_v<T, float>) {
+            toHostArray(vec.data(), NumericalDataType::kFloat32, vec.size());
+        } else if constexpr (std::is_same_v<T, double>) {
+            toHostArray(vec.data(), NumericalDataType::kFloat64, vec.size());
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            toHostArray(vec.data(), NumericalDataType::kInt64, vec.size());
+        } else if constexpr (std::is_same_v<T, int32_t>) {
+            toHostArray(vec.data(), NumericalDataType::kInt32, vec.size());
+        } else if constexpr (std::is_same_v<T, uint8_t>) {
+            toHostArray(vec.data(), NumericalDataType::kUInt8, vec.size());
+        } else if constexpr (std::is_same_v<T, uint32_t>) {
+            toHostArray(vec.data(), NumericalDataType::kUInt32, vec.size());
         } else {
             // print what type is not supported
             static_assert(always_false_v<T>, "Unsupported data type");

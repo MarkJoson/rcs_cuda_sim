@@ -37,7 +37,7 @@ public:
 
     const TensorHandle& getHistoryTensorHandle(size_t offset);
 
-    TensorHandle& getWriteTensorPtr();
+    TensorHandle& getWriteTensorRef();
 
     void resetEnvData(int env_group_id, int env_id);
 

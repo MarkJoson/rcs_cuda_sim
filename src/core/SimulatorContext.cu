@@ -188,6 +188,10 @@ Component::NodeOutputInfo SimulatorContext::getOutputInfo(const NodeNameRef &com
     return impl->getOutputInfo(component_name, message_name);
 }
 
+MessageBus* SimulatorContext::getMessageBus() {
+    return impl->getMessageBus();
+}
+
 // 获得EnvGroupMgr实例
 EnvGroupManager* SimulatorContext::getEnvGroupMgr() {
     return impl->getEnvGroupMgr();

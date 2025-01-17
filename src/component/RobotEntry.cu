@@ -1,28 +1,31 @@
-#include "geometry/GeometryManager.cuh"
-#include "core/SimulatorContext.hh"
 #include "component/RobotEntry.hh"
+#include "core/MessageBus.hh"
+#include "core/SimulatorContext.hh"
+#include "core/storage/GTensorConfig.hh"
+#include "geometry/GeometryManager.cuh"
+
+using namespace cuda_simulator::core;
 
 namespace cuda_simulator {
 namespace robot_entry {
 
-void RobotEntry::onNodeExecute(const core::NodeExecInputType &input,
-                               core::NodeExecOutputType &output) {}
+void RobotEntry::onNodeExecute(const core::NodeExecInputType &input, core::NodeExecOutputType &output) {}
 
-void RobotEntry::onNodeInit() {
-    addOutput({"pose", {
-        num_robot_per_env_,
-        4}});
-}
+void RobotEntry::onNodeInit() { addOutput({"pose", {num_robot_per_env_, 4}}); }
 
 void RobotEntry::onNodeStart() {}
 
-void RobotEntry::onNodeReset(const core::TensorHandle &reset_flags,
-                             core::NodeExecStateType &state) {}
+void RobotEntry::onNodeReset(const core::TensorHandle &reset_flags, core::NodeExecStateType &state) {}
 
 void RobotEntry::onEnvironGroupInit() {
   core::getGeometryManager()->createDynamicPolyObj(
-      core::geometry::SimplePolyShapeDef(
-          {{0, 0.5}, {0.5, 0}, {-0.5, 0}, {0, -0.5}}));
+      core::geometry::SimplePolyShapeDef({{0, 0.5}, {0.5, 0}, {-0.5, 0}, {0, -0.5}}));
+}
+
+void RobotEntry::setRobotPose(float4 robot_pose) {
+  TensorHandle reset = TensorHandle::fromHostVectorNew<float>({robot_pose.x, robot_pose.y, robot_pose.z, robot_pose.w});
+  auto &pose = core::getMessageBus()->getMessageQueue(name_, "pose")->getWriteTensorRef();
+  pose.copyFrom(reset);
 }
 
 } // namespace robot_entry

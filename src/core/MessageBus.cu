@@ -49,7 +49,7 @@ public:
     }
 
     const MessageShape& getMessageShape(const MessageNameRef& message_name) {
-        int message_id = message_id_map_[message_name];
+        int message_id = message_id_map_.at(message_name);
         return messages_.at(message_id).second;
     }
 
@@ -65,7 +65,7 @@ public:
 
         NodeId node_id = node_id_map_[component->getName()];
 
-        NodeDescription &node_desc = node_descriptions_[node_id];
+        NodeDescription &node_desc = node_descriptions_.at(node_id);
         if (node_desc.input_map.find(message_id) != node_desc.input_map.end()) {
             throw std::runtime_error("Input message already registered");
         }
@@ -84,10 +84,10 @@ public:
         );
 
         // 更新节点接收消息列表
-        node_descriptions_[node_id].input_map[message_id] = input_des_id;
+        node_descriptions_.at(node_id).input_map[message_id] = input_des_id;
 
         // 更新路由表
-        message_routes_[message_id].second.insert(input_des_id);
+        message_routes_.at(message_id).second.insert(input_des_id);
     }
 
     void registerOutput( ExecuteNode* component, const ExecuteNode::NodeOutputInfo &info ) {
@@ -98,7 +98,7 @@ public:
 
         NodeId node_id = node_id_map_[component->getName()];
 
-        NodeDescription &node_desc = node_descriptions_[node_id];
+        NodeDescription &node_desc = node_descriptions_.at(node_id);
         if (node_desc.output_map.find(message_id) != node_desc.output_map.end()) {
             throw std::runtime_error("Input message already registered");
         }
@@ -116,16 +116,16 @@ public:
         });
 
         // 更新节点接收消息列表
-        node_descriptions_[node_id].output_map[message_id] = output_des_id;
+        node_descriptions_.at(node_id).output_map[message_id] = output_des_id;
 
-        message_routes_[message_id].first.insert(output_des_id);
+        message_routes_.at(message_id).first.insert(output_des_id);
     }
 
     MessageQueue* getMessageQueue(const NodeNameRef &node_name, const MessageNameRef &message_name){
-        NodeId node_id = node_id_map_[node_name];
+        NodeId node_id = node_id_map_.at(node_name);
         try {
-            MessageQueueId mq_id = node_descriptions_[node_id].active_output_map[message_name];
-            return message_queues_[mq_id].get();
+            MessageQueueId mq_id = node_descriptions_.at(node_id).active_output_map.at(message_name);
+            return message_queues_.at(mq_id).get();
         } catch (const std::out_of_range &e) {
             throw std::runtime_error("MessageQueue not found! Maybe the message is not active.");
         }
@@ -208,7 +208,11 @@ public:
         // std::lock_guard<std::mutex> lock(mutex_);
         // TODO.
 
-        auto &trigger_desc = triggers_[trigger_tag];
+        auto &trigger_desc = triggers_.at(trigger_tag);
+
+        // default的时候自动重置执行顺序，不然总是忽略要重置MessageBus...
+        if(trigger_tag == "default")
+            resetExecuteOrder();
 
         for (const auto &[node_order, node_ids] : trigger_desc.node_order) {
             if (node_order >= current_execute_order_ + 1) {
@@ -392,7 +396,7 @@ private:    // ^---- 私有定义 -----
             message_id_map_[message_name] = message_id;
             message_routes_[message_id] = { {}, {} };
         } else {
-            message_id = message_id_map_[message_name];
+            message_id = message_id_map_.at(message_name);
         }
         return message_id;
     }
@@ -442,7 +446,7 @@ private:    // ^---- 私有定义 -----
             auto& [pub_ids, sub_ids] = routes;
 
             for (auto sub_id : sub_ids) {
-                auto *sub = &input_descriptions_[sub_id];
+                auto *sub = &input_descriptions_.at(sub_id);
 
                 // 仅有一个publisher时，统一将reduce_method设置为stack
                 if (pub_ids.size() == 1) {
@@ -461,7 +465,7 @@ private:    // ^---- 私有定义 -----
                         sub->shape);
 
                     // ! 需要重新索引sub，否则会因为向input_descriptions_插入导致引用失效
-                    sub = &input_descriptions_[sub_id];
+                    sub = &input_descriptions_.at(sub_id);
 
                     // 更改newRoute中的subscriber的接收消息id，为Reducer发布的消息ID
                     MessageNameRef reducer_pub_msg_name = reducer->getOutputMessageName();
@@ -485,13 +489,13 @@ private:    // ^---- 私有定义 -----
             auto& [pub_ids, sub_ids] = routes;
 
             for (auto sub_id : sub_ids) {
-                auto *sub = &input_descriptions_[sub_id];
+                auto *sub = &input_descriptions_.at(sub_id);
 
                 printf(FG_CYAN "stack_order size: %lu" FG_DEFAULT LINE_ENDL, sub->stack_order.size());
 
                 if (sub->stack_order.size() == 0) {
                     for (auto pub_id : pub_ids) {
-                        sub->stack_order.push_back( output_descriptions_[pub_id].node_name );
+                        sub->stack_order.push_back( output_descriptions_.at(pub_id).node_name );
                     }
                 }
 
@@ -541,13 +545,13 @@ private:    // ^---- 私有定义 -----
             const auto& [pub_ids, sub_ids] = routes;
 
             for (const auto& sub_id : sub_ids) {   // 遍历所有订阅者
-                const auto& sub = input_descriptions_[sub_id];
+                const auto& sub = input_descriptions_.at(sub_id);
                 if (pub_ids.empty()) {   // 没有发布者, 添加边到no_pub_vertex
                     Vertex sub_vertex = vertex_map.at(sub.node_name);
                     boost::add_edge(no_pub_vertex, sub_vertex, {message_id, NOPUB_NODE_ID, sub_id}, message_graph_);
                 } else {
                     for (const auto& pub_id : pub_ids) {
-                        const auto& pub = output_descriptions_[pub_id];
+                        const auto& pub = output_descriptions_.at(pub_id);
                         Vertex pub_vertex = vertex_map.at(pub.node_name);
                         Vertex sub_vertex = vertex_map.at(sub.node_name);
                         boost::add_edge(pub_vertex, sub_vertex, {message_id, pub_id, sub_id}, message_graph_);
@@ -619,7 +623,7 @@ private:    // ^---- 私有定义 -----
             NodeNameRef node_name = active_graph_[*vi].node_name;
             VertexOutEdgeIterator ei, eind;
             // for(std::tie(ei, eind) = boost::out_edges(*vi, active_graph_); ei!=eind; ei++) {
-            for(auto [message_id, pub_id] : node_descriptions_[node_id].output_map) {
+            for(auto [message_id, pub_id] : node_descriptions_.at(node_id).output_map) {
                 // const EdgeProperties &edge_props = active_graph_[*ei];
                 // MessageId message_id = edge_props.message_id;
                 const MessageNameRef& message_name = messages_.at(message_id).first;
@@ -630,7 +634,7 @@ private:    // ^---- 私有定义 -----
                 // 遍历当前消息的所有接收者，得到最大历史长度，没有接收者的消息时，offset长度为0
                 if(active_messages_routes_.find(message_id) != active_messages_routes_.end()) {
                     for(auto sub_id : active_messages_routes_.at(message_id).second) {
-                        const auto &sub = input_descriptions_[sub_id];
+                        const auto &sub = input_descriptions_.at(sub_id);
 
                         if(pub.shape != sub.shape) {
                             throw std::runtime_error("Shape mismatch for subscriber of message " + std::string(message_name));
@@ -683,8 +687,8 @@ private:    // ^---- 私有定义 -----
 
             // 填充active_output_map
             for(auto [message_id, pub_id] : node_des.active_outputs_desc) {
-                const MessageNameRef &message_name = output_descriptions_[pub_id].message_name;
-                node_des.active_output_map[message_name] = output_descriptions_[pub_id].queue_id;
+                const MessageNameRef &message_name = output_descriptions_.at(pub_id).message_name;
+                node_des.active_output_map[message_name] = output_descriptions_.at(pub_id).queue_id;
             }
 
             // 对于所有的active_input, 根据stack order的顺序查找对应消息的pub, 得到message_queue_id, 填充input_map
@@ -702,7 +706,7 @@ private:    // ^---- 私有定义 -----
                     // 如果消息不是活跃的，就跳过
                     if (active_pubs.find(pub_id) == active_pubs.end()) continue;
 
-                    const auto &pub = output_descriptions_[pub_id];
+                    const auto &pub = output_descriptions_.at(pub_id);
                     mq_ids.push_back({pub.queue_id, sub.history_offset});
                 }
 
@@ -825,7 +829,7 @@ private:    // ^---- 私有定义 -----
         NodeExecOutputType output_data;
 
         for (const auto& [message_name, mq_id] : node_des.active_output_map) {
-            output_data.insert(std::make_pair(message_name, message_queues_.at(mq_id)->getWriteTensorPtr()));
+            output_data.insert(std::make_pair(message_name, message_queues_.at(mq_id)->getWriteTensorRef()));
         }
 
         // 所有输入就绪时执行组件

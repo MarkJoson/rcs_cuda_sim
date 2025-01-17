@@ -515,6 +515,16 @@ void GTensorTorchWrapper::fromHostArray(const void* data, NumericalDataType type
     impl_->dtype = type;
 }
 
+void GTensorTorchWrapper::toHostArray(void* data, NumericalDataType type, int64_t numel) const {
+    auto new_tensor = impl_->tensor.to(
+        torch::TensorOptions()
+            .device(torch::kCPU)
+            .dtype(internal::TorchTensorImpl::getTorchDtype(type)));
+
+    new_tensor = new_tensor.reshape({numel});
+    std::memcpy(data, new_tensor.data_ptr(), numel * new_tensor.element_size());
+}
+
 void GTensorTorchWrapper::setTensorDefaultDeviceIdImpl(int device_id) {
     g_default_cuda_id = device_id;
 }

@@ -71,6 +71,9 @@ find_package(Boost REQUIRED COMPONENTS graph)
 # nanoflann
 include(thirdparty/nanoflann/nanoflann.cmake)
 
+# SFML
+find_package(SFML COMPONENTS graphics REQUIRED)
+
 # 使用python自带的库就不能使用新版ABI
 # add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=1)
 # set_target_properties(torch PROPERTIES INTERFACE_COMPILE_OPTIONS "-D_GLIBCXX_USE_CXX11_ABI=1")
@@ -145,36 +148,39 @@ set_target_properties(cudasim_test PROPERTIES
     POSITION_INDEPENDENT_CODE ON
 )
 
+
+
 target_link_libraries(cudasim_test
     PUBLIC
         cudasim_core
         cuda_sim_nanoflann
+        sfml-graphics
 )
 
 # /////////////////////////////////////////////////////
-add_executable(test_boost_graph
-    src/test_boost_graph.cpp
-)
+# add_executable(test_boost_graph
+#     src/test_boost_graph.cpp
+# )
 
-set_target_properties(test_boost_graph PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED ON
-)
+# set_target_properties(test_boost_graph PROPERTIES
+#     CXX_STANDARD 20
+#     CXX_STANDARD_REQUIRED ON
+# )
 
-target_include_directories(test_boost_graph
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>    # 构建时使用源代码中的 include 目录
-        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>          # 安装后使用安装的 include 目录
-    PRIVATE
-        ${TORCH_INCLUDE_DIRS}
-        ${Boost_INCLUDE_DIRS}
-)
+# target_include_directories(test_boost_graph
+#     PUBLIC
+#         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>    # 构建时使用源代码中的 include 目录
+#         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>          # 安装后使用安装的 include 目录
+#     PRIVATE
+#         ${TORCH_INCLUDE_DIRS}
+#         ${Boost_INCLUDE_DIRS}
+# )
 
-target_link_libraries(test_boost_graph
-    PUBLIC
-    ${Boost_LIBRARIES}
-    ${TORCH_LIBRARIES}
-)
+# target_link_libraries(test_boost_graph
+#     PUBLIC
+#     ${Boost_LIBRARIES}
+#     ${TORCH_LIBRARIES}
+# )
 
 
 ############

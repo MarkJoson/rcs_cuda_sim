@@ -16,6 +16,10 @@ public:
   void onNodeInit() override;
   void onNodeExecute(const core::NodeExecInputType &input, core::NodeExecOutputType &output) override;
 
+  float getLidarRange() const;
+  float getLidarResolution() const;
+  float getLidarRayNum() const;
+
 private:
     uint32_t num_inst_;
     core::MessageShape output_shape_;
