@@ -9,6 +9,7 @@
 #include "core/SimulatorContext.hh"
 #include "core/core_types.hh"
 #include "geometry/GeometryManager.cuh"
+#include "geometry/geometry_types.hh"
 #include "geometry/shapes.hh"
 
 using namespace cuda_simulator::core;
@@ -26,7 +27,7 @@ namespace lidar_sensor {
 #define EMIT_PER_THREAD (2)
 #define TOTAL_EMITION (EMIT_PER_THREAD * CTA_SIZE)
 
-#define LIDAR_LINES_LOG2 (4) // 128lines
+#define LIDAR_LINES_LOG2 (7) // 128lines
 #define LIDAR_LINES (1 << LIDAR_LINES_LOG2)
 
 static constexpr float LIDAR_MAX_RANGE = 8.0f;
@@ -104,7 +105,7 @@ __global__ void rasterKernel(const ConstantMemoryVector<uint32_t> num_static_lin
   int lidar_inst_id = env_inst_id * gridDim.x + blockIdx.x;
 
   // 每个场景有其对应的动态线段（由所有动态物体的位姿计算）
-  const float4 *__restrict__ dyn_lines_in_env = env_inst_id * num_dyn_lines + dyn_lines;
+  const float4 *__restrict__ dyn_lines_in_env = env_inst_id * num_dyn_lines + dyn_lines;  // TODO. 共享内存加一个维度避免bank冲突
   // 每个场景组有对应的静态线段
   const float4 *__restrict__ static_lines_in_group = static_lines + group_id;
   // 每个场景组静态线段的数量不同
@@ -117,7 +118,7 @@ __global__ void rasterKernel(const ConstantMemoryVector<uint32_t> num_static_lin
   uint32_t lineBufRead = 0, lineBufWrite = 0;
   uint32_t frLineBufRead = 0, frLineBufWrite = 0;
   float4 pose = poses[lidar_inst_id];
-
+  // float4 pose = {2,2};
   /********* 初始化lidar数据 *********/
   for (int i = tid; i < LIDAR_LINES; i += CTA_SIZE)
     s_lidarResponse[i] = LIDAR_MAX_RESPONSE;
@@ -156,7 +157,7 @@ __global__ void rasterKernel(const ConstantMemoryVector<uint32_t> num_static_lin
       BlockScan(temp_storage.scan_temp_storage).ExclusiveSum(visibility, scan, scan_reduce);
 
       if (visibility) {
-        s_lineBuf[lineBufWrite + scan] = lineIdx;
+        s_lineBuf[(lineBufWrite + scan) % LINE_BUF_SIZE] = lineIdx;
       }
 
       lineBufWrite += scan_reduce;
@@ -251,7 +252,7 @@ __global__ void rasterKernel(const ConstantMemoryVector<uint32_t> num_static_lin
             break;
 
           int fragIdx = relative_offsets[i];
-          uint32_t frLineBufIdx = decoded_items[i];
+          uint32_t frLineBufIdx = decoded_items[i];   // frLineBufIdx在存储时已经取余过了
           uint32_t lineIdx = s_frLineIdxBuf[frLineBufIdx];
           int e_grid = s_frLineSGridFragsBuf[frLineBufIdx] >> 16;
 
@@ -279,6 +280,8 @@ __global__ void rasterKernel(const ConstantMemoryVector<uint32_t> num_static_lin
 
   for (int i = tid; i < LIDAR_LINES; i += CTA_SIZE)
     lidar_response[i] = s_lidarResponse[i];
+  // if(tid < LIDAR_LINES)
+  //   printf("[LIDAR] %d: %f\n", tid, (lidar_response[tid]>>16)/1024.f);
 }
 
 void LidarSensor::onNodeReset(const TensorHandle &reset_flags, NodeExecStateType &state) {
@@ -287,38 +290,44 @@ void LidarSensor::onNodeReset(const TensorHandle &reset_flags, NodeExecStateType
 
 void LidarSensor::onEnvironGroupInit() {
   // 初始化LidarSensor
-  getGeometryManager()->createStaticPolyObj(0,
-                                            geometry::SimplePolyShapeDef({
-                                                {1.0, 0.0},
-                                                {1.0, 1.0},
-                                                {0.0, 1.0},
-                                                {0.0, 0.0},
-                                            }),
-                                            {{2, 0}, 0});
-  getGeometryManager()->createStaticPolyObj(0,
-                                            geometry::SimplePolyShapeDef({
-                                                {1.0, 0.0},
-                                                {1.0, 1.0},
-                                                {0.0, 1.0},
-                                                {0.0, 0.0},
-                                            }),
-                                            {{4, 2}, 0});
-  getGeometryManager()->createStaticPolyObj(0,
-                                            geometry::SimplePolyShapeDef({
-                                                {1.0, 0.0},
-                                                {1.0, 1.0},
-                                                {0.0, 1.0},
-                                                {0.0, 0.0},
-                                            }),
-                                            {{2, 4}, 0});
-  getGeometryManager()->createStaticPolyObj(0,
-                                            geometry::SimplePolyShapeDef({
-                                                {1.0, 0.0},
-                                                {1.0, 1.0},
-                                                {0.0, 1.0},
-                                                {0.0, 0.0},
-                                            }),
-                                            {{4, 0}, 0});
+
+
+  // float radius = 0.8;
+  // for(int ii = 0; ii<16; ii++) {
+  //   std::vector<geometry::Vector2f> circle_pts;
+  //   radius += 0.01;
+  //   for(int i=0; i<128; i++) {
+  //     float angle = 2*M_PI / 128 * i;
+  //     float x = cosf(angle) * radius+2;
+  //     float y = sinf(angle) * radius+2;
+  //     circle_pts.push_back({x, y});
+  //   }
+
+  //   getGeometryManager()->createStaticPolyObj(
+  //     0,
+  //     geometry::SimplePolyShapeDef(circle_pts),
+  //     {{0, 0}, 0}
+  //   );
+  // }
+
+  // radius = 1.8;
+  // for(int ii = 0; ii<16; ii++) {
+  //   std::vector<geometry::Vector2f> circle_pts;
+  //   radius += 0.02;
+  //   for(int i=63; i>=0; i--) {
+  //     float angle = 2*M_PI / 32 * i;
+  //     float x = cosf(angle) * radius+2;
+  //     float y = sinf(angle) * radius+2;
+  //     circle_pts.push_back({x, y});
+  //   }
+
+  //   getGeometryManager()->createStaticPolyObj(
+  //     0,
+  //     geometry::SimplePolyShapeDef(circle_pts),
+  //     {{0, 0}, 0}
+  //   );
+  // }
+
 }
 
 LidarSensor::LidarSensor() : Component("lidar_sensor") {
