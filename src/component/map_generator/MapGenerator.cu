@@ -42,11 +42,13 @@ void MapGenerator::onEnvironGroupInit() {
       // 内边界顺时针排列，按逆顺序排布点
       const impl::SimplePoly<float> &inner_shape = polygons.back();
       core::geometry::SimplePolyShapeDef inner_shape_def{
-          std::vector<core::geometry::Vector2f>(inner_shape.rbegin(),
-                                                inner_shape.rend())};
+          std::vector<core::geometry::Vector2f>(inner_shape.begin(),
+                                                inner_shape.end())};
+      std::reverse(outter_shape_def.vertices.begin(), outter_shape_def.vertices.end());
 
-      core::geometry::ComposedPolyShapeDef composed_shape{{outter_shape_def},
-                                                          {inner_shape_def}};
+
+      core::geometry::ComposedPolyShapeDef composed_shape{{inner_shape_def},
+                                                          {outter_shape_def}};
 
       core::getGeometryManager()->createStaticPolyObj(i, composed_shape, {});
     }
