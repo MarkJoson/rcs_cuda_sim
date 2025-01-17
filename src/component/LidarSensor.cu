@@ -79,8 +79,8 @@ __forceinline__ __device__ float4 readLine(int num_dyn_lines, const float4 *__re
     return static_lines[lineIdx - num_dyn_lines];
 }
 
-__global__ void rasterKernel(const ConstantMemoryVector<uint32_t> num_static_lines, // 每个场景中的静态线段数量
-                             const float4 *__restrict__ static_lines,               // 线段的起点
+__global__ void rasterKernel(const ConstMemItemAccessor<uint32_t> num_static_lines, // 每个场景中的静态线段数量
+                             const TensorItemAccessor<float> static_lines,
                              int num_dyn_lines,                    // 场景中的动态线段数量，所有场景统一
                              const float4 *__restrict__ dyn_lines, // 动态线段数组
                              const float4 *__restrict__ poses,     // 机器人的位姿
@@ -107,7 +107,7 @@ __global__ void rasterKernel(const ConstantMemoryVector<uint32_t> num_static_lin
   // 每个场景有其对应的动态线段（由所有动态物体的位姿计算）
   const float4 *__restrict__ dyn_lines_in_env = env_inst_id * num_dyn_lines + dyn_lines;  // TODO. 共享内存加一个维度避免bank冲突
   // 每个场景组有对应的静态线段
-  const float4 *__restrict__ static_lines_in_group = static_lines + group_id;
+  const float4 *__restrict__ static_lines_in_group = reinterpret_cast<const float4*>(static_lines.getAddr(group_id));
   // 每个场景组静态线段的数量不同
   int num_static_line_in_group = num_static_lines[group_id];
   // dynamic line在前，static line在后
@@ -361,13 +361,14 @@ void LidarSensor::onNodeExecute(const NodeExecInputType &input, NodeExecOutputTy
   uint32_t num_dyn_lines = getGeometryManager()->getNumDynLines();
 
   const float4 *dyn_lines = getGeometryManager()->getDynamicLines().typed_data<float4>();
-  const float4 *static_lines = getGeometryManager()->getStaticLinesDeviceTensor().typed_data<float4>();
   const float4 *pose = input.at("pose").begin()->typed_data<float4>();
-  const ConstantMemoryVector<uint32_t> &num_static_lines = getGeometryManager()->getNumStaticLines()->getDeviceData();
 
   uint32_t *lidar = output.at("lidar").typed_data<uint32_t>();
 
-  rasterKernel<<<grid_dim, block_dim>>>(num_static_lines, static_lines, num_dyn_lines, dyn_lines, pose, lidar);
+  rasterKernel<<<grid_dim, block_dim>>>(
+    getGeometryManager()->getNumStaticLines()->getAccessor(),
+    getGeometryManager()->getStaticLines()->getAccessor(),
+    num_dyn_lines, dyn_lines, pose, lidar);
 
   checkCudaErrors(cudaDeviceSynchronize());
   // TODO. 删除自己的dynamic_line

@@ -79,7 +79,6 @@ static constexpr int CONST_MEM_WORD_SIZE = 8192;
 extern __constant__ int constant_mem_pool[CONST_MEM_WORD_SIZE];
 extern __constant__ ConstMemPoolConfig d_cmp_config_;
 
-
 class EGConstantMemoryPool {
   static ConstMemPoolConfig h_cmp_config_;
   using ConstMemElemType = decltype(constant_mem_pool[0]);
@@ -110,7 +109,7 @@ public:
   }
 
   template <typename T> static inline __host__ void setData(int group_id, int offset, const T &data) {
-    checkCudaErrors(cudaMemcpyToSymbol(constant_mem_pool, &data, sizeof(T), offset));
+    checkCudaErrors(cudaMemcpyToSymbol(constant_mem_pool + hostGetMemPoolOffset(group_id, offset), &data, sizeof(T), offset));
   }
 
   // 当num_active_group发生变化时调用
@@ -135,10 +134,9 @@ private:
 
 // ------------------- 访问器 -------------------
 template <typename Derived, typename T> class MemItemAccessor {
+  __host__ __device__ Derived &derived() { return static_cast<Derived &>(*this); }
+  __host__ __device__ const Derived &derived() const { return static_cast<const Derived &>(*this); }
 public:
-  Derived &derived() { return static_cast<Derived &>(*this); }
-  const Derived &derived() const { return static_cast<const Derived &>(*this); }
-
   __device__ inline const T &operator[](int group_id) const { return derived().devGet(group_id); }
 
 protected:
@@ -146,36 +144,27 @@ protected:
 };
 
 template <typename U> class HostMemItemHandle;
-template <typename T> class HostMemItemAccessor : MemItemAccessor<HostMemItemAccessor<T>, T> {
-  uint8_t *host_ptr_;
-  int group_stride_;  // bytes
-  friend class HostMemItemHandle<T>;
-
+template <typename T> class HostMemItemAccessor : public MemItemAccessor<HostMemItemAccessor<T>, T> {
 public:
-  __host__ inline const T &get(int active_group_id) {
+  __host__ inline const T &get(int active_group_id) const {
     int offset = env_group_impl::EGActiveGroupMapper::hostGetGroupId(active_group_id) * group_stride_;
     return *(reinterpret_cast<T *>(host_ptr_ + offset));
   }
 
-  __host__ inline void hostSet(int group_id, const T &data) const {
-    int offset = group_id * group_stride_;
-    *(reinterpret_cast<T *>(host_ptr_ + offset)) = data;
-  }
-
 private:
-  __host__ static inline HostMemItemAccessor<T> assignAccessor(T *host_ptr, int group_stride) {
+  HostMemItemAccessor(const T *host_ptr, int group_stride) : host_ptr_(host_ptr), group_stride_(group_stride) {}
+
+  __host__ static inline HostMemItemAccessor<T> assignAccessor(const T *host_ptr, int group_stride) {
     return HostMemItemAccessor<T>(host_ptr, group_stride);
   }
 
-private:
-  HostMemItemAccessor(T *host_ptr, int group_stride) : host_ptr_(host_ptr), group_stride_(group_stride) {}
+  const uint8_t *host_ptr_;
+  const int group_stride_; // bytes
+  friend class HostMemItemHandle<T>;
 };
 
 template <typename U> class ConstMemItemHandle;
-template <typename T> class ConstMemItemAccessor : MemItemAccessor<ConstMemItemAccessor<T>, T> {
-  int pool_offset_;
-  friend class ConstMemItemHandle<T>;
-
+template <typename T> class ConstMemItemAccessor : public MemItemAccessor<ConstMemItemAccessor<T>, T> {
 public:
   __device__ inline const T &devGet(int active_group_id) const {
     return env_group_impl::EGConstantMemoryPool::getData<T>(active_group_id, pool_offset_);
@@ -186,29 +175,32 @@ public:
     env_group_impl::EGConstantMemoryPool::setData(group_id, offset, data);
   }
 
-private:
+
+protected:
+  ConstMemItemAccessor(int mem_pool_offset) : pool_offset_(mem_pool_offset) {}
+
   __host__ static inline ConstMemItemAccessor<T> assignAccessor(int pool_offset) {
     return ConstMemItemAccessor<T>(pool_offset);
   }
 
-private:
-  ConstMemItemAccessor(int mem_pool_offset) : pool_offset_(mem_pool_offset) {}
+  const int pool_offset_;
+  friend class ConstMemItemHandle<T>;
 };
 
 template <typename U> class GlobalMemItemHandle;
-template <typename T> class GlobalMemItemAccessor : MemItemAccessor<GlobalMemItemAccessor<T>, T> {
-  uint8_t *dev_ptr_;
-  uint32_t group_stride_;    // 单位：字节
-
-  friend class GlobalMemItemHandle<T>;
-
+template <typename T> class GlobalMemItemAccessor : public MemItemAccessor<GlobalMemItemAccessor<T>, T> {
 public:
   __host__ __device__ inline T *getAddr(int group_id) {
     uint32_t offset = group_id * group_stride_;
     return reinterpret_cast<T *>(dev_ptr_ + offset);
   }
 
-  __device__ inline const T &get(int active_group_id) {
+  __host__ __device__ inline const T *getAddr(int group_id) const {
+    uint32_t offset = group_id * group_stride_;
+    return reinterpret_cast<const T *>(dev_ptr_ + offset);
+  }
+
+  __device__ inline const T &get(int active_group_id) const {
     int group_id = env_group_impl::EGActiveGroupMapper::devGetGroupId(active_group_id);
     return *(getAddr(group_id));
   }
@@ -218,52 +210,48 @@ public:
     checkCudaErrors(cudaMemcpy(offset + dev_ptr_, &data, sizeof(T), cudaMemcpyHostToDevice));
   }
 
-private:
-  __host__ static inline GlobalMemItemAccessor<T> assignAccessor(T *dev_ptr) {
+protected:
+  GlobalMemItemAccessor(const T *dev_ptr, int group_stride) : dev_ptr_(reinterpret_cast<const uint8_t*>(dev_ptr)), group_stride_(group_stride) {}
+
+  __host__ static inline GlobalMemItemAccessor<T> assignAccessor(const T *dev_ptr) {
     uint32_t stride = ((sizeof(T) + 3) / 4) * 4; // 4字节对齐
     return GlobalMemItemAccessor<T>(dev_ptr, stride);
   }
 
-  __host__ static inline GlobalMemItemAccessor<T> assignAccessor(T *dev_ptr, uint32_t group_stride) {
-    if(group_stride % 4 != 0) {
+  __host__ static inline GlobalMemItemAccessor<T> assignAccessor(const T *dev_ptr, uint32_t group_stride) {
+    if (group_stride % 4 != 0) {
       throw std::runtime_error("group stride should align 4byte");
     }
     return GlobalMemItemAccessor<T>(dev_ptr, group_stride);
   }
 
-  template <typename U>
-  GlobalMemItemAccessor<U> convertType() {
-    return GlobalMemItemAccessor<U>(dev_ptr_, group_stride_);
-  }
+  const uint8_t *dev_ptr_;
+  const uint32_t group_stride_; // 单位：字节
 
-private:
-  GlobalMemItemAccessor(T *dev_ptr, int group_stride) : dev_ptr_(dev_ptr), group_stride_(group_stride) {}
+  friend class GlobalMemItemHandle<T>;
 };
 
 template <typename U> class TensorItemHandle;
-template <typename T> class TensorItemAccessor : GlobalMemItemAccessor<T> {
-  int numel_;
-  friend class TensorItemHandle<T>;
+template <typename T> class TensorItemAccessor : public GlobalMemItemAccessor<T> {
+public:
+__host__ __device__ int getNumElement() const { return numel_; }
 
-private:
-  template<typename U>
-  __host__ static inline TensorItemHandle<T> assignAccessor(T *dev_ptr, std::vector<U>::const_iterator shape_iter,
-                                                                 std::vector<U>::const_iterator shape_end) {
+protected:
+  TensorItemAccessor(const T *dev_ptr, int group_stride, int numel)
+      : GlobalMemItemAccessor<T>(dev_ptr, group_stride), numel_(numel) {}
+
+  template <typename U>
+  __host__ static inline TensorItemAccessor<T> assignAccessor(const T *dev_ptr, const std::vector<U> &shape) {
     int numel = 1;
-    for (; shape_iter != shape_end; shape_iter++) {
-      numel *= *shape_iter;
+    for (auto i : shape) {
+      numel *= i;
     }
     // 假定使用连续存储
-    return TensorItemHandle<T>(dev_ptr, numel, numel*sizeof(T));
+    return TensorItemAccessor<T>(dev_ptr, numel, numel * sizeof(T));
   }
 
-  template<typename U>
-  __host__ static inline TensorItemHandle<T> assignAccessor(T *dev_ptr, const std::vector<U>& shape) {
-    return assignAccessor(dev_ptr, shape.begin(), shape.end());
-  }
-  __host__ __device__ int getNumElement() const { return numel_; }
-private:
-  TensorItemAccessor(T *dev_ptr, int group_stride, int numel) : GlobalMemItemAccessor<T>(dev_ptr, group_stride), numel_(numel) {}
+  const int numel_;
+  friend class TensorItemHandle<T>;
 };
 
 // ------------------- 配置项句柄 -------------------
@@ -295,10 +283,12 @@ public:
   virtual ~HostMemItemHandle() = default;
 
   T &hostAt(int group_id) { return host_data_[group_id]; }
+  const T &hostAt(int group_id) const { return host_data_[group_id]; }
 
   std::vector<T> &hostData() { return host_data_; }
 
   HostMemItemAccessor<T> getAccessor() { return HostMemItemAccessor<T>(host_data_.data(), sizeof(T)); }
+  const HostMemItemAccessor<T> getAccessor() const { return HostMemItemAccessor<T>(host_data_.data(), sizeof(T)); }
 };
 
 // 常量内存区域句柄，仅支持基本数据类型，包含常量内存池偏移量，主机内存句柄
@@ -306,7 +296,7 @@ template <typename T> class ConstMemItemHandle : public HostMemItemHandle<T> {
   int pool_offset_;
 
 public:
-  ConstMemItemHandle(int64_t num_group, int64_t num_active_group)
+  ConstMemItemHandle(int64_t num_group)
       : HostMemItemHandle<T>(num_group, MemoryType::CONSTANT_GPU_MEM),
         pool_offset_(env_group_impl::EGConstantMemoryPool::allocate<T>()) {}
 
@@ -320,6 +310,7 @@ public:
   }
 
   ConstMemItemAccessor<T> getAccessor() { return ConstMemItemAccessor<T>::assignAccessor(pool_offset_); }
+  const ConstMemItemAccessor<T> getAccessor() const { return ConstMemItemAccessor<T>::assignAccessor(pool_offset_); }
 };
 
 // 全局内存区域句柄
@@ -336,10 +327,13 @@ public:
 
   void syncToDevice() override {
     checkCudaErrors(cudaMemcpy(dev_ptr_, HostMemItemHandle<T>::host_data_.data(),
-                                HostMemItemHandle<T>::host_data_.size() * elem_size_, cudaMemcpyHostToDevice));
+                               HostMemItemHandle<T>::host_data_.size() * elem_size_, cudaMemcpyHostToDevice));
   }
 
   GlobalMemItemAccessor<T> getAccessor() { return GlobalMemItemAccessor<T>::assignAccessor(dev_ptr_, elem_size_); }
+  const GlobalMemItemAccessor<T> getAccessor() const {
+    return GlobalMemItemAccessor<T>::assignAccessor(dev_ptr_, elem_size_);
+  }
 };
 
 // 全局内存区域张量数据句柄，由TensorHandle管理
@@ -370,7 +364,17 @@ public:
     return host_data_[{group_id, indices...}];
   }
 
-  TensorItemAccessor<T> getAccessor() { return TensorItemAccessor<T>::assignAccessor(device_data_.data(), shape_); }
+  template <typename... Args> __host__ const auto at(int64_t group_id, Args... indices) const {
+    if (group_id >= num_group_) {
+      throw std::out_of_range("group_id out of range");
+    }
+    return host_data_[{group_id, indices...}];
+  }
+
+  TensorItemAccessor<T> getAccessor() { return TensorItemAccessor<T>::assignAccessor(device_data_.typed_data<T>(), shape_); }
+  const TensorItemAccessor<T> getAccessor() const {
+    return TensorItemAccessor<T>::assignAccessor(device_data_.typed_data<T>(), shape_);
+  }
 };
 
 // ------------------- 环境组管理器 -------------------
@@ -400,8 +404,7 @@ public:
     }
 
     if constexpr (mem_type == MemoryType::CONSTANT_GPU_MEM) {
-      std::unique_ptr<ConstMemItemHandle<T>> item =
-          std::make_unique<ConstMemItemHandle<T>>(num_group_, num_active_group_);
+      std::unique_ptr<ConstMemItemHandle<T>> item = std::make_unique<ConstMemItemHandle<T>>(num_group_);
       ConstMemItemHandle<T> *ptr = item.get();
       registry_.insert({name, std::move(item)});
       return ptr;
