@@ -65,7 +65,7 @@ public:
     // todo. 统一地图尺寸
     getContext()->setup();
 
-    static_lines = getGeometryManager()->getStaticLinesHostData(0);
+    static_lines = getGeometryManager()->getStaticLines(0);
     num_static_lines = getGeometryManager()->getNumStaticLines()->at(0);
     ray_lines.resize(lidar_sensor->getLidarRayNum());
   }

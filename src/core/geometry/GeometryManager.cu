@@ -98,7 +98,7 @@ public:
   }
 
   void pushStaticPolyObj(int group_id, std::unique_ptr<ShapeDef> &&shape_def, const Transform2D &pose) {
-    static_scene_descs_->at(group_id).push_back(std::make_pair(std::move(shape_def), pose));
+    static_scene_descs_->hostAt(group_id).push_back(std::make_pair(std::move(shape_def), pose));
   }
 
   // 在所有环境组中创建动态物体
@@ -127,22 +127,26 @@ public:
     transformDynamicLines();
   }
 
-  const TensorHandle &getDynamicLines() { return dyn_lines_; }
+  const TensorItemHandle<float>* getStaticLines() const { return static_lines_; }
+
+  const ConstMemItemHandle<uint32_t>* getNumStaticLines() const { return num_static_lines_; }
+
+  const TensorItemHandle<float>* getStaticESDF() const { return static_esdf_; }
+
   uint32_t getNumDynLines() { return num_dyn_lines_; }
-  const TensorHandle &getStaticLinesDeviceTensor() { return static_lines_->getDeviceTensor(); }
-  const float4* getStaticLinesHostData(int64_t group_id) { return static_lines_->at(group_id).typed_data<float4>(); }
-  EGConstMemConfigItem<uint32_t> *getNumStaticLines() { return num_static_lines_; }
+
+  const TensorHandle &getDynamicLines() { return dyn_lines_; }
   const TensorHandle &getDynamicPoses() { return dyn_poses_; }
-  TensorHandle getStaticESDF(int group_id) { return static_esdf_->at(group_id); }
+  const TensorHandle getShapePose(int obj_id) { return dyn_poses_[obj_id]; }
+
   ShapeDef *getShapeDef(int obj_id) { return dyn_scene_desc_[obj_id].get(); }
-  TensorHandle getShapePose(int obj_id) { return dyn_poses_[obj_id]; }
 
 protected:
   void renderStaticEDF() {
     // 为所有的场景组生成静态物体的SDF
     for (int64_t group_id = 0; group_id < static_scene_descs_->getNumEnvGroup(); group_id++) {
       GridMapGenerator grid_map({GRIDMAP_WIDTH, GRIDMAP_HEIGHT, {0, 0}, GRIDMAP_RESOLU});
-      for (auto &static_obj : static_scene_descs_->at(group_id)) {
+      for (auto &static_obj : static_scene_descs_->hostAt(group_id)) {
         auto &shape = static_obj.first;
         auto &pose = static_obj.second;
 
@@ -186,7 +190,7 @@ protected:
         }
       };
 
-      for (auto &static_obj : static_scene_descs_->at(group_id)) {
+      for (auto &static_obj : static_scene_descs_->hostAt(group_id)) {
         const auto &shape = static_obj.first;
         if (shape->type == ShapeType::SIMPLE_POLYGON) { // 简单多边形
           poly_handle_fn(dynamic_cast<SimplePolyShapeDef *>(shape.get()), static_obj.second);
@@ -196,7 +200,7 @@ protected:
           throw std::runtime_error("Shape Type Not Support at Present!");
         }
       }
-      num_static_lines_->at(group_id) = num_static_lines_in_group;
+      num_static_lines_->hostAt(group_id) = num_static_lines_in_group;
     }
   }
 
@@ -297,10 +301,10 @@ private:
   using DynamicSceneDescription = std::vector<std::unique_ptr<ShapeDef>>;
 
   // 静态物体
-  EGHostMemConfigItem<StaticSceneDescription> *static_scene_descs_ = nullptr;
-  EGConstMemConfigItem<uint32_t> *num_static_lines_ = nullptr; // 静态多边形物体，外轮廓线段数量，用于激光雷达
-  EGGlobalMemConfigTensor<float> *static_lines_ = nullptr;     // 静态多边形物体，外轮廓线段端点，用于激光雷达
-  EGGlobalMemConfigTensor<float> *static_esdf_ = nullptr;      // 静态物体形成的ESDF: [group, width, height, 4]
+  HostMemItemHandle<StaticSceneDescription> *static_scene_descs_ = nullptr;
+  ConstMemItemHandle<uint32_t> *num_static_lines_ = nullptr; // 静态多边形物体，外轮廓线段数量，用于激光雷达
+  TensorItemHandle<float> *static_lines_ = nullptr;     // 静态多边形物体，外轮廓线段端点，用于激光雷达
+  TensorItemHandle<float> *static_esdf_ = nullptr;      // 静态物体形成的ESDF: [group, width, height, 4]
 
   // 动态物体
   DynamicSceneDescription dyn_scene_desc_; // 动态物体定义（仅支持多边形）
@@ -327,25 +331,27 @@ GeometryManager::GeometryManager() { impl_ = std::make_unique<Impl>(); }
 
 GeometryManager::~GeometryManager() = default;
 
-const TensorHandle &GeometryManager::getDynamicLines() { return impl_->getDynamicLines(); }
-
-const ShapeDef *GeometryManager::getShapeDef(int obj_id) { return impl_->getShapeDef(obj_id); }
-
-TensorHandle GeometryManager::getStaticESDF(int group_id) { return impl_->getStaticESDF(group_id); }
-
-const TensorHandle &GeometryManager::getDynamicPoses() { return impl_->getDynamicPoses(); }
-
-EGConstMemConfigItem<uint32_t> *GeometryManager::getNumStaticLines() { return impl_->getNumStaticLines(); }
-
-const TensorHandle &GeometryManager::getStaticLinesDeviceTensor() { return impl_->getStaticLinesDeviceTensor(); }
-
-const float4* GeometryManager::getStaticLinesHostData(int64_t group_id) { return impl_->getStaticLinesHostData(group_id); }
-
-uint32_t GeometryManager::getNumDynLines() { return impl_->getNumDynLines(); }
-
 void GeometryManager::execute() { impl_->execute(); }
 
 void GeometryManager::assemble() { impl_->assemble(); }
+
+const ShapeDef *GeometryManager::getShapeDef(int obj_id) { return impl_->getShapeDef(obj_id); }
+
+const TensorItemHandle<float> *GeometryManager::getStaticLines() const { return impl_->getStaticLines(); }
+
+const ConstMemItemHandle<uint32_t> *GeometryManager::getNumStaticLines() const {
+  return impl_->getNumStaticLines();
+}
+
+const TensorItemHandle<float> *GeometryManager::getStaticESDF() const { return impl_->getStaticESDF(); }
+
+uint32_t GeometryManager::getNumDynLines() { return impl_->getNumDynLines(); }
+
+const TensorHandle &GeometryManager::getDynamicLines() { return impl_->getDynamicLines(); }
+
+const TensorHandle &GeometryManager::getDynamicPoses() { return impl_->getDynamicPoses(); }
+
+const TensorHandle GeometryManager::getShapePose(int obj_id) { return impl_->getShapePose(obj_id); }
 
 DynamicObjectProxy GeometryManager::createDynamicPolyObj(const SimplePolyShapeDef &polygon_def) {
   return DynamicObjectProxy(impl_->createDynamicPolyObj(polygon_def), this);

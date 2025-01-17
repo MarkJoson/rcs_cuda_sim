@@ -2,6 +2,7 @@
 #define CUDASIM_ENV_GROUP_MANAGER_HH
 
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -17,71 +18,6 @@
 namespace cuda_simulator {
 namespace core {
 
-namespace env_group_impl {
-
-constexpr int CONST_MEM_WORD_SIZE = 8192;
-extern __constant__ int constant_mem_pool[CONST_MEM_WORD_SIZE];
-extern __constant__ uint32_t d_num_active_group;
-
-// TODO. 原有定义
-
-// 单个group的所有常量数据是顺序排列的，每个group的数据是分开的
-// group 1: |[var1, var2, var3, ...]|
-// group 2: |[var1, var2, var3, ...]|
-// group 3: |[var1, var2, var3, ...]|
-
-inline int &getConstMemAllocPerGroup() {
-  // TODO. 多线程互斥锁
-  static int allocated_words = 0;
-  return allocated_words;
-}
-
-inline int addConstMemAllocWords(int inc_words) {
-  int old_words = getConstMemAllocPerGroup();
-  getConstMemAllocPerGroup() = inc_words;
-  return old_words;
-}
-
-inline int &getNumActiveGroup() {
-  static int active_group_count = 0;
-  return active_group_count;
-}
-
-inline bool constMemFreeSpaceLeft(int words_needed = 0) {
-  return getConstMemAllocPerGroup() + words_needed < CONST_MEM_WORD_SIZE / getNumActiveGroup();
-}
-
-inline void setNumActiveGroup(int count) {
-  getNumActiveGroup() = count;
-  if (!constMemFreeSpaceLeft()) {
-    throw std::runtime_error("constant memory pool is full after setting active group count!");
-  }
-  checkCudaErrors(cudaMemcpyToSymbol(d_num_active_group, &count, sizeof(uint32_t)));
-}
-
-template <typename T> inline int allocate() {
-  // 向上取整
-  int words_per_elem =
-      (sizeof(T) + sizeof(env_group_impl::constant_mem_pool[0]) + 1) / sizeof(env_group_impl::constant_mem_pool[0]);
-  if (!constMemFreeSpaceLeft(words_per_elem))
-    throw std::bad_alloc();
-
-  int offset = env_group_impl::getConstMemAllocPerGroup();
-  env_group_impl::getConstMemAllocPerGroup() += words_per_elem;
-  return offset;
-}
-
-template <typename T> inline __device__ T getConstData(int group_id, int offset) {
-  return env_group_impl::constant_mem_pool[group_id * (CONST_MEM_WORD_SIZE / d_num_active_group) + offset];
-}
-
-inline int getConstantMemPoolOffset(int group_id, int offset) {
-  // return group_id * (getConstMemAllocPerGroup()) + offset;
-  return group_id * (CONST_MEM_WORD_SIZE / getNumActiveGroup()) + offset;
-}
-
-} // namespace env_group_impl
-
 enum class MemoryType {
   HOST_MEM,         // 主机内存
   CONSTANT_GPU_MEM, // 常量内存
@@ -89,177 +25,374 @@ enum class MemoryType {
   GLOBAL_TENSOR     // 全局张量
 };
 
-// ------------------- 内存管理 -------------------
+const int MAX_NUM_ACTIVE_GROUP = 16;
 
-template <typename T> class GlobalMemoryAllocator {
+namespace env_group_impl {
+
+// 活跃环境组的索引 活跃环境组 -> 环境组 映射管理器
+struct ActiveGroupMapperStorage {
+  int num_active_group = 0;
+  int id_map[MAX_NUM_ACTIVE_GROUP] = {0};
+};
+
+extern __constant__ ActiveGroupMapperStorage d_agm_storage_;
+
+class EGActiveGroupMapper {
+  static ActiveGroupMapperStorage h_agm_storage_;
+
 public:
-  using value_type = T;
-  using pointer = T *;
-  using const_pointer = const T *;
-  using size_type = std::size_t;
+  __device__ static inline int devGetGroupId(int active_group_id) { return d_agm_storage_.id_map[active_group_id]; }
 
-  pointer allocate(size_type n) {
-    pointer p;
-    cudaError_t err = cudaMalloc(&p, n * sizeof(T));
-    if (err != cudaSuccess) {
+  __host__ static inline int hostGetGroupId(int active_group_id) { return h_agm_storage_.id_map[active_group_id]; }
+
+  __device__ static inline int devGetNumActiveGroup() { return d_agm_storage_.num_active_group; }
+
+  __host__ static inline int hostGetNumActiveGroup() { return h_agm_storage_.num_active_group; }
+
+  __host__ static inline void hostSetNumActiveGroup(int num_active_group) {
+    if (num_active_group > MAX_NUM_ACTIVE_GROUP) {
+      throw std::runtime_error("num_active_group exceeds maximum value when set num_active_group!\n");
+    }
+    h_agm_storage_.num_active_group = num_active_group;
+    checkCudaErrors(cudaMemcpyToSymbol(d_agm_storage_, &h_agm_storage_, sizeof(h_agm_storage_)));
+  }
+
+  __host__ static inline void replaceActiveGroups(const std::vector<int> &active_group_ids) {
+    if (active_group_ids.size() > MAX_NUM_ACTIVE_GROUP) {
+      throw std::runtime_error("active group ids exceeds maximum value when replace ActiveGroups!\n");
+    }
+    h_agm_storage_.num_active_group = active_group_ids.size();
+    std::memcpy(h_agm_storage_.id_map, active_group_ids.data(), sizeof(h_agm_storage_.id_map));
+    checkCudaErrors(cudaMemcpyToSymbol(d_agm_storage_, &h_agm_storage_, sizeof(h_agm_storage_)));
+  }
+};
+
+struct ConstMemPoolConfig {
+  int num_group_alloc_elem_;
+  int capacity_per_group_;
+  __host__ __device__ __forceinline__ int getMemPoolOffset(int group_id, int offset) const {
+    return group_id * capacity_per_group_ + offset;
+  }
+};
+
+static constexpr int CONST_MEM_WORD_SIZE = 8192;
+extern __constant__ int constant_mem_pool[CONST_MEM_WORD_SIZE];
+extern __constant__ ConstMemPoolConfig d_cmp_config_;
+
+
+class EGConstantMemoryPool {
+  static ConstMemPoolConfig h_cmp_config_;
+  using ConstMemElemType = decltype(constant_mem_pool[0]);
+
+public:
+  template <typename T> static inline int allocate() {
+    // 向上取整
+    int words_per_group = (sizeof(T) + sizeof(ConstMemElemType) + 1) / sizeof(ConstMemElemType);
+    if (h_cmp_config_.num_group_alloc_elem_ + words_per_group > h_cmp_config_.capacity_per_group_) {
       throw std::bad_alloc();
     }
-    return p;
+    h_cmp_config_.num_group_alloc_elem_ += words_per_group;
+    syncConfigToDevice();
+    return h_cmp_config_.num_group_alloc_elem_ - words_per_group;
   }
 
-  void deallocate(pointer p, size_type) {
-    cudaError_t err = cudaFree(p);
-    if (err != cudaSuccess) {
-      throw std::runtime_error("CUDA deallocation failed");
+  __host__ static inline int hostGetMemPoolOffset(int group_id, int offset) {
+    // return group_id * (getConstMemAllocPerGroup()) + offset;
+    return h_cmp_config_.getMemPoolOffset(group_id, offset);
+  }
+
+  __device__ static inline int devGetMemPoolOffset(int group_id, int offset) {
+    return d_cmp_config_.getMemPoolOffset(group_id, offset);
+  }
+
+  template <typename T> static inline __device__ const T &getData(int group_id, int offset) {
+    return *(reinterpret_cast<T *>(constant_mem_pool + devGetMemPoolOffset(group_id, offset)));
+  }
+
+  template <typename T> static inline __host__ void setData(int group_id, int offset, const T &data) {
+    checkCudaErrors(cudaMemcpyToSymbol(constant_mem_pool, &data, sizeof(T), offset));
+  }
+
+  // 当num_active_group发生变化时调用
+  __host__ static inline void updateConfig() {
+    // 当前存储模式下，所有 active group 均分constant memory
+    h_cmp_config_.capacity_per_group_ = CONST_MEM_WORD_SIZE / EGActiveGroupMapper::hostGetNumActiveGroup();
+    if (h_cmp_config_.num_group_alloc_elem_ > h_cmp_config_.capacity_per_group_) {
+      throw std::runtime_error("constant memory pool is full after setting active group count!");
     }
+
+    // 修改后自动同步到device
+    syncConfigToDevice();
   }
 
-  template <typename U> struct rebind {
-    using other = GlobalMemoryAllocator<U>;
-  };
+private:
+  __host__ static inline void syncConfigToDevice() {
+    checkCudaErrors(cudaMemcpyToSymbol(d_cmp_config_, &h_cmp_config_, sizeof(ConstMemPoolConfig)));
+  }
 };
 
-template <typename T> class ConstantMemoryVector {
-  int offset_;
-  static constexpr bool CHECK_BOUND = true;
+} // namespace env_group_impl
+
+// ------------------- 访问器 -------------------
+template <typename Derived, typename T> class MemItemAccessor {
+public:
+  Derived &derived() { return static_cast<Derived &>(*this); }
+  const Derived &derived() const { return static_cast<const Derived &>(*this); }
+
+  __device__ inline const T &operator[](int group_id) const { return derived().devGet(group_id); }
+
+protected:
+  MemItemAccessor() {}
+};
+
+template <typename U> class HostMemItemHandle;
+template <typename T> class HostMemItemAccessor : MemItemAccessor<HostMemItemAccessor<T>, T> {
+  uint8_t *host_ptr_;
+  int group_stride_;  // bytes
+  friend class HostMemItemHandle<T>;
 
 public:
-  ConstantMemoryVector() { offset_ = env_group_impl::allocate<T>(); }
-
-  __device__ inline const T operator[](int idx) const {
-    if (idx >= env_group_impl::d_num_active_group) {
-      printf("index out of range: %d\n", idx);
-      return T();
-    }
-    // throw std::out_of_range("index out of range");
-    return env_group_impl::constant_mem_pool[offset_ + idx];
+  __host__ inline const T &get(int active_group_id) {
+    int offset = env_group_impl::EGActiveGroupMapper::hostGetGroupId(active_group_id) * group_stride_;
+    return *(reinterpret_cast<T *>(host_ptr_ + offset));
   }
 
-  void set(int idx, const T &value) {
-    if (CHECK_BOUND && idx >= env_group_impl::getNumActiveGroup()) {
-      throw std::out_of_range("index out of range");
-    }
-    env_group_impl::constant_mem_pool[offset_ + idx] = value;
-    int pool_offset = env_group_impl::getConstantMemPoolOffset(idx, offset_);
-    checkCudaErrors(cudaMemcpyToSymbol(env_group_impl::constant_mem_pool, &value, sizeof(T), pool_offset));
+  __host__ inline void hostSet(int group_id, const T &data) const {
+    int offset = group_id * group_stride_;
+    *(reinterpret_cast<T *>(host_ptr_ + offset)) = data;
   }
+
+private:
+  __host__ static inline HostMemItemAccessor<T> assignAccessor(T *host_ptr, int group_stride) {
+    return HostMemItemAccessor<T>(host_ptr, group_stride);
+  }
+
+private:
+  HostMemItemAccessor(T *host_ptr, int group_stride) : host_ptr_(host_ptr), group_stride_(group_stride) {}
 };
 
-class EGConfigItemBase {
+template <typename U> class ConstMemItemHandle;
+template <typename T> class ConstMemItemAccessor : MemItemAccessor<ConstMemItemAccessor<T>, T> {
+  int pool_offset_;
+  friend class ConstMemItemHandle<T>;
+
+public:
+  __device__ inline const T &devGet(int active_group_id) const {
+    return env_group_impl::EGConstantMemoryPool::getData<T>(active_group_id, pool_offset_);
+  }
+
+  __host__ inline void hostSet(int group_id, const T &data) const {
+    int offset = env_group_impl::EGConstantMemoryPool::hostGetMemPoolOffset(group_id, pool_offset_);
+    env_group_impl::EGConstantMemoryPool::setData(group_id, offset, data);
+  }
+
+private:
+  __host__ static inline ConstMemItemAccessor<T> assignAccessor(int pool_offset) {
+    return ConstMemItemAccessor<T>(pool_offset);
+  }
+
+private:
+  ConstMemItemAccessor(int mem_pool_offset) : pool_offset_(mem_pool_offset) {}
+};
+
+template <typename U> class GlobalMemItemHandle;
+template <typename T> class GlobalMemItemAccessor : MemItemAccessor<GlobalMemItemAccessor<T>, T> {
+  uint8_t *dev_ptr_;
+  uint32_t group_stride_;    // 单位：字节
+
+  friend class GlobalMemItemHandle<T>;
+
+public:
+  __host__ __device__ inline T *getAddr(int group_id) {
+    uint32_t offset = group_id * group_stride_;
+    return reinterpret_cast<T *>(dev_ptr_ + offset);
+  }
+
+  __device__ inline const T &get(int active_group_id) {
+    int group_id = env_group_impl::EGActiveGroupMapper::devGetGroupId(active_group_id);
+    return *(getAddr(group_id));
+  }
+
+  __host__ inline void hostSet(int group_id, const T &data) const {
+    uint32_t offset = group_id * group_stride_;
+    checkCudaErrors(cudaMemcpy(offset + dev_ptr_, &data, sizeof(T), cudaMemcpyHostToDevice));
+  }
+
+private:
+  __host__ static inline GlobalMemItemAccessor<T> assignAccessor(T *dev_ptr) {
+    uint32_t stride = ((sizeof(T) + 3) / 4) * 4; // 4字节对齐
+    return GlobalMemItemAccessor<T>(dev_ptr, stride);
+  }
+
+  __host__ static inline GlobalMemItemAccessor<T> assignAccessor(T *dev_ptr, uint32_t group_stride) {
+    if(group_stride % 4 != 0) {
+      throw std::runtime_error("group stride should align 4byte");
+    }
+    return GlobalMemItemAccessor<T>(dev_ptr, group_stride);
+  }
+
+  template <typename U>
+  GlobalMemItemAccessor<U> convertType() {
+    return GlobalMemItemAccessor<U>(dev_ptr_, group_stride_);
+  }
+
+private:
+  GlobalMemItemAccessor(T *dev_ptr, int group_stride) : dev_ptr_(dev_ptr), group_stride_(group_stride) {}
+};
+
+template <typename U> class TensorItemHandle;
+template <typename T> class TensorItemAccessor : GlobalMemItemAccessor<T> {
+  int numel_;
+  friend class TensorItemHandle<T>;
+
+private:
+  template<typename U>
+  __host__ static inline TensorItemHandle<T> assignAccessor(T *dev_ptr, std::vector<U>::const_iterator shape_iter,
+                                                                 std::vector<U>::const_iterator shape_end) {
+    int numel = 1;
+    for (; shape_iter != shape_end; shape_iter++) {
+      numel *= *shape_iter;
+    }
+    // 假定使用连续存储
+    return TensorItemHandle<T>(dev_ptr, numel, numel*sizeof(T));
+  }
+
+  template<typename U>
+  __host__ static inline TensorItemHandle<T> assignAccessor(T *dev_ptr, const std::vector<U>& shape) {
+    return assignAccessor(dev_ptr, shape.begin(), shape.end());
+  }
+  __host__ __device__ int getNumElement() const { return numel_; }
+private:
+  TensorItemAccessor(T *dev_ptr, int group_stride, int numel) : GlobalMemItemAccessor<T>(dev_ptr, group_stride), numel_(numel) {}
+};
+
+// ------------------- 配置项句柄 -------------------
+class ItemHandleBase {
 protected:
   MemoryType mem_type_;
   int num_group_;
 
 public:
-  EGConfigItemBase(int num_group, MemoryType mem_type) : mem_type_(mem_type), num_group_(num_group) {}
+  ItemHandleBase(int num_group, MemoryType mem_type) : mem_type_(mem_type), num_group_(num_group) {}
 
-  virtual ~EGConfigItemBase() = default;
+  virtual ~ItemHandleBase() = default;
 
-  virtual void syncToDevice() {};
+  virtual void syncToDevice() {}
 
   MemoryType getMemoryType() const { return mem_type_; }
 
   int getNumEnvGroup() const { return num_group_; }
 };
 
-template <typename T> class EGHostMemConfigItem : public EGConfigItemBase {
+// 主机内存区域，表明该项配置不会在
+template <typename T> class HostMemItemHandle : public ItemHandleBase {
 protected:
   std::vector<T> host_data_;
 
 public:
-  EGHostMemConfigItem(int64_t num_group, MemoryType alternative = MemoryType::HOST_MEM)
-      : EGConfigItemBase(num_group, alternative), host_data_(num_group) {}
-  virtual ~EGHostMemConfigItem() = default;
+  HostMemItemHandle(int num_group, MemoryType alternative = MemoryType::HOST_MEM)
+      : ItemHandleBase(num_group, alternative), host_data_(num_group) {}
+  virtual ~HostMemItemHandle() = default;
 
-  T &at(int64_t idx) { return host_data_[idx]; }
+  T &hostAt(int group_id) { return host_data_[group_id]; }
 
-  std::vector<T> &host_data() { return host_data_; }
+  std::vector<T> &hostData() { return host_data_; }
+
+  HostMemItemAccessor<T> getAccessor() { return HostMemItemAccessor<T>(host_data_.data(), sizeof(T)); }
 };
 
 // 常量内存区域句柄，仅支持基本数据类型，包含常量内存池偏移量，主机内存句柄
-template <typename T> class EGConstMemConfigItem : public EGHostMemConfigItem<T> {
-  // std::vector<T, ConstantMemoryAllocator<T>> device_data_;
-  ConstantMemoryVector<T> device_data_;
-  int num_active_group_;
-  const std::vector<int> &active_group_indices_;
+template <typename T> class ConstMemItemHandle : public HostMemItemHandle<T> {
+  int pool_offset_;
 
 public:
-  EGConstMemConfigItem(int64_t num_group, int64_t num_active_group, const std::vector<int> &active_group_indices)
-      : EGHostMemConfigItem<T>(num_group, MemoryType::CONSTANT_GPU_MEM), device_data_(),
-        num_active_group_(num_active_group), active_group_indices_(active_group_indices) {
-    env_group_impl::setNumActiveGroup(num_active_group);
-  }
+  ConstMemItemHandle(int64_t num_group, int64_t num_active_group)
+      : HostMemItemHandle<T>(num_group, MemoryType::CONSTANT_GPU_MEM),
+        pool_offset_(env_group_impl::EGConstantMemoryPool::allocate<T>()) {}
 
   // 根据活跃组id同步到设备
   void syncToDevice() override {
-    for (auto group_id : active_group_indices_) {
-      // reflect_data.push_back(EGHostMemConfigItem<T>::host_data_[group_id]);
-      device_data_.set(group_id, EGHostMemConfigItem<T>::host_data_[group_id]);
+    ConstMemItemAccessor<T> accessor = getAccessor();
+    for (int ag = 0; ag < env_group_impl::EGActiveGroupMapper::hostGetNumActiveGroup(); ag++) {
+      int group_id = env_group_impl::EGActiveGroupMapper::hostGetGroupId(ag);
+      accessor.hostSet(group_id, HostMemItemHandle<T>::host_data_[group_id]);
     }
   }
 
-  const ConstantMemoryVector<T> &getDeviceData() { return device_data_; }
+  ConstMemItemAccessor<T> getAccessor() { return ConstMemItemAccessor<T>::assignAccessor(pool_offset_); }
 };
 
 // 全局内存区域句柄
-template <typename T> class EGGlobalMemConfigItem : public EGHostMemConfigItem<T> {
-  std::vector<T, GlobalMemoryAllocator<T>> device_data_;
+template <typename T> class GlobalMemItemHandle : public HostMemItemHandle<T> {
+  // std::vector<T, GlobalMemoryAllocator<T>> device_data_;
+  T *dev_ptr_;
+  // static constexpr int elem_size_ = (sizeof(T)+3)/4;
+  static constexpr int elem_size_ = sizeof(T);
 
 public:
-  EGGlobalMemConfigItem(int64_t num_group)
-      : EGHostMemConfigItem<T>(num_group, MemoryType::GLOBAL_GPU_MEM), device_data_(num_group) {}
+  GlobalMemItemHandle(int64_t num_group) : HostMemItemHandle<T>(num_group, MemoryType::GLOBAL_GPU_MEM) {
+    checkCudaErrors(cudaMalloc(&dev_ptr_, elem_size_ * num_group));
+  }
 
   void syncToDevice() override {
-    checkCudaErrors(cudaMemcpy(device_data_.data(), EGHostMemConfigItem<T>::host_data().data(),
-                               EGHostMemConfigItem<T>::host_data().size() * sizeof(T), cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(dev_ptr_, HostMemItemHandle<T>::host_data_.data(),
+                                HostMemItemHandle<T>::host_data_.size() * elem_size_, cudaMemcpyHostToDevice));
   }
+
+  GlobalMemItemAccessor<T> getAccessor() { return GlobalMemItemAccessor<T>::assignAccessor(dev_ptr_, elem_size_); }
 };
 
-template <typename T> class EGGlobalMemConfigTensor : public EGConfigItemBase {
-  TensorHandle host_tensor_;
-  TensorHandle device_tensor_;
+// 全局内存区域张量数据句柄，由TensorHandle管理
+template <typename T> class TensorItemHandle : public ItemHandleBase {
+  TensorHandle host_data_;
+  TensorHandle device_data_;
+  TensorShape shape_;
 
 public:
-  EGGlobalMemConfigTensor(const std::string &name, int64_t num_group, const TensorShape &shape)
-      : EGConfigItemBase(num_group, MemoryType::GLOBAL_TENSOR) {
+  TensorItemHandle(const std::string &name, int64_t num_group, const TensorShape &shape)
+      : ItemHandleBase(num_group, MemoryType::GLOBAL_TENSOR), shape_(shape) {
+
+    // 在最开始插入num_group维度
     TensorShape new_shape = shape;
     new_shape.insert(new_shape.begin(), num_group);
 
-    TensorRegistry::getInstance().createTensor<T>(host_tensor_, name + "_Config@CPU", new_shape, DeviceType::kCPU);
-    TensorRegistry::getInstance().createTensor<T>(device_tensor_, name + "_Config@CUDA", new_shape, DeviceType::kCUDA);
+    // 创建配置项的内存张量
+    TensorRegistry::getInstance().createTensor<T>(host_data_, name + "_Config@CPU", new_shape, DeviceType::kCPU);
+    TensorRegistry::getInstance().createTensor<T>(device_data_, name + "_Config@CUDA", new_shape, DeviceType::kCUDA);
   }
 
-  TensorHandle &getHostTensor() { return host_tensor_; }
+  void syncToDevice() override { host_data_.copyTo(device_data_); }
 
-  const TensorHandle &getDeviceTensor() { return device_tensor_; }
-
-  void syncToDevice() { host_tensor_.copyTo(device_tensor_); }
-
-  template <typename... Args> auto at(int64_t group_id, Args... indices) {
+  template <typename... Args> __host__ auto at(int64_t group_id, Args... indices) {
     if (group_id >= num_group_) {
       throw std::out_of_range("group_id out of range");
     }
-    return host_tensor_[{group_id, indices...}];
+    return host_data_[{group_id, indices...}];
   }
+
+  TensorItemAccessor<T> getAccessor() { return TensorItemAccessor<T>::assignAccessor(device_data_.data(), shape_); }
 };
 
 // ------------------- 环境组管理器 -------------------
-
 class EnvGroupManager {
 public:
+  constexpr static int SHAPE_PLACEHOLDER_GROUP = -100;
+  constexpr static int SHAPE_PLACEHOLDER_ENV = -101;
+
   EnvGroupManager(int num_env_per_group = 1, int num_group = 1, int num_active_group = 1)
       : num_env_per_group_(num_env_per_group), num_group_(num_group), num_active_group_(num_active_group) {
     if (num_active_group > num_group) {
       throw std::runtime_error("num_active_group should be less than or equal to num_group");
     }
+    if (num_active_group > MAX_NUM_ACTIVE_GROUP) {
+      throw std::runtime_error("num_active_group exceed the max number of active groups");
+    }
     if (num_env_per_group <= 0 || num_group <= 0 || num_active_group <= 0) {
       throw std::runtime_error("num_env_per_group, num_group, num_active_group should be greater than 0");
     }
-    env_group_impl::setNumActiveGroup(num_active_group);
+    env_group_impl::EGActiveGroupMapper::hostSetNumActiveGroup(num_active_group);
+    env_group_impl::EGConstantMemoryPool::updateConfig();
   }
-
-  constexpr static int SHAPE_PLACEHOLDER_GROUP = -100;
-  constexpr static int SHAPE_PLACEHOLDER_ENV = -101;
 
   template <typename T, MemoryType mem_type> auto registerConfigItem(const std::string &name) {
     if (registry_.find(name) != registry_.end()) {
@@ -267,19 +400,19 @@ public:
     }
 
     if constexpr (mem_type == MemoryType::CONSTANT_GPU_MEM) {
-      std::unique_ptr<EGConstMemConfigItem<T>> item =
-          std::make_unique<EGConstMemConfigItem<T>>(num_group_, num_active_group_, active_group_indices_);
-      EGConstMemConfigItem<T> *ptr = item.get();
+      std::unique_ptr<ConstMemItemHandle<T>> item =
+          std::make_unique<ConstMemItemHandle<T>>(num_group_, num_active_group_);
+      ConstMemItemHandle<T> *ptr = item.get();
       registry_.insert({name, std::move(item)});
       return ptr;
     } else if constexpr (mem_type == MemoryType::GLOBAL_GPU_MEM) {
-      std::unique_ptr<EGGlobalMemConfigItem<T>> item = std::make_unique<EGGlobalMemConfigItem<T>>(num_group_);
-      EGGlobalMemConfigItem<T> *ptr = item.get();
+      std::unique_ptr<GlobalMemItemHandle<T>> item = std::make_unique<GlobalMemItemHandle<T>>(num_group_);
+      GlobalMemItemHandle<T> *ptr = item.get();
       registry_.insert({name, std::move(item)});
       return ptr;
     } else if constexpr (mem_type == MemoryType::HOST_MEM) {
-      std::unique_ptr<EGHostMemConfigItem<T>> item = std::make_unique<EGHostMemConfigItem<T>>(num_group_);
-      EGHostMemConfigItem<T> *ptr = item.get();
+      std::unique_ptr<HostMemItemHandle<T>> item = std::make_unique<HostMemItemHandle<T>>(num_group_);
+      HostMemItemHandle<T> *ptr = item.get();
       registry_.insert({name, std::move(item)});
       return ptr;
     } else {
@@ -291,22 +424,20 @@ public:
     if (registry_.find(name) != registry_.end()) {
       throw std::runtime_error("name already exists in registry, please check your code.");
     }
-    // TODO. 到底用max_num_env_group_还是num_env_group_
-    std::unique_ptr<EGGlobalMemConfigTensor<T>> item =
-        std::make_unique<EGGlobalMemConfigTensor<T>>(name, num_group_, shape);
-    EGGlobalMemConfigTensor<T> *ptr = item.get();
+    std::unique_ptr<TensorItemHandle<T>> item = std::make_unique<TensorItemHandle<T>>(name, num_group_, shape);
+    TensorItemHandle<T> *ptr = item.get();
     registry_.insert({name, std::move(item)});
     return ptr;
   }
 
-  // 返回新Tensor引用
-  TensorHandle &createTensor(const std::string &name, const TensorShape &shape_with_placeholder, NumericalDataType dtype,
-                             DeviceType device_type = DeviceType::kCUDA) {
+  // 返回新Tensor引用，包含了Group和Env维度
+  TensorHandle &createTensor(const std::string &name, const TensorShape &shape_with_placeholder,
+                             NumericalDataType dtype, DeviceType device_type = DeviceType::kCUDA) {
     std::vector<int64_t> shape;
     for (auto s : shape_with_placeholder) {
       if (s == SHAPE_PLACEHOLDER_GROUP) {
         // TODO. 这里使用的是num_group，因为某些核函数需要数据紧密排列。因此需要在调整group数量后的二次分配
-        shape.push_back(num_env_per_group_);
+        shape.push_back(num_group_);
       } else if (s == SHAPE_PLACEHOLDER_ENV) {
         shape.push_back(num_env_per_group_);
       } else {
@@ -350,21 +481,24 @@ public:
 
   void sampleActiveGroupIndices() {
     // TODO. 目前是顺序取，后续可以考虑随机取
-    active_group_indices_.clear();
+    std::vector<int> active_indices;
     for (int i = 0; i < num_active_group_; i++) {
-      active_group_indices_.push_back(i);
+      active_indices.push_back(i);
     }
+    // 替换当前的活跃组，同时更新ActiveGroup
+    env_group_impl::EGActiveGroupMapper::replaceActiveGroups(active_indices);
+    env_group_impl::EGConstantMemoryPool::updateConfig();
   }
-
-  int getNumGroup() const { return num_group_; }
-  int getNumActiveGroup() const { return num_active_group_; }
-  int getNumEnvPerGroup() const { return num_env_per_group_; }
 
   void syncToDevice() {
     for (auto &[name, item] : registry_) {
       item->syncToDevice();
     }
   }
+
+  int getNumGroup() const { return num_group_; }
+  int getNumActiveGroup() const { return num_active_group_; }
+  int getNumEnvPerGroup() const { return num_env_per_group_; }
 
 private:
   // 每个环境组的环境数量
@@ -373,11 +507,8 @@ private:
   const int num_group_;
   // 当前活跃环境组的数量
   const int num_active_group_;
-  // 活跃环境组的索引
-  // TODO. 移动到全局变量
-  std::vector<int> active_group_indices_;
   // 环境组配置项注册表
-  std::unordered_map<std::string, std::unique_ptr<EGConfigItemBase>> registry_;
+  std::unordered_map<std::string, std::unique_ptr<ItemHandleBase>> registry_;
 };
 
 } // namespace core
