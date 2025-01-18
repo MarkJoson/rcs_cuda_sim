@@ -248,7 +248,7 @@ protected:
       numel *= i;
     }
     // 假定使用连续存储
-    return TensorItemAccessor<T>(dev_ptr, numel, numel * sizeof(T));
+    return TensorItemAccessor<T>(dev_ptr, numel * sizeof(T), numel);
   }
 
   const int numel_;

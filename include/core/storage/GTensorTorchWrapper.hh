@@ -26,7 +26,7 @@ public:
         DeviceType device_type=DeviceType::kCUDA);
 
     explicit GTensorTorchWrapper(
-        const std::vector<int64_t>& shape,
+        const TensorShape& shape,
         NumericalDataType dtype=NumericalDataType::kFloat32,
         DeviceType device_type=DeviceType::kCUDA);
 
@@ -70,7 +70,7 @@ public:
     }
 
 
-    std::vector<int64_t> shape() const override;
+    TensorShape shape() const override;
     size_t elemCount() const override;
     size_t elemSize() const override;
     size_t dim() const override;
@@ -88,8 +88,8 @@ public:
     void fill(Scalar value) override;
     void copyFrom(const GTensorTorchWrapper& other) override;
     void copyTo(GTensorTorchWrapper& other) const override;
-    void resize(const std::vector<int64_t>& shape) override;
-    void reshape(const std::vector<int64_t>& shape) override;
+    void resize(const TensorShape& shape) override;
+    void reshape(const TensorShape& shape) override;
 
     // TODO. replaceTensor需要成为虚函数吗？
     // TODO. fixme. bindTensor 和 replaceTensor这种奇怪的东西还是别要了
@@ -99,7 +99,6 @@ public:
     // 绑定shared_ptr，不拷贝Tensor。使两个对象共享同一个TensorPtr
     void bindTensorRef(const GTensorTorchWrapper& other) { impl_ = other.impl_; }
     void bindTensorRef(GTensorTorchWrapper&& other) { impl_ = std::move(other.impl_); }
-
 
     // 从主机数组创建张量
     void fromHostArray(const void* data, NumericalDataType type, int64_t numel) override;
@@ -124,7 +123,7 @@ protected:
     GTensorTorchWrapper div_impl(const GTensorTorchWrapper& other) const;
     GTensorTorchWrapper slice_impl(int64_t dim, int64_t start, int64_t end) const;
     GTensorTorchWrapper index_impl(int64_t index) const;
-    GTensorTorchWrapper index_impl(const std::vector<int64_t>& indices) const;
+    GTensorTorchWrapper index_impl(const TensorShape& indices) const;
 
     // 实现ITensor要求的内部方法
     GTensorTorchWrapper bitwise_not_impl() const;
@@ -146,6 +145,9 @@ protected:
     GTensorTorchWrapper& sub_inplace_scalar_impl(const Scalar& scalar);
     GTensorTorchWrapper& mul_inplace_scalar_impl(const Scalar& scalar);
     GTensorTorchWrapper& div_inplace_scalar_impl(const Scalar& scalar);
+
+    static GTensorTorchWrapper zerosImpl(const TensorShape& shape, NumericalDataType dtype, DeviceType device_type);
+    static GTensorTorchWrapper randsImpl(const TensorShape& shape, NumericalDataType dtype, DeviceType device_type);
 
     // 取scalar的item方法
     template<typename T>
@@ -212,6 +214,7 @@ protected:
     // 类的Static声明
     static void setTensorDefaultDeviceIdImpl(int device_id);
     static void setSeedImpl(uint64_t seed);
+
 
 private:
     std::shared_ptr<internal::TorchTensorImpl> impl_;

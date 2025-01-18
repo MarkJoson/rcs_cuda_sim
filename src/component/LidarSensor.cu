@@ -100,6 +100,7 @@ __global__ void rasterKernel(const ConstMemItemAccessor<uint32_t> num_static_lin
   volatile __shared__ uint32_t s_frLineIdxBuf[FR_BUF_SIZE];        // 1K
   volatile __shared__ uint32_t s_frLineSGridFragsBuf[FR_BUF_SIZE]; // 1K
   __shared__ uint32_t s_lidarResponse[LIDAR_LINES];                // 256B
+  // TODO. 共享内存加一个维度避免bank冲突
   __shared__ union {
     typename BlockScan::TempStorage scan_temp_storage;
     typename BlockRunLengthDecodeT::TempStorage decode_temp_storage;
@@ -108,11 +109,14 @@ __global__ void rasterKernel(const ConstMemItemAccessor<uint32_t> num_static_lin
   /// Grid: (num_lidars, num_envs, num_groups)
   //  Block: (CTA_SIZE, 1, 1)
   int group_id = blockIdx.z;
-  int env_inst_id = blockIdx.z * gridDim.y + blockIdx.y;
-  int lidar_inst_id = env_inst_id * gridDim.x + blockIdx.x;
+  int env_id = blockIdx.z * gridDim.y + blockIdx.y;
+  int lidar_inst_id = env_id * gridDim.x + blockIdx.x;
+
+  // 每个lidar对应的lidar_response
+  lidar_response += lidar_inst_id * LIDAR_LINES;
 
   // 每个场景有其对应的动态线段（由所有动态物体的位姿计算）
-  const float4 *__restrict__ dyn_lines_in_env = env_inst_id * num_dyn_lines + dyn_lines;  // TODO. 共享内存加一个维度避免bank冲突
+  const float4 *__restrict__ dyn_lines_in_env = env_id * num_dyn_lines + dyn_lines;
   // 每个场景组有对应的静态线段
   const float4 *__restrict__ static_lines_in_group = reinterpret_cast<const float4*>(static_lines.getAddr(group_id));
   // 每个场景组静态线段的数量不同
