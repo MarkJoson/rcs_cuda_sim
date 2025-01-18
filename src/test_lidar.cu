@@ -6,6 +6,7 @@
 #include "geometry/GeometryManager.cuh"
 
 #include <SFML/Graphics.hpp>
+#include <SFML/Graphics/CircleShape.hpp>
 #include <stdexcept>
 
 using namespace cuda_simulator;
@@ -38,7 +39,8 @@ class TestLidar {
   int active_group_id_ = 0;
 
   // 当前lidar位置
-  float2 lidar_pos_ = make_float2(2, 2);
+  float2 mouse_pos_ = make_float2(2, 2);
+  float4 lidar_pose_;
 
   // 动态线段
   std::vector<float4> ray_lines;
@@ -46,7 +48,6 @@ class TestLidar {
   // 静态线段
   const float4 *static_lines = nullptr;
   uint32_t num_static_lines = 0;
-
 
   map_gen::MapGenerator *map_generator;
   robot_entry::RobotEntry *robot_entry;
@@ -67,7 +68,7 @@ public:
     // mouse_pos_text_.setFillColor(sf::Color::Green); // 设置文字颜色
     // mouse_pos_text_.setPosition(10, 10);            // 设置文字位置
 
-    getContext()->initialize(16, 1, 1);
+    getContext()->initialize(16, 4, 4);
     map_generator = getContext()->createComponent<map_gen::MapGenerator>(3, 3, 0.05);
     robot_entry = getContext()->createComponent<robot_entry::RobotEntry>(1);
     lidar_sensor = getContext()->createComponent<lidar_sensor::LidarSensor>();
@@ -76,10 +77,14 @@ public:
     getContext()->setup();
 
     ray_lines.resize(lidar_sensor->getLidarRayNum());
+
+    // 设置默认环境为0,0
+    changeEnvironGroup(2);
+    changeEnviron(0);
   }
 
   void changeEnvironGroup(int active_group_id) {
-    if(active_group_id >= getEnvGroupMgr()->getNumActiveGroup()) {
+    if (active_group_id >= getEnvGroupMgr()->getNumActiveGroup()) {
       throw std::runtime_error("Invalid group id");
     }
 
@@ -91,13 +96,36 @@ public:
   }
 
   void changeEnviron(int env_id) {
-    if(env_id >= getEnvGroupMgr()->getNumEnvPerGroup()) {
+    if (env_id >= getEnvGroupMgr()->getNumEnvPerGroup()) {
       throw std::runtime_error("Invalid env id");
     }
 
     env_id_ = env_id;
   }
 
+  void grabLidarPose() {
+    MessageQueue *pose = getMessageBus()->getMessageQueue("robot_entry", "pose");
+    auto &pose_tensor = pose->getHistoryTensorHandle(0);
+    std::vector<float> pose_data;
+    pose_tensor[{active_group_id_, env_id_, 0}].toHostVector(pose_data);
+    lidar_pose_ = make_float4(pose_data[0], pose_data[1], pose_data[2], pose_data[3]);
+  }
+
+  void grabLidarResult() {
+    MessageQueue *queue = getMessageBus()->getMessageQueue("lidar_sensor", "lidar");
+    auto &lidar = queue->getHistoryTensorHandle(0);
+
+    std::vector<uint32_t> raw_lidar;
+    lidar[{active_group_id_, env_id_, 0}].toHostVector(raw_lidar);
+
+    for (size_t i = 0; i < raw_lidar.size(); i++) {
+      float angle = i * lidar_sensor->getLidarResolution();
+      float r = (raw_lidar[i] >> 16) / 1024.f;
+      float4 cartesian_ray =
+          make_float4(lidar_pose_.x, lidar_pose_.y, r * cosf(angle) + lidar_pose_.x, r * sinf(angle) + lidar_pose_.y);
+      ray_lines[i] = cartesian_ray;
+    }
+  }
 
   void drawStaticLines() {
     for (size_t i = 0; i < num_static_lines; i++) {
@@ -118,6 +146,12 @@ public:
   }
 
   void drawRays() {
+    sf::CircleShape circle(30);
+    circle.setFillColor(sf::Color::Green);
+    circle.setOrigin(circle.getRadius(), circle.getRadius());
+    circle.setPosition(convertPoint(window_, sf::Vector2f(lidar_pose_.x, lidar_pose_.y)));
+    window_.draw(circle);
+
     for (const auto &line : ray_lines) {
       // 创建一个 sf::VertexArray 用于绘制线段
       sf::VertexArray lineShape(sf::Lines, 2);
@@ -134,25 +168,13 @@ public:
     }
   }
 
-  void updateLidar(float2 lidar_pos) {
+  void updateLidar(float2 click_pos) {
     // std::vector<float> rays = rasterGPU(lbegins.size(), make_float3(lidar_pos_.x, lidar_pos_.y, 0), lbegins, lends);
-    robot_entry->setRobotPose(make_float4(lidar_pos.x, lidar_pos.y, 0, 0));
-
+    robot_entry->setRobotPose(make_float4(click_pos.x, click_pos.y, 0, 0));
     getContext()->trigger("default");
 
-    MessageQueue *queue = getMessageBus()->getMessageQueue("lidar_sensor", "lidar");
-    auto &lidar = queue->getHistoryTensorHandle(0);
-
-    std::vector<uint32_t> raw_data;
-    lidar[{active_group_id_, env_id_, 0}].toHostVector(raw_data);
-
-    for (size_t i = 0; i < raw_data.size(); i++) {
-      float angle = i * lidar_sensor->getLidarResolution();
-      float r = (raw_data[i] >> 16) / 1024.f;
-      float4 cartesian_ray =
-          make_float4(lidar_pos.x, lidar_pos.y, r * cosf(angle) + lidar_pos_.x, r * sinf(angle) + lidar_pos_.y);
-      ray_lines[i] = cartesian_ray;
-    }
+    grabLidarPose();
+    grabLidarResult();
   }
 
   void repaint(const sf::Vector2f &mouse_world_pos) {
@@ -167,7 +189,7 @@ public:
     drawRays();
 
     // 绘制鼠标位置文本
-    window_.draw(mouse_pos_text_);
+    // window_.draw(mouse_pos_text_);
     // 显示窗口内容
     window_.display();
   }
@@ -188,19 +210,32 @@ public:
 
         if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
           // 鼠标点击事件
-          lidar_pos_.x = mouse_world_pos.x;
-          lidar_pos_.y = mouse_world_pos.y;
-          std::cout << "Mouse clicked at: (" << lidar_pos_.x << ", " << lidar_pos_.y << ")\n";
-          updateLidar(lidar_pos_);
+          mouse_pos_.x = mouse_world_pos.x;
+          mouse_pos_.y = mouse_world_pos.y;
+          std::cout << "Mouse clicked at: (" << mouse_pos_.x << ", " << mouse_pos_.y << ")\n";
+          updateLidar(mouse_pos_);
         } else if (event.type == sf::Event::KeyPressed && event.key.code >= sf::Keyboard::Num0 &&
                    event.key.code <= sf::Keyboard::Num9) {
           // 0-9键按下, 获取按下的数字
           int num = event.key.code - sf::Keyboard::Num0;
           std::cout << "Switching to environ group" << num << "!\n";
-        }
+          changeEnvironGroup(num);
 
-        repaint(mouse_world_pos);
+          grabLidarPose();
+          grabLidarResult();
+        } else if (event.type == sf::Event::KeyPressed && event.key.code >= sf::Keyboard::Numpad0 &&
+                   event.key.code <= sf::Keyboard::Numpad9) {
+          // 0-9键按下, 获取按下的数字
+          int num = event.key.code - sf::Keyboard::Numpad0;
+          std::cout << "Switching to environ" << num << "!\n";
+          changeEnviron(num);
+
+          grabLidarPose();
+          grabLidarResult();
+        }
       }
+
+      repaint(mouse_world_pos);
     }
   }
 };
