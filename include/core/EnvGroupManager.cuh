@@ -71,7 +71,7 @@ struct ConstMemPoolConfig {
   int num_group_alloc_elem_;
   int capacity_per_group_;
   __host__ __device__ __forceinline__ int getMemPoolOffset(int group_id, int offset) const {
-    return group_id * capacity_per_group_ + offset;
+    return group_id * capacity_per_group_ + offset;   // 单位：字
   }
 };
 
@@ -85,7 +85,7 @@ class EGConstantMemoryPool {
 
 public:
   template <typename T> static inline int allocate() {
-    // 向上取整
+    // 对齐到边界
     int words_per_group = (sizeof(T) + sizeof(ConstMemElemType) + 1) / sizeof(ConstMemElemType);
     if (h_cmp_config_.num_group_alloc_elem_ + words_per_group > h_cmp_config_.capacity_per_group_) {
       throw std::bad_alloc();
@@ -95,21 +95,13 @@ public:
     return h_cmp_config_.num_group_alloc_elem_ - words_per_group;
   }
 
-  __host__ static inline int hostGetMemPoolOffset(int group_id, int offset) {
-    // return group_id * (getConstMemAllocPerGroup()) + offset;
-    return h_cmp_config_.getMemPoolOffset(group_id, offset);
+  template <typename T> static __forceinline__ __device__ const T &getData(int group_id, int offset_in_group) {
+    return *(reinterpret_cast<T *>(&constant_mem_pool[devGetMemPoolOffset(group_id, offset_in_group)]));
   }
 
-  __device__ static inline int devGetMemPoolOffset(int group_id, int offset) {
-    return d_cmp_config_.getMemPoolOffset(group_id, offset);
-  }
-
-  template <typename T> static inline __device__ const T &getData(int group_id, int offset) {
-    return *(reinterpret_cast<T *>(&constant_mem_pool[devGetMemPoolOffset(group_id, offset)]));
-  }
-
-  template <typename T> static inline __host__ void setData(int group_id, int offset, const T &data) {
-    checkCudaErrors(cudaMemcpyToSymbol(constant_mem_pool, &data, sizeof(T), hostGetMemPoolOffset(group_id, offset)));
+  template <typename T> static __forceinline__ __host__ void setData(int group_id, int offset_in_group, const T &data) {
+    checkCudaErrors(cudaMemcpyToSymbol(constant_mem_pool, &data, sizeof(T),
+                                       hostGetMemPoolOffset(group_id, offset_in_group) * sizeof(ConstMemElemType)));
   }
 
   // 当num_active_group发生变化时调用
@@ -127,6 +119,15 @@ public:
 private:
   __host__ static inline void syncConfigToDevice() {
     checkCudaErrors(cudaMemcpyToSymbol(d_cmp_config_, &h_cmp_config_, sizeof(ConstMemPoolConfig)));
+  }
+
+  __host__ static __forceinline__ int hostGetMemPoolOffset(int group_id, int offset_in_group) {
+    // return group_id * (getConstMemAllocPerGroup()) + offset;
+    return h_cmp_config_.getMemPoolOffset(group_id, offset_in_group);   // 单位：字
+  }
+
+  __device__ static __forceinline__ int devGetMemPoolOffset(int group_id, int offset_in_group) {
+    return d_cmp_config_.getMemPoolOffset(group_id, offset_in_group);   // 单位：字
   }
 };
 
@@ -172,8 +173,7 @@ public:
   }
 
   __host__ inline void hostSet(int group_id, const T &data) const {
-    int offset = env_group_impl::EGConstantMemoryPool::hostGetMemPoolOffset(group_id, pool_offset_);
-    env_group_impl::EGConstantMemoryPool::setData(group_id, offset, data);
+    env_group_impl::EGConstantMemoryPool::setData(group_id, pool_offset_, data);
   }
 
 protected:

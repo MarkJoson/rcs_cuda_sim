@@ -68,7 +68,7 @@ public:
     // mouse_pos_text_.setFillColor(sf::Color::Green); // 设置文字颜色
     // mouse_pos_text_.setPosition(10, 10);            // 设置文字位置
 
-    getContext()->initialize(16, 4, 4);
+    getContext()->initialize(16, 16, 16);
     map_generator = getContext()->createComponent<map_gen::MapGenerator>(3, 3, 0.05);
     robot_entry = getContext()->createComponent<robot_entry::RobotEntry>(1);
     lidar_sensor = getContext()->createComponent<lidar_sensor::LidarSensor>();
