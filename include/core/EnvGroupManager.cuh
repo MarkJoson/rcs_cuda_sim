@@ -105,11 +105,11 @@ public:
   }
 
   template <typename T> static inline __device__ const T &getData(int group_id, int offset) {
-    return *(reinterpret_cast<T *>(constant_mem_pool + devGetMemPoolOffset(group_id, offset)));
+    return *(reinterpret_cast<T *>(&constant_mem_pool[devGetMemPoolOffset(group_id, offset)]));
   }
 
   template <typename T> static inline __host__ void setData(int group_id, int offset, const T &data) {
-    checkCudaErrors(cudaMemcpyToSymbol(constant_mem_pool + hostGetMemPoolOffset(group_id, offset), &data, sizeof(T), offset));
+    checkCudaErrors(cudaMemcpyToSymbol(constant_mem_pool, &data, sizeof(T), hostGetMemPoolOffset(group_id, offset)));
   }
 
   // 当num_active_group发生变化时调用
@@ -136,6 +136,7 @@ private:
 template <typename Derived, typename T> class MemItemAccessor {
   __host__ __device__ Derived &derived() { return static_cast<Derived &>(*this); }
   __host__ __device__ const Derived &derived() const { return static_cast<const Derived &>(*this); }
+
 public:
   __device__ inline const T &operator[](int group_id) const { return derived().devGet(group_id); }
 
@@ -175,7 +176,6 @@ public:
     env_group_impl::EGConstantMemoryPool::setData(group_id, offset, data);
   }
 
-
 protected:
   ConstMemItemAccessor(int mem_pool_offset) : pool_offset_(mem_pool_offset) {}
 
@@ -211,7 +211,8 @@ public:
   }
 
 protected:
-  GlobalMemItemAccessor(const T *dev_ptr, int group_stride) : dev_ptr_(reinterpret_cast<const uint8_t*>(dev_ptr)), group_stride_(group_stride) {}
+  GlobalMemItemAccessor(const T *dev_ptr, int group_stride)
+      : dev_ptr_(reinterpret_cast<const uint8_t *>(dev_ptr)), group_stride_(group_stride) {}
 
   __host__ static inline GlobalMemItemAccessor<T> assignAccessor(const T *dev_ptr) {
     uint32_t stride = ((sizeof(T) + 3) / 4) * 4; // 4字节对齐
@@ -234,7 +235,7 @@ protected:
 template <typename U> class TensorItemHandle;
 template <typename T> class TensorItemAccessor : public GlobalMemItemAccessor<T> {
 public:
-__host__ __device__ int getNumElement() const { return numel_; }
+  __host__ __device__ int getNumElement() const { return numel_; }
 
 protected:
   TensorItemAccessor(const T *dev_ptr, int group_stride, int numel)
@@ -282,8 +283,17 @@ public:
       : ItemHandleBase(num_group, alternative), host_data_(num_group) {}
   virtual ~HostMemItemHandle() = default;
 
-  T &hostAt(int group_id) { return host_data_[group_id]; }
-  const T &hostAt(int group_id) const { return host_data_[group_id]; }
+  __host__ T &groupAt(int group_id) { return host_data_[group_id]; }
+  __host__ const T &groupAt(int group_id) const { return host_data_[group_id]; }
+
+  __host__ T &activeGroupAt(int active_group_id) {
+    int group_id = env_group_impl::EGActiveGroupMapper::hostGetGroupId(active_group_id);
+    return host_data_[group_id];
+  }
+  __host__ const T &activeGroupAt(int active_group_id) const {
+    int group_id = env_group_impl::EGActiveGroupMapper::hostGetGroupId(active_group_id);
+    return host_data_[group_id];
+  }
 
   std::vector<T> &hostData() { return host_data_; }
 
@@ -357,21 +367,39 @@ public:
 
   void syncToDevice() override { host_data_.copyTo(device_data_); }
 
-  template <typename... Args> __host__ auto at(int64_t group_id, Args... indices) {
+  template <typename... Args> __host__ auto groupAt(int64_t group_id, Args... indices) {
     if (group_id >= num_group_) {
       throw std::out_of_range("group_id out of range");
     }
     return host_data_[{group_id, indices...}];
   }
 
-  template <typename... Args> __host__ const auto at(int64_t group_id, Args... indices) const {
+  template <typename... Args> __host__ const auto groupAt(int64_t group_id, Args... indices) const {
     if (group_id >= num_group_) {
       throw std::out_of_range("group_id out of range");
     }
     return host_data_[{group_id, indices...}];
   }
 
-  TensorItemAccessor<T> getAccessor() { return TensorItemAccessor<T>::assignAccessor(device_data_.typed_data<T>(), shape_); }
+  template <typename... Args> __host__ auto activeGroupAt(int64_t active_group_id, Args... indices) {
+    if (active_group_id >= env_group_impl::EGActiveGroupMapper::hostGetNumActiveGroup()) {
+      throw std::out_of_range("active_group_id out of range");
+    }
+    int group_id = env_group_impl::EGActiveGroupMapper::hostGetGroupId(active_group_id);
+    return host_data_[{group_id, indices...}];
+  }
+
+  template <typename... Args> __host__ const auto activeGroupAt(int64_t active_group_id, Args... indices) const {
+    if (active_group_id >= env_group_impl::EGActiveGroupMapper::hostGetNumActiveGroup()) {
+      throw std::out_of_range("active_group_id out of range");
+    }
+    int group_id = env_group_impl::EGActiveGroupMapper::hostGetGroupId(active_group_id);
+    return host_data_[{group_id, indices...}];
+  }
+
+  TensorItemAccessor<T> getAccessor() {
+    return TensorItemAccessor<T>::assignAccessor(device_data_.typed_data<T>(), shape_);
+  }
   const TensorItemAccessor<T> getAccessor() const {
     return TensorItemAccessor<T>::assignAccessor(device_data_.typed_data<T>(), shape_);
   }
@@ -380,7 +408,7 @@ public:
 // ------------------- 环境组管理器 -------------------
 class EnvGroupManager {
 public:
-  constexpr static int SHAPE_PLACEHOLDER_GROUP = -100;
+  constexpr static int SHAPE_PLACEHOLDER_ACTIVE_GROUP = -100;
   constexpr static int SHAPE_PLACEHOLDER_ENV = -101;
 
   EnvGroupManager(int num_env_per_group = 1, int num_group = 1, int num_active_group = 1)
@@ -438,9 +466,9 @@ public:
                              NumericalDataType dtype, DeviceType device_type = DeviceType::kCUDA) {
     std::vector<int64_t> shape;
     for (auto s : shape_with_placeholder) {
-      if (s == SHAPE_PLACEHOLDER_GROUP) {
+      if (s == SHAPE_PLACEHOLDER_ACTIVE_GROUP) {
         // TODO. 这里使用的是num_group，因为某些核函数需要数据紧密排列。因此需要在调整group数量后的二次分配
-        shape.push_back(num_group_);
+        shape.push_back(num_active_group_);
       } else if (s == SHAPE_PLACEHOLDER_ENV) {
         shape.push_back(num_env_per_group_);
       } else {
@@ -456,7 +484,7 @@ public:
 
     std::vector<int64_t> shape;
     for (auto s : shape_with_placeholder) {
-      if (s == SHAPE_PLACEHOLDER_GROUP) {
+      if (s == SHAPE_PLACEHOLDER_ACTIVE_GROUP) {
         shape.push_back(num_group_);
       } else if (s == SHAPE_PLACEHOLDER_ENV) {
         shape.push_back(num_env_per_group_);

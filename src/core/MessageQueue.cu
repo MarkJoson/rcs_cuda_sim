@@ -37,7 +37,7 @@ void MessageQueue::allocate() {
 
         // 根据shape创建对应的tensor
         std::vector<int64_t> tensor_shape = {
-            EnvGroupManager::SHAPE_PLACEHOLDER_GROUP, EnvGroupManager::SHAPE_PLACEHOLDER_ENV};
+            EnvGroupManager::SHAPE_PLACEHOLDER_ACTIVE_GROUP, EnvGroupManager::SHAPE_PLACEHOLDER_ENV};
         tensor_shape.insert(tensor_shape.end(), shape_.begin(), shape_.end());
         history_.push_back(
             core::getEnvGroupMgr()->createTensor(tensor_uri, tensor_shape, dtype_));

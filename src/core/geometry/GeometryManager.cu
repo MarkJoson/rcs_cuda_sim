@@ -98,7 +98,7 @@ public:
   }
 
   void pushStaticPolyObj(int group_id, std::unique_ptr<ShapeDef> &&shape_def, const Transform2D &pose) {
-    static_scene_descs_->hostAt(group_id).push_back(std::make_pair(std::move(shape_def), pose));
+    static_scene_descs_->groupAt(group_id).push_back(std::make_pair(std::move(shape_def), pose));
   }
 
   // 在所有环境组中创建动态物体
@@ -146,7 +146,7 @@ protected:
     // 为所有的场景组生成静态物体的SDF
     for (int64_t group_id = 0; group_id < static_scene_descs_->getNumEnvGroup(); group_id++) {
       GridMapGenerator grid_map({GRIDMAP_WIDTH, GRIDMAP_HEIGHT, {0, 0}, GRIDMAP_RESOLU});
-      for (auto &static_obj : static_scene_descs_->hostAt(group_id)) {
+      for (auto &static_obj : static_scene_descs_->groupAt(group_id)) {
         auto &shape = static_obj.first;
         auto &pose = static_obj.second;
 
@@ -160,7 +160,7 @@ protected:
           throw std::runtime_error("Shape Type Not Support at Present!");
         }
       }
-      TensorHandle map_tensor = static_esdf_->at(group_id);
+      TensorHandle map_tensor = static_esdf_->groupAt(group_id);
       grid_map.fastEDT(map_tensor);
     }
   }
@@ -172,7 +172,7 @@ protected:
       // 本group的场景中 static线段的数量
       uint32_t num_static_lines_in_group = 0;
       // 获得当前场景的写入地址
-      TensorHandle static_line_tensor = static_lines_->at(group_id, 0, 0);
+      TensorHandle static_line_tensor = static_lines_->groupAt(group_id, 0, 0);
       if (!static_line_tensor.is_contiguous())
         throw std::runtime_error("static_line_tensor by every env is not contiguous!");
 
@@ -190,7 +190,7 @@ protected:
         }
       };
 
-      for (auto &static_obj : static_scene_descs_->hostAt(group_id)) {
+      for (auto &static_obj : static_scene_descs_->groupAt(group_id)) {
         const auto &shape = static_obj.first;
         if (shape->type == ShapeType::SIMPLE_POLYGON) { // 简单多边形
           poly_handle_fn(dynamic_cast<SimplePolyShapeDef *>(shape.get()), static_obj.second);
@@ -200,7 +200,7 @@ protected:
           throw std::runtime_error("Shape Type Not Support at Present!");
         }
       }
-      num_static_lines_->hostAt(group_id) = num_static_lines_in_group;
+      num_static_lines_->groupAt(group_id) = num_static_lines_in_group;
     }
   }
 
@@ -255,12 +255,12 @@ protected:
     // TODO. 取代这个，在kernel中实时计算
     getContext()->getEnvGroupMgr()->createTensor<float>(
         dyn_lines_, "scene_lines",
-        {EnvGroupManager::SHAPE_PLACEHOLDER_GROUP, EnvGroupManager::SHAPE_PLACEHOLDER_ENV, num_dyn_lines_, 4});
+        {EnvGroupManager::SHAPE_PLACEHOLDER_ACTIVE_GROUP, EnvGroupManager::SHAPE_PLACEHOLDER_ENV, num_dyn_lines_, 4});
 
     // 场景中所有dyn object的pose, [obj, group, env, 4]
     getContext()->getEnvGroupMgr()->createTensor<float>(dyn_poses_, "dynamic_poses",
                                                         {static_cast<int64_t>(dyn_scene_desc_.size()),
-                                                         EnvGroupManager::SHAPE_PLACEHOLDER_GROUP,
+                                                         EnvGroupManager::SHAPE_PLACEHOLDER_ACTIVE_GROUP,
                                                          EnvGroupManager::SHAPE_PLACEHOLDER_ENV, 4});
 
     std::cout << "Dynamic Object Line: " << dyn_shape_lines_ << std::endl;
