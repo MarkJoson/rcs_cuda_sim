@@ -79,6 +79,13 @@ __forceinline__ __device__ float4 readLine(int num_dyn_lines, const float4 *__re
     return static_lines[lineIdx - num_dyn_lines];
 }
 
+
+// rasterKernel, block大小 == 128, 1个block处理1个机器人. grid大小 ==
+// (环境组数,环境数,机器人数) rasterKernel: Input:[poses],
+// Output:[lidar_response] 线段数据：储存在全局内存，numLines, 储存在 constant 内存
+// 1. 从场景管理器中获得所有线段的数据：line_begins, line_ends
+// 2. 计算机器人的位姿poses
+// 3. 发布激光雷达的响应lidar_response
 __global__ void rasterKernel(const ConstMemItemAccessor<uint32_t> num_static_lines, // 每个场景中的静态线段数量
                              const TensorItemAccessor<float> static_lines,
                              int num_dyn_lines,                    // 场景中的动态线段数量，所有场景统一
@@ -350,19 +357,17 @@ void LidarSensor::onNodeInit() {
 }
 
 void LidarSensor::onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output) {
-
   /// Grid: (num_lidars, num_envs, num_groups)
   //  Block: (CTA_SIZE, 1, 1)
   dim3 block_dim{CTA_SIZE, 1, 1};
-  uint32_t num_group = getEnvGroupMgr()->getNumActiveGroup();
+  uint32_t num_active_group = getEnvGroupMgr()->getNumActiveGroup();
   uint32_t num_envs = getEnvGroupMgr()->getNumEnvPerGroup();
-  dim3 grid_dim{num_inst_, num_envs, num_group};
+  dim3 grid_dim{num_inst_, num_envs, num_active_group};
 
   uint32_t num_dyn_lines = getGeometryManager()->getNumDynLines();
 
   const float4 *dyn_lines = getGeometryManager()->getDynamicLines().typed_data<float4>();
   const float4 *pose = input.at("pose").begin()->typed_data<float4>();
-
   uint32_t *lidar = output.at("lidar").typed_data<uint32_t>();
 
   rasterKernel<<<grid_dim, block_dim>>>(
@@ -371,17 +376,7 @@ void LidarSensor::onNodeExecute(const NodeExecInputType &input, NodeExecOutputTy
     num_dyn_lines, dyn_lines, pose, lidar);
 
   checkCudaErrors(cudaDeviceSynchronize());
-  // TODO. 删除自己的dynamic_line
-
   // std::cout << "LidarSensor: "<< output.at("lidar")/65536/1024.f << std::endl;
-
-  // rasterKernel, block大小 == 128, 1个block处理1个机器人. grid大小 ==
-  // (环境组数,环境数,机器人数) rasterKernel: Input:[poses],
-  // Output:[lidar_response] 线段数据：储存在全局内存，numLines, 储存在
-  // constant 内存
-  // 1. 从场景管理器中获得所有线段的数据：line_begins, line_ends
-  // 2. 计算机器人的位姿poses
-  // 3. 发布激光雷达的响应lidar_response
 }
 
 float LidarSensor::getLidarRange() const {

@@ -56,7 +56,7 @@ public:
     Component::NodeInputInfo getInputInfo(const NodeNameRef &component_name, const MessageName &message_name);
     // 获得OutputInfo
     Component::NodeOutputInfo getOutputInfo(const NodeNameRef &component_name, const MessageName &message_name);
-    void initialize();
+    void initialize(int num_env_per_group = 1, int num_group = 1, int num_active_group = 1);
     // 初始化组件
     void setup(const std::vector<NodeTagRef> &entrances = {"default", "observe"});
     // 运行

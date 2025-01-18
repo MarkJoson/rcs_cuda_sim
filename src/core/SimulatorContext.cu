@@ -68,9 +68,9 @@ public:
     }
 
     // 初始化子系统: MessageBus, EnvGroupManager
-    void initialize() {
+    void initialize(int num_env_per_group, int num_group, int num_active_group) {
         message_bus = std::make_unique<MessageBus>();
-        env_group_manager = std::make_unique<EnvGroupManager>(1,1,1);
+        env_group_manager = std::make_unique<EnvGroupManager>(num_env_per_group, num_group, num_active_group);
         geometry_manager = std::make_unique<geometry::GeometryManager>();
     }
 
@@ -203,8 +203,8 @@ geometry::GeometryManager* SimulatorContext::getGeometryManager() {
 }
 
 // 初始化子系统: MessageBus, EnvGroupManager
-void SimulatorContext::initialize() {
-    impl->initialize();
+void SimulatorContext::initialize(int num_env_per_group, int num_group, int num_active_group) {
+    impl->initialize(num_env_per_group, num_group, num_active_group);
 }
 
 void SimulatorContext::setup(const std::vector<NodeTagRef> &entrances) {
