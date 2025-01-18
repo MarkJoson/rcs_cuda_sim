@@ -129,8 +129,6 @@ target_link_libraries(cudasim_core
     PUBLIC
         ${OpenCV_LIBRARIES}
         ${Boost_LIBRARIES}
-        cuda_sim_eigen
-
     PRIVATE
         cudasim_torch_dep
 )
@@ -139,8 +137,11 @@ target_link_libraries(cudasim_core
 add_executable(cudasim_test
     src/test_lidar.cu
     src/component/map_generator/MapGenerator.cu
+    src/component/minco_traj_mover/MincoTrajMover.cu
+    src/component/minco_traj_mover/MincoTrajHelper.cpp
     src/component/LidarSensor.cu
     src/component/RobotEntry.cu
+
 )
 
 set_target_properties(cudasim_test PROPERTIES
@@ -148,13 +149,12 @@ set_target_properties(cudasim_test PROPERTIES
     POSITION_INDEPENDENT_CODE ON
 )
 
-
-
 target_link_libraries(cudasim_test
     PUBLIC
         cudasim_core
         cuda_sim_nanoflann
         sfml-graphics
+        cuda_sim_eigen
 )
 
 # /////////////////////////////////////////////////////

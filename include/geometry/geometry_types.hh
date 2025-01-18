@@ -3,9 +3,10 @@
 
 #pragma once
 // #include <Eigen/Eigen>
-#include <Eigen/Dense>
+// #include <Eigen/Dense>
 #include <string>
 #include <iostream>
+#include <cmath>
 
 namespace cuda_simulator {
 namespace core {

@@ -1,10 +1,10 @@
-#ifndef CUDASIM_COMPONENT_MINCO_TRAJ_MOVER_HH
-#define CUDASIM_COMPONENT_MINCO_TRAJ_MOVER_HH
+#ifndef CUDASIM_COMPONENT_MINCOTRAJMOVER_HH
+#define CUDASIM_COMPONENT_MINCOTRAJMOVER_HH
 
 #include "core/Component.hh"
 
 namespace cuda_simulator {
-namespace component {
+namespace minco_traj_mover {
 
 class MincoTrajMover : public core::Component {
 public:
@@ -29,4 +29,4 @@ public:
 
 
 
-#endif // CUDASIM_COMPONENT_MINCO_TRAJ_MOVER_HH
+#endif // CUDASIM_COMPONENT_MINCOTRAJMOVER_HH

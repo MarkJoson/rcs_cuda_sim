@@ -1,25 +1,31 @@
 CompileFlags:
-  Compiler: /usr/local/cuda/bin/nvcc
+  # Compiler: /usr/local/cuda/bin/nvcc
   Add:
     - "-std=c++20"
-    - "-fdeclspec"
     - "-D__CUDACC__"
+    - "-I/home/szh/MyExperiment/rcs_nextgen/build/eigen/include/eigen3"
+    - "--cuda-gpu-arch=sm_86"
     - "-allow-unsupported-compiler"
   Remove:
-    # strip CUDA fatbin args
+    - "-std=gnu++20"
+    - "-fPIC"
+    - "-fno-omit-frame-pointer"
+    - "-resource-dir=*"
+    - "-W*"
     - "-Xfatbin*"
     - "--device-debug"
-    # strip CUDA arch flags
     - "-gencode*"
     - "--generate-code*"
     - "--diag_suppress*"
-    # strip CUDA flags unknown to clang
     - "-ccbin*"
     - "--compiler-options*"
     - "--expt-extended-lambda"
     - "--expt-relaxed-constexpr"
     - "-forward-unknown-to-host-compiler"
     - "-Werror=cross-execution-space-call"
+    - "-Xcudafe"
+    - "-Xcompiler*"
+    - "--"
 Hover:
   ShowAKA: Yes
 InlayHints:
