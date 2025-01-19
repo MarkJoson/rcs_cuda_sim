@@ -22,7 +22,8 @@ public:
     void onNodeInit() override;
 
     void onNodeExecute(const core::NodeExecInputType &input,
-                       core::NodeExecOutputType &output) override;
+                       core::NodeExecOutputType &output,
+                       core::NodeExecStateType &) override;
 
     void setRobotPose(float4 robot_pose);
 

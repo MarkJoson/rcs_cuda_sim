@@ -96,6 +96,8 @@ __global__ void rasterKernel(const ConstMemItemAccessor<uint32_t> num_static_lin
   using BlockScan = cub::BlockScan<uint32_t, CTA_SIZE>;
   using BlockRunLengthDecodeT = cub::BlockRunLengthDecode<uint32_t, CTA_SIZE, 1, EMIT_PER_THREAD>;
 
+  // TODO. 检查不要超过最大机器人数量
+
   volatile __shared__ uint32_t s_lineBuf[LINE_BUF_SIZE];           // 1K
   volatile __shared__ uint32_t s_frLineIdxBuf[FR_BUF_SIZE];        // 1K
   volatile __shared__ uint32_t s_frLineSGridFragsBuf[FR_BUF_SIZE]; // 1K

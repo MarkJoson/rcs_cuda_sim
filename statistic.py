@@ -17,6 +17,6 @@ def count_lines_of_code(dirs, extensions):
     return total_lines
 
 directory = ['./src', './include', './python']  # 当前目录
-extensions = ['.cpp','.h','.cu','.cuh','.py', '.cc', '.hh']  # 扩展名
+extensions = ['.cpp','.h','.cu','.cuh','.py', '.cc', '.hh', 'cpp', 'hpp']  # 扩展名
 total_lines = count_lines_of_code(directory, extensions)
 print(f"Total lines of code in {extensions} files: {total_lines}")

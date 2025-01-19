@@ -2,6 +2,7 @@
 #define CUDASIM_COMPONENT_MINCOTRAJHELPER_HH
 
 #include <Eigen/Dense>
+#include <Eigen/src/Core/Matrix.h>
 #include <cmath>
 #include <cuda_runtime_api.h>
 #include <iostream>
@@ -368,6 +369,39 @@ public:
     // std::cout << "Kpp: " << std::endl << Kpp << std::endl;
     // std::cout << "mat_F_stab: " << std::endl << mat_F_stab << std::endl;
     // std::cout << "mat_G_stab: " << std::endl << mat_G_stab << std::endl;
+  }
+
+  template<typename T>
+  void getMatF(T* output) {
+    // output.resize(6 * 6);
+    for (int i = 0; i < 6; ++i) {
+      for (int j = 0; j < 6; ++j) {
+        output[i * 6 + j] = mat_F_stab(i, j);
+      }
+    }
+  }
+
+  template<typename T>
+  void getMatG(T* output) {
+    // output.resize(6);
+    for (int i = 0; i < 6; ++i) {
+      output[i] = mat_G_stab(i, 0);
+    }
+  }
+
+  template<typename T>
+  void getMatCkpt(int num_ckpts, T* output) {
+
+    Eigen::MatrixXd ckpt_mat = Eigen::MatrixXd::Zero(num_ckpts * 2, NCOFF);
+    ckpt_mat.block(0, 0, num_ckpts, NCOFF) = MincoToolbox::constructCkptMat(pieceT, num_ckpts, 1);
+    ckpt_mat.block(num_ckpts, 0, num_ckpts, NCOFF) = MincoToolbox::constructCkptMat(pieceT, num_ckpts, 2);
+
+    // output.resize(num_ckpts * 2 * NCOFF);
+    for (int i = 0; i < num_ckpts * 2; ++i) {
+      for (int j = 0; j < NCOFF; ++j) {
+        output[i * NCOFF + j] = ckpt_mat(i, j);
+      }
+    }
   }
 };
 

@@ -2,31 +2,28 @@
 #define CUDASIM_COMPONENT_MINCOTRAJMOVER_HH
 
 #include "core/Component.hh"
+#include "core/core_types.hh"
 
 namespace cuda_simulator {
 namespace minco_traj_mover {
 
 class MincoTrajMover : public core::Component {
 public:
-    MincoTrajMover() : Component("minco_traj_mover") { }
+  MincoTrajMover() : Component("minco_traj_mover") {}
 
-    void onEnvironGroupInit() override;
+  void onEnvironGroupInit() override;
 
-    void onNodeReset(const core::TensorHandle &reset_flags,
+  void onNodeReset(const core::TensorHandle &reset_flags, core::NodeExecStateType &state) override;
+
+  void onNodeStart() override;
+
+  void onNodeInit() override;
+
+  void onNodeExecute(const core::NodeExecInputType &input, core::NodeExecOutputType &output,
                      core::NodeExecStateType &state) override;
-
-    void onNodeStart() override;
-
-    void onNodeInit() override;
-
-    void onNodeExecute(const core::NodeExecInputType &input,
-                       core::NodeExecOutputType &output) override;
 };
 
-
-} // namespace component
+} // namespace minco_traj_mover
 } // namespace cuda_simulator
-
-
 
 #endif // CUDASIM_COMPONENT_MINCOTRAJMOVER_HH
