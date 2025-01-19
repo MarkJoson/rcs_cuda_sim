@@ -25,7 +25,7 @@ using Mat1x1 = Eigen::Matrix<double, 1, 1>;
 using Mat1x6 = Eigen::Matrix<double, 1, NCOFF>;
 using Mat3x6 = Eigen::Matrix<double, S, NCOFF>;
 using Mat6x6 = Eigen::Matrix<double, NCOFF, NCOFF>;
-using Mat6x2 = Eigen::Matrix<double, NCOFF, NDIM>;
+using Vec6 = Eigen::Matrix<double, NCOFF, 1>;
 using Mat3x2 = Eigen::Matrix<double, S, NDIM>;
 using MatCoff = Eigen::Matrix<double, NCOFF, NDIM>;
 
@@ -44,8 +44,8 @@ static inline unsigned long factorial(int n) {
 class Toolbox {
 public:
   /// 构造特定时间的 β(t)
-  static Mat6x2 constructBetaT(double t, int rank) {
-    Mat6x2 beta = Mat6x2::Zero();
+  static Vec6 constructBetaT(double t, int rank) {
+    Vec6 beta = Vec6::Zero();
     for (int i = rank; i < NCOFF; ++i) {
       if (std::fabs(t) > 1e-12 || (i - rank) == 0) {
         double num_factor = static_cast<double>(factorial(i));
@@ -146,7 +146,7 @@ public:
 
   static Mat6x6 constructBBTint(double pieceT, int rank) {
     Mat6x6 bbint = Mat6x6::Zero();
-    Mat6x2 beta = constructBetaT(pieceT, rank);
+    Vec6 beta = constructBetaT(pieceT, rank);
 
     for (int i = 0; i < NCOFF; ++i) {
       for (int j = 0; j < NCOFF; ++j) {
@@ -277,13 +277,13 @@ class MincoTrajSystem {
 
   // 矩阵
   Mat6x6 mat_F; // (6x6)
-  Mat6x2 mat_G; // (6x1) or (NCOFFx1)
+  Vec6 mat_G; // (6x1) or (NCOFFx1)
   Mat6x6 mat_F_stab;
-  Mat6x2 mat_G_stab;
+  Vec6 mat_G_stab;
   Mat1x6 K; // LQR增益矩阵
 
   // 求解离散Riccati方程的LQR
-  Mat1x6 solveDLQR(const Mat6x6 &A, const Mat6x2 &B, const Mat6x6 &Q, const Mat1x1 &R) {
+  Mat1x6 solveDLQR(const Mat6x6 &A, const Vec6 &B, const Mat6x6 &Q, const Mat1x1 &R) {
     // 这里使用迭代法求解离散Riccati方程
     Mat6x6 P = Q; // 初始猜测
     Mat6x6 P_next;
@@ -293,7 +293,7 @@ class MincoTrajSystem {
     for (int i = 0; i < max_iter; i++) {
       // P_next = Q + A^T * P * A - A^T * P * B * (R + B^T * P * B)^-1 * B^T * P * A
       Mat1x1 temp = R + B.transpose() * P * B;
-      Mat6x6 K_temp = (temp.inverse() * B.transpose() * P * A);
+      Mat1x6 K_temp = (temp.inverse() * B.transpose() * P * A);
       P_next = Q + A.transpose() * P * A - A.transpose() * P * B * K_temp;
 
       if ((P_next - P).norm() < epsilon) {
@@ -309,7 +309,7 @@ class MincoTrajSystem {
   }
 
 public:
-  MincoTrajSystem(double execT, double RATIO) {
+  MincoTrajSystem(double execT=0.1, double RATIO=0.2) {
     pieceT = execT / RATIO;
     realT = execT;
 
@@ -327,7 +327,7 @@ public:
     }
 
     // 4. mat_u = [[0,0,0,0,1,0]]^T => (6x1)
-    Mat6x2 mat_u;
+    Vec6 mat_u;
     mat_u.setZero();
     mat_u(4, 0) = 1.0;
 
@@ -341,7 +341,7 @@ public:
     Mat6x6 Q = Toolbox::constructBBTint(pieceT, S);
     // LQR，控制权重矩阵
     Mat1x1 R;
-    R << 1.0;
+    R << 10.0;
 
     // 求解LQR
     K = solveDLQR(mat_F, mat_G, Q, R);
@@ -353,9 +353,21 @@ public:
     mat_F_stab = mat_F - mat_G * K;
 
     // 构造稳定化的输入矩阵
-    Mat6x2 selector = Mat6x2::Zero();
+    Vec6 selector = Vec6::Zero();
     selector(0) = 1.0;
     mat_G_stab = mat_G * Kpp * selector;
+
+    // std::cout << "mat_F: " << std::endl << mat_F << std::endl;
+    // std::cout << "mat_G: " << std::endl << mat_G << std::endl;
+    // printf("K:[[");
+    // for(int i=0;i<6;i++) {
+    //   printf("%f, ", K(0, i));
+    // }
+    // printf("]]\n");
+    // // std::cout << "K: " << std::endl << K << std::endl;
+    // std::cout << "Kpp: " << std::endl << Kpp << std::endl;
+    // std::cout << "mat_F_stab: " << std::endl << mat_F_stab << std::endl;
+    // std::cout << "mat_G_stab: " << std::endl << mat_G_stab << std::endl;
   }
 };
 
