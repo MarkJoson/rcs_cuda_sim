@@ -30,6 +30,8 @@ public:
 
     void registerOutput( ExecuteNode* component, const ExecuteNode::NodeOutputInfo &info );
 
+    void registerState( ExecuteNode* component, const ExecuteNode::NodeStateInfo &info );
+
     MessageQueue* getMessageQueue(const NodeNameRef &node_name, const MessageNameRef &message_name);
 
     void addTrigger(NodeTagRef trigger_tag);

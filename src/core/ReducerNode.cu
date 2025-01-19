@@ -24,7 +24,7 @@ void ReducerNode::onNodeInit() {
     addOutput({output_message_name_, message_shape_});
 }
 
-void ReducerNode::onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output) {
+void ReducerNode::onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output, NodeExecStateType &) {
     switch (reduce_method_) {
         case ReduceMethod::STACK:
             throw std::runtime_error("STACK method not supported in ReducerComponent");

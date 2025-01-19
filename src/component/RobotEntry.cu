@@ -9,7 +9,8 @@ using namespace cuda_simulator::core;
 namespace cuda_simulator {
 namespace robot_entry {
 
-void RobotEntry::onNodeExecute(const core::NodeExecInputType &input, core::NodeExecOutputType &output) {}
+void RobotEntry::onNodeExecute(const core::NodeExecInputType &, core::NodeExecOutputType &, core::NodeExecStateType &) {
+}
 
 void RobotEntry::onNodeInit() { addOutput({"pose", {num_robot_per_env_, 4}}); }
 
@@ -23,8 +24,7 @@ void RobotEntry::onEnvironGroupInit() {
 }
 
 void RobotEntry::setRobotPose(float4 robot_pose) {
-  TensorHandle reset = TensorHandle::fromHostVectorNew<float>(
-    {robot_pose.x, robot_pose.y, robot_pose.z, robot_pose.w});
+  TensorHandle reset = TensorHandle::fromHostVectorNew<float>({robot_pose.x, robot_pose.y, robot_pose.z, robot_pose.w});
   auto &pose = core::getMessageBus()->getMessageQueue(name_, "pose")->getWriteTensorRef();
   pose.copyFrom(reset);
   TensorHandle &&random_tensor = TensorHandle::rands({pose.shape()[1], num_robot_per_env_, 4}) * 0.3f;

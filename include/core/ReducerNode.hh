@@ -24,7 +24,7 @@ public:
 
     void onNodeInit() override;
 
-    void onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output) override;
+    void onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output, NodeExecStateType &state) override;
 
     void onNodeReset(const TensorHandle& reset_flags, NodeExecStateType &state ) override;
 

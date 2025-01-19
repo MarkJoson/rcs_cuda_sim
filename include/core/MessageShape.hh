@@ -13,6 +13,10 @@ using MessageName = std::string;
 using MessageNameRef = std::string_view;
 using MessageShape = std::vector<int64_t>;
 
+using StateName = std::string;
+using StateNameRef = std::string_view;
+using StateShape = std::vector<int64_t>;
+
 // 消息形状引用，该类没有设置对数据的检查，使用时需要保证数据的有效性！！！
 class MessageShapeRef {
 public:
@@ -88,6 +92,9 @@ private:
     int64_t dim_;
     const int64_t *shape_;
 };
+
+using StateShapeRef = MessageShapeRef;
+
 
 } // namespace core
 } // namespace cuda_simulator

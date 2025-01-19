@@ -2,6 +2,7 @@
 #define CUDASIM_LIDAR_SENSOR_HH
 
 #include "core/Component.hh"
+#include "core/core_types.hh"
 
 namespace cuda_simulator {
 namespace lidar_sensor {
@@ -14,7 +15,7 @@ public:
   void onNodeReset(const core::TensorHandle &reset_flags, core::NodeExecStateType &state) override;
   void onNodeStart() override {}
   void onNodeInit() override;
-  void onNodeExecute(const core::NodeExecInputType &input, core::NodeExecOutputType &output) override;
+  void onNodeExecute(const core::NodeExecInputType &input, core::NodeExecOutputType &output, core::NodeExecStateType &state) override;
 
   float getLidarRange() const;
   float getLidarResolution() const;

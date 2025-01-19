@@ -25,6 +25,8 @@
 
 #include <boost/format.hpp>
 
+#include "core/ExecuteNode.hh"
+#include "core/MessageShape.hh"
 #include "core/console_style.h"
 #include "core/core_types.hh"
 
@@ -61,7 +63,7 @@ public:
             throw std::runtime_error("Invalid history offset");
         }
 
-        MessageId message_id = lookUpOrCreateMessageId(info.message_name, info.shape);
+        MessageId message_id = lookUpOrCreateMessageId(info.name, info.shape);
 
         NodeId node_id = node_id_map_[component->getName()];
 
@@ -75,7 +77,7 @@ public:
             node_id,
             component->getName(),
             message_id,
-            info.message_name,
+            info.name,
             info.shape,
             info.history_offset,
             info.reduce_method,
@@ -90,11 +92,11 @@ public:
         message_routes_.at(message_id).second.insert(input_des_id);
     }
 
-    void registerOutput( ExecuteNode* component, const ExecuteNode::NodeOutputInfo &info ) {
+    void registerOutput(ExecuteNode* component, const ExecuteNode::NodeOutputInfo &info ) {
         // std::lock_guard<std::mutex> lock(mutex_);
         // TODO.
 
-        MessageId message_id = lookUpOrCreateMessageId(info.message_name, info.shape);
+        MessageId message_id = lookUpOrCreateMessageId(info.name, info.shape);
 
         NodeId node_id = node_id_map_[component->getName()];
 
@@ -108,7 +110,7 @@ public:
             node_id,
             component->getName(),
             message_id,
-            info.message_name,
+            info.name,
             info.shape,
             info.dtype,
             info.history_padding_val,
@@ -121,10 +123,32 @@ public:
         message_routes_.at(message_id).first.insert(output_des_id);
     }
 
+    void registerState(ExecuteNode* component, const ExecuteNode::NodeStateInfo &info) {
+        // std::lock_guard<std::mutex> lock(mutex_);
+        // TODO.
+
+        NodeId node_id = node_id_map_[component->getName()];
+
+        NodeDescription &node_desc = node_descriptions_.at(node_id);
+
+        DescriptionId state_des_id = state_descriptions_.size();
+        state_descriptions_.push_back({
+            node_id,
+            component->getName(),
+            info.name,
+            info.shape,
+            info.dtype,
+            info.init_val
+        });
+
+        // 更新节点接收消息列表
+        node_descriptions_.at(node_id).state_map[info.name] = state_des_id;
+    }
+
     MessageQueue* getMessageQueue(const NodeNameRef &node_name, const MessageNameRef &message_name){
         NodeId node_id = node_id_map_.at(node_name);
         try {
-            MessageQueueId mq_id = node_descriptions_.at(node_id).active_output_map.at(message_name);
+            MessageQueueId mq_id = node_descriptions_.at(node_id).active_output_queue_map.at(message_name);
             return message_queues_.at(mq_id).get();
         } catch (const std::out_of_range &e) {
             throw std::runtime_error("MessageQueue not found! Maybe the message is not active.");
@@ -288,7 +312,7 @@ private:    // ^---- 私有定义 -----
         MessageId message_id;
         MessageNameRef message_name;
         // 消息形状
-        MessageShape shape;
+        MessageShapeRef shape;
         // 历史偏移
         int history_offset;
         // 多输出消息时的归约方法，当reduce_method为STACK时，stack_dim和stack_order有效
@@ -306,11 +330,27 @@ private:    // ^---- 私有定义 -----
         MessageId message_id;
         MessageNameRef message_name;
         // 消息形状
-        MessageShape shape;
+        MessageShapeRef shape;
         // 数值数据类型
         NumericalDataType dtype;
         // 无效历史数据的填充值
         std::optional<TensorHandle> history_padding_val;
+        // 消息队列ID
+        MessageQueueId queue_id = INT_MAX;
+    };
+
+    struct StateDescription {
+        // 所属组件名
+        NodeId node_id;
+        NodeNameRef node_name;
+        // 状态名
+        StateNameRef state_name;
+        // 状态形状
+        StateShapeRef shape;
+        // 状态数据类型
+        NumericalDataType dtype;
+        // 状态数据
+        std::optional<TensorHandle> init_val;
         // 消息队列ID
         MessageQueueId queue_id = INT_MAX;
     };
@@ -323,13 +363,15 @@ private:    // ^---- 私有定义 -----
 
         std::unordered_map<MessageId, DescriptionId> input_map;
         std::unordered_map<MessageId, DescriptionId> output_map;
+        std::unordered_map<StateNameRef, DescriptionId> state_map;        // 目前state使用messageNameRef作为索引
 
         std::unordered_map<MessageId, DescriptionId> active_input_desc;
         std::unordered_map<MessageId, DescriptionId> active_outputs_desc;
 
         std::unordered_map<MessageNameRef, std::vector<
-            std::pair<MessageQueueId, int>>> active_input_map;      // MessageQueue Id, history_offset
-        std::unordered_map<MessageNameRef, MessageQueueId> active_output_map;
+            std::pair<MessageQueueId, int>>> active_input_queue_map;      // MessageQueue Id, history_offset
+        std::unordered_map<MessageNameRef, MessageQueueId> active_output_queue_map;
+        std::unordered_map<MessageNameRef, MessageQueueId> state_queue_map;
     };
 
 
@@ -622,7 +664,10 @@ private:    // ^---- 私有定义 -----
             NodeId node_id = active_graph_[*vi].node_id;
             NodeNameRef node_name = active_graph_[*vi].node_name;
             VertexOutEdgeIterator ei, eind;
+
+            // outedge可能会因为没有下游节点而删除，节点此时无法对输出写入，这可能给核函数的编写造成麻烦。我们在这里为所有消息创建
             // for(std::tie(ei, eind) = boost::out_edges(*vi, active_graph_); ei!=eind; ei++) {
+            // 为每个输出消息创建消息队列
             for(auto [message_id, pub_id] : node_descriptions_.at(node_id).output_map) {
                 // const EdgeProperties &edge_props = active_graph_[*ei];
                 // MessageId message_id = edge_props.message_id;
@@ -631,7 +676,7 @@ private:    // ^---- 私有定义 -----
 
                 int max_mq_history_offset = 0;
 
-                // 遍历当前消息的所有接收者，得到最大历史长度，没有接收者的消息时，offset长度为0
+                // 遍历当前消息的所有接收者，检查消息的shape是否匹配。在之后得到最大历史长度，没有接收者的消息时，offset长度为0
                 if(active_messages_routes_.find(message_id) != active_messages_routes_.end()) {
                     for(auto sub_id : active_messages_routes_.at(message_id).second) {
                         const auto &sub = input_descriptions_.at(sub_id);
@@ -655,6 +700,20 @@ private:    // ^---- 私有定义 -----
                     pub.shape,
                     pub.dtype,
                     max_mq_history_offset+1));
+            }
+
+            // 为每个状态创建消息队列
+            for(auto [state_name, state_desc_id] : node_descriptions_.at(node_id).state_map) {
+                StateDescription &state_desc = state_descriptions_.at(state_desc_id);
+                state_desc.queue_id = message_queues_.size();
+                message_queues_.push_back(std::make_unique<MessageQueue>(
+                    node_id,
+                    node_name,
+                    STATE_MESSAGE_ID,           // TODO. 在之后合适的时机，为每个状态创建一个消息ID
+                    state_desc.state_name,
+                    state_desc.shape,
+                    state_desc.dtype,
+                    1));
             }
         }
     }
@@ -688,7 +747,7 @@ private:    // ^---- 私有定义 -----
             // 填充active_output_map
             for(auto [message_id, pub_id] : node_des.active_outputs_desc) {
                 const MessageNameRef &message_name = output_descriptions_.at(pub_id).message_name;
-                node_des.active_output_map[message_name] = output_descriptions_.at(pub_id).queue_id;
+                node_des.active_output_queue_map[message_name] = output_descriptions_.at(pub_id).queue_id;
             }
 
             // 对于所有的active_input, 根据stack order的顺序查找对应消息的pub, 得到message_queue_id, 填充input_map
@@ -714,13 +773,18 @@ private:    // ^---- 私有定义 -----
                 auto finder = reducers_.find(message_name);
                 if (finder != reducers_.end()) {
                     // 使用原消息名作为节点的输入
-                    node_des.active_input_map[finder->second->getMessageName()] = mq_ids;
+                    node_des.active_input_queue_map[finder->second->getMessageName()] = mq_ids;
                 } else {
-                    node_des.active_input_map[message_name] = mq_ids;
+                    node_des.active_input_queue_map[message_name] = mq_ids;
                 }
 
             }
 
+            // 为state_queue_map填充消息队列ID
+            for(auto [state_name, state_desc_id] : node_des.state_map) {
+                StateDescription &state_desc = state_descriptions_.at(state_desc_id);
+                node_des.state_queue_map[state_name] = state_desc.queue_id;
+            }
         }
     }
 
@@ -816,8 +880,7 @@ private:    // ^---- 私有定义 -----
 
         // 收集所有输入数据
         NodeExecInputType input_data;
-
-        for (const auto& [message_name, sub_mq_ids] : node_des.active_input_map) {
+        for (const auto& [message_name, sub_mq_ids] : node_des.active_input_queue_map) {
             // input_data[message_name] = {};
             std::vector<TensorHandle> input_data_list;
             for (auto [mq_id, hist_off] : sub_mq_ids) {
@@ -826,14 +889,20 @@ private:    // ^---- 私有定义 -----
             input_data.insert(std::make_pair(message_name, input_data_list));
         }
 
+        // 收集所有输出数据
         NodeExecOutputType output_data;
-
-        for (const auto& [message_name, mq_id] : node_des.active_output_map) {
+        for (const auto& [message_name, mq_id] : node_des.active_output_queue_map) {
             output_data.insert(std::make_pair(message_name, message_queues_.at(mq_id)->getWriteTensorRef()));
         }
 
+        // 收集所有状态数据
+        NodeExecStateType state_data;
+        for (const auto& [state_name, mq_id] : node_des.state_queue_map) {
+            state_data.insert(std::make_pair(state_name, message_queues_.at(mq_id)->getWriteTensorRef()));
+        }
+
         // 所有输入就绪时执行组件
-        node_ptr->onNodeExecute(input_data, output_data);
+        node_ptr->onNodeExecute(input_data, output_data, state_data);
     }
 
     std::string generateGraphDot(const Graph& g, const std::string& graph_name, bool with_order=false) const {
@@ -901,6 +970,8 @@ private:
     static constexpr const char* TRIGGER_NODE_TAG = "$trigger";
     static constexpr NodeId TRIGGER_NODE_ID = 65537;
 
+    static constexpr MessageId STATE_MESSAGE_ID = 65538;
+
 
     static constexpr NodeId INVALID_NODE_ID = std::numeric_limits<NodeId>::max();
     static constexpr MessageId INVALID_MESSAGE_ID = std::numeric_limits<MessageId>::max();
@@ -924,6 +995,7 @@ private:
     std::unordered_map<MessageNameRef, MessageId> message_id_map_;
     std::vector<InputDescription> input_descriptions_;
     std::vector<OutputDescription> output_descriptions_;
+    std::vector<StateDescription> state_descriptions_;                      // TODO. 后续考虑将state作为消息，方便其他组件以零拷贝方式获取状态
 
     // 消息转发
     std::unordered_map<MessageId, MessageRoute> message_routes_;            // 原路由
@@ -963,6 +1035,10 @@ void MessageBus::registerInput(ExecuteNode* component, const ExecuteNode::NodeIn
 
 void MessageBus::registerOutput( ExecuteNode* component, const ExecuteNode::NodeOutputInfo &info ) {
     impl_->registerOutput(component, info);
+}
+
+void MessageBus::registerState(ExecuteNode* component, const ExecuteNode::NodeStateInfo &info) {
+    impl_->registerState(component, info);
 }
 
 MessageQueue* MessageBus::getMessageQueue(const NodeNameRef &node_name, const MessageNameRef &message_name) {

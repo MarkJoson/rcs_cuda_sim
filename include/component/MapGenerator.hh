@@ -2,6 +2,7 @@
 #define CUDASIM_COMPONENT_MAPGEN_CUH
 
 #include "core/Component.hh"
+#include "core/core_types.hh"
 
 namespace cuda_simulator {
 namespace map_gen {
@@ -17,7 +18,7 @@ public:
     void onEnvironGroupInit() override;
 
     void onNodeInit() override { }
-    void onNodeExecute(const core::NodeExecInputType& , core::NodeExecOutputType &) override { }
+    void onNodeExecute(const core::NodeExecInputType& , core::NodeExecOutputType &, core::NodeExecStateType&) override { }
     void onNodeReset(const core::TensorHandle& , core::NodeExecStateType &) override { }
 private:
     const float MAP_WIDTH;

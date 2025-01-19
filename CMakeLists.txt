@@ -135,13 +135,12 @@ target_link_libraries(cudasim_core
 
 # /////////////////////////////////////////////////////
 add_executable(cudasim_test
-    src/test_lidar.cu
+    src/test_mover.cu
     src/component/map_generator/MapGenerator.cu
     src/component/minco_traj_mover/MincoTrajMover.cu
     src/component/minco_traj_mover/MincoTrajHelper.cpp
     src/component/LidarSensor.cu
     src/component/RobotEntry.cu
-
 )
 
 set_target_properties(cudasim_test PROPERTIES

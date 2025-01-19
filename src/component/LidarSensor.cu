@@ -360,7 +360,7 @@ void LidarSensor::onNodeInit() {
   addOutput({"lidar", output_shape_, NumericalDataType::kUInt32});
 }
 
-void LidarSensor::onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output) {
+void LidarSensor::onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output, core::NodeExecStateType &) {
   /// Grid: (num_lidars, num_envs, num_groups)
   //  Block: (CTA_SIZE, 1, 1)
   dim3 block_dim{CTA_SIZE, 1, 1};

@@ -87,11 +87,14 @@ public:
         for(auto &com_id : dep_seq) {
             //components[com_id]->onEnvironInit();
             message_bus->registerComponent(components[com_id].get());
-            for(auto &input : components[com_id]->getInputs()) {
+            for(const auto &input : components[com_id]->getInputs()) {
                 message_bus->registerInput(components[com_id].get(), input.second);
             }
-            for(auto &output : components[com_id]->getOutputs()) {
+            for(const auto &output : components[com_id]->getOutputs()) {
                 message_bus->registerOutput(components[com_id].get(), output.second);
+            }
+            for(const auto &state: components[com_id]->getStates()) {
+                message_bus->registerState(components[com_id].get(), state.second);
             }
         }
 
