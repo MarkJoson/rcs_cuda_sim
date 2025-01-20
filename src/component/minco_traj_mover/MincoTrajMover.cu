@@ -26,68 +26,55 @@ struct MincoMoverConfig {
 
 static __constant__ MincoMoverConfig d_config;
 
-// blockDim[x:32,y:6,z:1]
-// gridDim[x:num_total_robot/32,y:1,z:1]
 __global__ void mincoTrajCoeffIterate(int num_total_robot,                    //
                                       const float *__restrict__ target_poses, //
-                                      float *__restrict__ coeff,              // [num_total_robot, 6, 3dim]
-                                      float *__restrict__ force_out) {
+                                      float *__restrict__ coeffs               // [num_total_robot, 6, 3dim]
+) {
 
-  int robot_subidx = threadIdx.x;
   int robot_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
   // 多余的线程退出
   if (robot_idx >= num_total_robot)
     return;
 
-  using BlockStore = cub::BlockStore<float, 32, 3, cub::BLOCK_STORE_TRANSPOSE, 6>;
-  __shared__ union {
-    float coeff[6][3][32];
-    typename BlockStore::TempStorage store;
-  } temp_storage;
+  // 每一个thread对应coeff为6*3, target_pose 为 1*3
+  // new_coeff = matF * old_coeff + matG * target_pose
 
-  // 每个block包含32个机器人，6个对应每机器人的工作线程
-
-  // 加载数据。总共有num_total_robot*18个数据，每次加载1/3，每个机器人6*3dim个float系数
-  int block_size = blockDim.x * blockDim.y;
-  int tid = threadIdx.y * blockDim.x + threadIdx.x;
-  for (int i = tid; i < block_size*3; i+=block_size) {
-    // 每次读取本block中，1/3的机器人数据
-    int copy_robot_idx = i / 18;
-    int copy_coff = (i / 3) % 6;
-    int copy_dim = copy_coff % 3;
-    temp_storage.coeff[copy_coff][copy_dim][copy_robot_idx] = coeff[robot_idx * 18 + i];
-  }
-
-  __syncthreads();
-
-  float4 pose = reinterpret_cast<const float4 *>(target_poses)[robot_idx];
-
-  // 计算新的系数
-  float new_coeff[3] = {0, 0, 0};
-#pragma unroll
+  // 6*6 乘 6*3
+  float new_coeff[6][3];
+  #pragma unroll
   for (int i = 0; i < 6; i++) {
-#pragma unroll
-    for (int dim = 0; dim < 3; dim++) {
-      new_coeff[dim] += d_config.coeff_matF[threadIdx.y][i] * temp_storage.coeff[dim][i][robot_subidx];
+    #pragma unroll
+    for (int j = 0; j < 3; j++) {
+      new_coeff[i][j] = 0;
+      #pragma unroll
+      for (int k = 0; k < 6; k++) {
+        new_coeff[i][j] += d_config.coeff_matF[i][k] * coeffs[robot_idx * 6 * 3 + k * 3 + j];
+      }
+      new_coeff[i][j] += d_config.coeff_matG[i] * target_poses[robot_idx * 3 + j];
     }
   }
-
-#pragma unroll
-  for (int i = 0; i < 3; i++) {
-    new_coeff[i] += d_config.coeff_matG[threadIdx.y] * reinterpret_cast<const float *>(&pose)[i];
+  #pragma unroll
+  for (int i = 0; i < 6; i++) {
+    #pragma unroll
+    for (int j = 0; j < 3; j++) {
+      coeffs[robot_idx * 6 * 3 + i * 3 + j] = new_coeff[i][j];
+    }
   }
+}
 
-#pragma unroll
-  for (int i = 0; i < 3; i++) {
-    temp_storage.coeff[threadIdx.y][i][threadIdx.x] = new_coeff[i];
-  }
+__global__ void mincoTrajBound(int num_total_robot, const float *__restrict__ coeffs, float *__restrict__ bound) {
+  int robot_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-  __syncthreads();
+  // 多余的线程退出
+  if (robot_idx >= num_total_robot)
+    return;
 
-  for (int i = 0; i < 18 * 32; i += block_size) {
-    coeff[robot_idx * 18 + i] = temp_storage.coeff[threadIdx.y][i][threadIdx.x];
-  }
+  // 速度检查点4个，加速度检查点4个，每个检查点3个维度
+
+  // ckpt:[2][4][3] = mat_ckpt:[2][4][6] * coeff[6][3]
+  // 所有检查点做min max规约，得到bound_min[2,对应速度/加速度][3,对应维度x,y,z]
+  // 将target_pose(float4)中限制在bound内
 }
 
 // TODO. 与物理引擎的交互？
