@@ -78,6 +78,8 @@ public:
     // 信息查询
     size_t size() const { return tensors.size(); }
 
+    void clear() { tensors.clear(); }
+
     bool exists(const std::string &uri) const {
         return tensors.find(uri) != tensors.end();
     }
