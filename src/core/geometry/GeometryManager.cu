@@ -135,9 +135,9 @@ public:
 
   uint32_t getNumDynLines() { return num_dyn_lines_; }
 
-  const TensorHandle &getDynamicLines() { return dyn_lines_; }
-  const TensorHandle &getDynamicPoses() { return dyn_poses_; }
-  const TensorHandle getShapePose(int obj_id) { return dyn_poses_[obj_id]; }
+  const GTensor &getDynamicLines() { return dyn_lines_; }
+  const GTensor &getDynamicPoses() { return dyn_poses_; }
+  const GTensor getShapePose(int obj_id) { return dyn_poses_[obj_id]; }
 
   ShapeDef *getShapeDef(int obj_id) { return dyn_scene_desc_[obj_id].get(); }
 
@@ -160,7 +160,7 @@ protected:
           throw std::runtime_error("Shape Type Not Support at Present!");
         }
       }
-      TensorHandle map_tensor = static_esdf_->groupAt(group_id);
+      GTensor map_tensor = static_esdf_->groupAt(group_id);
       grid_map.fastEDT(map_tensor);
     }
   }
@@ -172,7 +172,7 @@ protected:
       // 本group的场景中 static线段的数量
       uint32_t num_static_lines_in_group = 0;
       // 获得当前场景的写入地址
-      TensorHandle static_line_tensor = static_lines_->groupAt(group_id, 0, 0);
+      GTensor static_line_tensor = static_lines_->groupAt(group_id, 0, 0);
       if (!static_line_tensor.isContiguous())
         throw std::runtime_error("static_line_tensor by every env is not contiguous!");
 
@@ -309,12 +309,12 @@ private:
   // 动态物体
   DynamicSceneDescription dyn_scene_desc_; // 动态物体定义（仅支持多边形）
   uint32_t num_dyn_lines_ = 0;             // 多边形线段数量
-  TensorHandle dyn_shape_line_ids_;        // 点集合对应的物体id: [line] -> {16位物体id, 16位内部点id}
-  TensorHandle dyn_shape_lines_;           // 多边形线段集合（局部坐标系）: [line, 4]
+  GTensor dyn_shape_line_ids_;        // 点集合对应的物体id: [line] -> {16位物体id, 16位内部点id}
+  GTensor dyn_shape_lines_;           // 多边形线段集合（局部坐标系）: [line, 4]
 
   // 为每个环境准备的数据
-  TensorHandle dyn_poses_; // 动态物体位姿集合: [obj, group, env, 4]
-  TensorHandle dyn_lines_; // 动态物体线段集合: [group, env, lines, 4]
+  GTensor dyn_poses_; // 动态物体位姿集合: [obj, group, env, 4]
+  GTensor dyn_lines_; // 动态物体线段集合: [group, env, lines, 4]
 
   // TODO. 动态物体的初始位姿，放到onReset中初始化
 
@@ -325,7 +325,7 @@ private:
 
 const ShapeDef *DynamicObjectProxy::getShapeDef() { return manager_->getShapeDef(obj_id_); }
 
-TensorHandle DynamicObjectProxy::getShapePose() { return manager_->getDynamicPoses(); }
+GTensor DynamicObjectProxy::getShapePose() { return manager_->getDynamicPoses(); }
 
 GeometryManager::GeometryManager() { impl_ = std::make_unique<Impl>(); }
 
@@ -347,11 +347,11 @@ const TensorItemHandle<float> *GeometryManager::getStaticESDF() const { return i
 
 uint32_t GeometryManager::getNumDynLines() { return impl_->getNumDynLines(); }
 
-const TensorHandle &GeometryManager::getDynamicLines() { return impl_->getDynamicLines(); }
+const GTensor &GeometryManager::getDynamicLines() { return impl_->getDynamicLines(); }
 
-const TensorHandle &GeometryManager::getDynamicPoses() { return impl_->getDynamicPoses(); }
+const GTensor &GeometryManager::getDynamicPoses() { return impl_->getDynamicPoses(); }
 
-const TensorHandle GeometryManager::getShapePose(int obj_id) { return impl_->getShapePose(obj_id); }
+const GTensor GeometryManager::getShapePose(int obj_id) { return impl_->getShapePose(obj_id); }
 
 DynamicObjectProxy GeometryManager::createDynamicPolyObj(const SimplePolyShapeDef &polygon_def) {
   return DynamicObjectProxy(impl_->createDynamicPolyObj(polygon_def), this);

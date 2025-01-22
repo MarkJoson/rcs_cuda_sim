@@ -10,8 +10,6 @@ class GTensorTorchWrapper;
 
 using GTensor = GTensorTorchWrapper;
 
-using TensorHandle = GTensor;
-
 } // namespace core
 } // namespace cuda_simulator
 

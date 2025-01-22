@@ -295,7 +295,7 @@ __global__ void rasterKernel(const ConstMemItemAccessor<uint32_t> num_static_lin
   //   printf("[LIDAR] %d: %f\n", tid, (lidar_response[tid]>>16)/1024.f);
 }
 
-void LidarSensor::onNodeReset(const TensorHandle &reset_flags, NodeExecStateType &state) {
+void LidarSensor::onNodeReset(const GTensor &reset_flags, NodeExecStateType &state) {
   // 重置LidarSensor
 }
 

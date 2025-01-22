@@ -16,7 +16,7 @@ void RobotEntry::onNodeInit() { addOutput({"pose", {num_robot_per_env_, 4}}); }
 
 void RobotEntry::onNodeStart() {}
 
-void RobotEntry::onNodeReset(const core::TensorHandle &reset_flags, core::NodeExecStateType &state) {}
+void RobotEntry::onNodeReset(const core::GTensor &reset_flags, core::NodeExecStateType &state) {}
 
 void RobotEntry::onEnvironGroupInit() {
   core::getGeometryManager()->createDynamicPolyObj(
@@ -24,10 +24,10 @@ void RobotEntry::onEnvironGroupInit() {
 }
 
 void RobotEntry::setRobotPose(float4 robot_pose) {
-  TensorHandle reset = TensorHandle::fromHostVectorNew<float>({robot_pose.x, robot_pose.y, robot_pose.z, robot_pose.w});
+  GTensor reset = GTensor::fromHostVectorNew<float>({robot_pose.x, robot_pose.y, robot_pose.z, robot_pose.w});
   auto &pose = core::getMessageBus()->getMessageQueue(name_, "pose")->getWriteTensorRef();
   pose.copyFrom(reset);
-  TensorHandle &&random_tensor = TensorHandle::rands({pose.shape()[1], num_robot_per_env_, 4}) * 0.3f;
+  GTensor &&random_tensor = GTensor::rands({pose.shape()[1], num_robot_per_env_, 4}) * 0.3f;
   pose += random_tensor;
 }
 

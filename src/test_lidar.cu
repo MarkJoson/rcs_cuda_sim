@@ -105,7 +105,7 @@ public:
 
   void grabLidarPose() {
     MessageQueue *pose = getMessageBus()->getMessageQueue("robot_entry", "pose");
-    auto &pose_tensor = pose->getHistoryTensorHandle(0);
+    auto &pose_tensor = pose->getHistoryGTensor(0);
     std::vector<float> pose_data;
     pose_tensor[{active_group_id_, env_id_, 0}].toHostVector(pose_data);
     lidar_pose_ = make_float4(pose_data[0], pose_data[1], pose_data[2], pose_data[3]);
@@ -113,7 +113,7 @@ public:
 
   void grabLidarResult() {
     MessageQueue *queue = getMessageBus()->getMessageQueue("lidar_sensor", "lidar");
-    auto &lidar = queue->getHistoryTensorHandle(0);
+    auto &lidar = queue->getHistoryGTensor(0);
 
     std::vector<uint32_t> raw_lidar;
     lidar[{active_group_id_, env_id_, 0}].toHostVector(raw_lidar);

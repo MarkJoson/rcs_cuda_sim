@@ -12,7 +12,7 @@ public:
   LidarSensor();
 
   void onEnvironGroupInit() override;
-  void onNodeReset(const core::TensorHandle &reset_flags, core::NodeExecStateType &state) override;
+  void onNodeReset(const core::GTensor &reset_flags, core::NodeExecStateType &state) override;
   void onNodeStart() override {}
   void onNodeInit() override;
   void onNodeExecute(const core::NodeExecInputType &input, core::NodeExecOutputType &output, core::NodeExecStateType &state) override;

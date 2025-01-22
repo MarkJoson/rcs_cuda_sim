@@ -38,7 +38,7 @@ public:
         value += 1.0f;
     }
 
-    void onReset(const TensorHandle&, NodeExecStateType&) override {}
+    void onReset(const GTensor&, NodeExecStateType&) override {}
 };
 
 class ProcessComponent : public CountableComponent<ProcessComponent> {
@@ -71,7 +71,7 @@ public:
         out_tensor = in_tensor;
     }
 
-    void onReset(const TensorHandle&, NodeExecStateType&) override {}
+    void onReset(const GTensor&, NodeExecStateType&) override {}
 };
 
 class SinkComponent : public CountableComponent<SinkComponent> {
@@ -103,7 +103,7 @@ public:
 
     }
 
-    void onReset(const TensorHandle&, NodeExecStateType&) override {}
+    void onReset(const GTensor&, NodeExecStateType&) override {}
 };
 
 void testBasicMessagePassing() {
@@ -157,7 +157,7 @@ public:
         received_values.push_back(in_tensor[0].item<float>());
     }
 
-    void onReset(const TensorHandle&, NodeExecStateType&) override {}
+    void onReset(const GTensor&, NodeExecStateType&) override {}
 };
 
 void testMessageHistory() {
@@ -214,7 +214,7 @@ public:
         }
     }
 
-    void onReset(const TensorHandle&, NodeExecStateType&) override {}
+    void onReset(const GTensor&, NodeExecStateType&) override {}
 };
 
 void testMultiSourceFusion() {

@@ -110,7 +110,7 @@ public:
      * @brief 计算欧几里得距离场（快速算法）
      * @param output 输出的距离场，每个元素包含了距离场的x，y分量，距离值，以及是否是边界
      */
-    void fastEDT(core::TensorHandle& output) {
+    void fastEDT(core::GTensor& output) {
         //-----------------------------  计算辅助地图：边界与inside  -------------------------------------
         // 生成可用的边界地图
         cv::Mat kernel = cv::Mat::ones(3, 3, CV_8U);
@@ -277,7 +277,7 @@ void GridMapGenerator::drawCircle(const CircleShapeDef& circle, const Transform2
     impl_->drawCircle(circle, tf);
 }
 
-void GridMapGenerator::fastEDT(TensorHandle& output) {
+void GridMapGenerator::fastEDT(GTensor& output) {
     impl_->fastEDT(output);
 }
 

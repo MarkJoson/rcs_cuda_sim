@@ -26,7 +26,7 @@ public:
 
     void onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output, NodeExecStateType &state) override;
 
-    void onNodeReset(const TensorHandle& reset_flags, NodeExecStateType &state ) override;
+    void onNodeReset(const GTensor& reset_flags, NodeExecStateType &state ) override;
 
     MessageNameRef getMessageName() { return message_name_; }
     MessageNameRef getOutputMessageName() { return output_message_name_; }

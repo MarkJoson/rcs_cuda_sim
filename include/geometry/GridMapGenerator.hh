@@ -45,7 +45,7 @@ public:
     void drawPolygon(const SimplePolyShapeDef& poly, const Transform2D& tf);
     void drawPolygon(const ComposedPolyShapeDef& poly, const Transform2D& tf);
     void drawCircle(const CircleShapeDef& circle, const Transform2D& tf);
-    void fastEDT(TensorHandle& output);
+    void fastEDT(GTensor& output);
     GridMapDescription getGridMapDescription() const;
 private:
     class Impl;

@@ -19,7 +19,7 @@ public:
 
     void onNodeInit() override { }
     void onNodeExecute(const core::NodeExecInputType& , core::NodeExecOutputType &, core::NodeExecStateType&) override { }
-    void onNodeReset(const core::TensorHandle& , core::NodeExecStateType &) override { }
+    void onNodeReset(const core::GTensor& , core::NodeExecStateType &) override { }
 private:
     const float MAP_WIDTH;
     const float MAP_HEIGHT;

@@ -151,7 +151,7 @@ void testGeometryManagerEDF() {
         // cv::resizeWindow("EDF Visualization", 800, 800);
 
         // 获取EDF数据并转换为可视化图像
-        core::TensorHandle static_esdf = geom_manager->getStaticESDF(0);
+        core::GTensor static_esdf = geom_manager->getStaticESDF(0);
 
         // 获取环境组0的EDF数据
         auto esdf_data = static_esdf.typed_data<float4>();

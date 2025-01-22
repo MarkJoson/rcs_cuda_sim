@@ -28,16 +28,16 @@ public:
             MessageShapeRef shape,
             NumericalDataType dtype,
             size_t max_history_len,
-            std::optional<TensorHandle> history_padding_val = std::nullopt);
+            std::optional<GTensor> history_padding_val = std::nullopt);
 
     MessageQueue(const MessageQueue&) = delete;
     MessageQueue& operator=(const MessageQueue&) = delete;
 
     void allocate();
 
-    const TensorHandle& getHistoryTensorHandle(size_t offset);
+    const GTensor& getHistoryGTensor(size_t offset);
 
-    TensorHandle& getWriteTensorRef();
+    GTensor& getWriteTensorRef();
 
     void resetEnvData(int env_group_id, int env_id);
 
@@ -56,13 +56,13 @@ private:
     MessageShapeRef shape_;
     NumericalDataType dtype_;
     size_t max_history_len_;
-    std::optional<TensorHandle> history_padding_val_;
+    std::optional<GTensor> history_padding_val_;
 
     size_t write_index_ = 0;
     size_t valid_count_ = 0;
 
     // [History_len, env_group_size, env_cnt, *shape...]
-    std::vector<TensorHandle> history_;
+    std::vector<GTensor> history_;
 };
 
 } // namespace core

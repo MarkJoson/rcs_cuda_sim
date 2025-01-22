@@ -30,11 +30,11 @@ constexpr int NUM_CKPTS = 4;
 
 struct MincoTrajMover::Priv {
   cublasHandle_t cublas_handle_;
-  TensorHandle matF;      // 轨迹, 状态转移矩阵(6x6)
-  TensorHandle matG;      // 目标位置, 输入矩阵(6x1)
-  TensorHandle matC;      // 速度, 加速度, 检查矩阵(2xNUM_CKPTSx6),  [{vel/acc}, {ckpt0/1/2},
-  TensorHandle matCmGinv; // 检查矩阵乘以输入矩阵(2xNUM_CKPTSx1)
-  TensorHandle bound; // 2xNUM_CKPTSx3 [速度/加速度, ckpts, x/y/z方向]
+  GTensor matF;      // 轨迹, 状态转移矩阵(6x6)
+  GTensor matG;      // 目标位置, 输入矩阵(6x1)
+  GTensor matC;      // 速度, 加速度, 检查矩阵(2xNUM_CKPTSx6),  [{vel/acc}, {ckpt0/1/2},
+  GTensor matCmGinv; // 检查矩阵乘以输入矩阵(2xNUM_CKPTSx1)
+  GTensor bound; // 2xNUM_CKPTSx3 [速度/加速度, ckpts, x/y/z方向]
 };
 
 MincoTrajMover::MincoTrajMover()
@@ -57,7 +57,7 @@ MincoTrajMover::MincoTrajMover()
   float max_acc_y = 1;
   float max_acc_z = 1;
 
-  priv_->bound = TensorHandle::fromHostVectorNew<float>(
+  priv_->bound = GTensor::fromHostVectorNew<float>(
       {max_vel_x, max_vel_y, max_vel_z, max_acc_x, max_acc_y, max_acc_z});
 
   // bound(2,3) reshape -> (2, 1, 3)
@@ -112,14 +112,14 @@ void MincoTrajMover::onNodeExecute(const core::NodeExecInputType &input,
   int batch_count = coeff.elemCount() / 18;
 
   // 计算F*x, F(6x6), x(6xB3)
-  TensorHandle FmX = TensorHandle::matmul(priv_->matF, coeff);
+  GTensor FmX = GTensor::matmul(priv_->matF, coeff);
 
   // 计算G*u, G(6x1), u(1xB3)
-  TensorHandle GmU = TensorHandle::matmul(priv_->matG, posT);
+  GTensor GmU = GTensor::matmul(priv_->matG, posT);
 
   // 计算V - Ckpt*FmX, [8,B3]=> [2(vel/acc),4(pts),B(batch_size),3(dim)],
   // 使用gemm运算; Ckpt(8x6), FmX(6xB3); m=8, n=batch_count * 3, k=6
-  TensorHandle CkFmX = TensorHandle::matmul(priv_->matC, FmX);
+  GTensor CkFmX = GTensor::matmul(priv_->matC, FmX);
 
   // 计算点除 CmGinv(2,NUMCKPT,1)->(2,NUMCKPT,1,1) * VmCkFmX(2,NUMCKPT,B,3) ->
   // (2,NUMCKPT,B,3)
@@ -135,14 +135,14 @@ void MincoTrajMover::onNodeExecute(const core::NodeExecInputType &input,
   auto new_posT = posT.clamp(min_bound, max_bound);
 
   // 迭代计算新的coeff
-  coeff = FmX + TensorHandle::matmul(priv_->matG, new_posT);
+  coeff = FmX + GTensor::matmul(priv_->matG, new_posT);
 }
 
 void MincoTrajMover::onNodeStart() {
   CUBLAS_CHECK(cublasCreate(&priv_->cublas_handle_));
 }
 
-void MincoTrajMover::onNodeReset(const core::TensorHandle &reset_flags,
+void MincoTrajMover::onNodeReset(const core::GTensor &reset_flags,
                                  core::NodeExecStateType &state) {
 }
 

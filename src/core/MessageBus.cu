@@ -334,7 +334,7 @@ private:    // ^---- 私有定义 -----
         // 数值数据类型
         NumericalDataType dtype;
         // 无效历史数据的填充值
-        std::optional<TensorHandle> history_padding_val;
+        std::optional<GTensor> history_padding_val;
         // 消息队列ID
         MessageQueueId queue_id = INT_MAX;
     };
@@ -350,7 +350,7 @@ private:    // ^---- 私有定义 -----
         // 状态数据类型
         NumericalDataType dtype;
         // 状态数据
-        std::optional<TensorHandle> init_val;
+        std::optional<GTensor> init_val;
         // 消息队列ID
         MessageQueueId queue_id = INT_MAX;
     };
@@ -882,9 +882,9 @@ private:    // ^---- 私有定义 -----
         NodeExecInputType input_data;
         for (const auto& [message_name, sub_mq_ids] : node_des.active_input_queue_map) {
             // input_data[message_name] = {};
-            std::vector<TensorHandle> input_data_list;
+            std::vector<GTensor> input_data_list;
             for (auto [mq_id, hist_off] : sub_mq_ids) {
-                input_data_list.push_back(message_queues_.at(mq_id)->getHistoryTensorHandle(hist_off));
+                input_data_list.push_back(message_queues_.at(mq_id)->getHistoryGTensor(hist_off));
             }
             input_data.insert(std::make_pair(message_name, input_data_list));
         }

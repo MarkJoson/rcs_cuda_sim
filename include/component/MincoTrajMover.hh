@@ -17,7 +17,7 @@ public:
 
   void onEnvironGroupInit() override;
 
-  void onNodeReset(const core::TensorHandle &reset_flags, core::NodeExecStateType &state) override;
+  void onNodeReset(const core::GTensor &reset_flags, core::NodeExecStateType &state) override;
 
   void onNodeStart() override;
 

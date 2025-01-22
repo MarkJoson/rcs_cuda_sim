@@ -23,31 +23,31 @@ public:
     TensorRegistry& operator=(TensorRegistry&&) = delete;
 
     // 创建张量接口，返回刚刚创建Tensor的引用
-    TensorHandle& createTensor(const std::string& uri, const TensorShape& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
-        tensors.insert(std::make_pair(uri, TensorHandle(shape, dtype, device_type)));
+    GTensor& createTensor(const std::string& uri, const TensorShape& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
+        tensors.insert(std::make_pair(uri, GTensor(shape, dtype, device_type)));
         return tensors.at(uri);
     }
 
     template<typename T>
-    TensorHandle& createTensor(const std::string& uri, const TensorShape& shape, DeviceType device_type=DeviceType::kCUDA) {
-        auto dtype = TensorHandle::convertTypeToTensorType<T>();
+    GTensor& createTensor(const std::string& uri, const TensorShape& shape, DeviceType device_type=DeviceType::kCUDA) {
+        auto dtype = GTensor::convertTypeToTensorType<T>();
         return createTensor(uri, shape, dtype, device_type);
     }
 
-    void createTensor(TensorHandle& target, const std::string& uri, const TensorShape& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
+    void createTensor(GTensor& target, const std::string& uri, const TensorShape& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
         target.bindTensorRef(createTensor(uri, shape, dtype, device_type));
     }
 
-    // 对已经定义的TensorHandle直接使用赋值运算符，不会使新TensorHandle的内部impl指针指向在TensorRegistry中的真实数据
+    // 对已经定义的GTensor直接使用赋值运算符，不会使新GTensor的内部impl指针指向在TensorRegistry中的真实数据
     // 因此如果对已有符号赋值，需要使用带tensor参数的方法
     template<typename T>
-    void createTensor(TensorHandle& target, const std::string& uri, const TensorShape& shape, DeviceType device_type=DeviceType::kCUDA) {
-        auto dtype = TensorHandle::convertTypeToTensorType<T>();
+    void createTensor(GTensor& target, const std::string& uri, const TensorShape& shape, DeviceType device_type=DeviceType::kCUDA) {
+        auto dtype = GTensor::convertTypeToTensorType<T>();
         target.bindTensorRef(createTensor(uri, shape, dtype, device_type));
     }
 
     // 获取张量
-    TensorHandle& getTensor(const std::string& uri) {
+    GTensor& getTensor(const std::string& uri) {
         auto it = tensors.find(uri);
         if (it == tensors.end()) {
             throw std::runtime_error("Tensor not found: " + uri);
@@ -55,7 +55,7 @@ public:
         return it->second;
     }
 
-    const TensorHandle& getTensor(const std::string& uri) const {
+    const GTensor& getTensor(const std::string& uri) const {
         auto it = tensors.find(uri);
         if (it == tensors.end()) {
             throw std::runtime_error("Tensor not found: " + uri);
@@ -67,8 +67,8 @@ public:
     void removeTensor(const std::string &uri) { tensors.erase(uri); }
 
     // 批量操作
-    std::vector<TensorHandle> getTensorsByPrefix(const std::string& prefix) {
-        std::vector<TensorHandle> result;
+    std::vector<GTensor> getTensorsByPrefix(const std::string& prefix) {
+        std::vector<GTensor> result;
         for (const auto& [uri, tensor] : tensors) {
             if (uri.substr(0, prefix.length()) == prefix) {
                 result.push_back(tensor);
@@ -113,7 +113,7 @@ private:
     ~TensorRegistry() = default;
 
 private:
-    std::unordered_map<std::string, TensorHandle> tensors;
+    std::unordered_map<std::string, GTensor> tensors;
 };
 
 } // namespace core

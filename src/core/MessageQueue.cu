@@ -13,7 +13,7 @@ MessageQueue::MessageQueue(
             MessageShapeRef shape,
             NumericalDataType dtype,
             size_t max_history_len,
-            std::optional<TensorHandle> history_padding_val)
+            std::optional<GTensor> history_padding_val)
     : pub_node_id_(pub_node_id)
     , pub_node_name_(pub_node_name)
     , message_id_(message_id)
@@ -50,7 +50,7 @@ void MessageQueue::allocate() {
 }
 
 // 获取历史消息
-const TensorHandle& MessageQueue::getHistoryTensorHandle(size_t offset) {
+const GTensor& MessageQueue::getHistoryGTensor(size_t offset) {
     if (offset >= max_history_len_) {
         throw std::runtime_error("Invalid history offset");
     }
@@ -60,7 +60,7 @@ const TensorHandle& MessageQueue::getHistoryTensorHandle(size_t offset) {
 }
 
 // 获取当前的写入Tensor
-TensorHandle& MessageQueue::getWriteTensorRef() {
+GTensor& MessageQueue::getWriteTensorRef() {
     auto& result = history_[write_index_];
     write_index_ = (write_index_ + 1) % max_history_len_;
     return result;

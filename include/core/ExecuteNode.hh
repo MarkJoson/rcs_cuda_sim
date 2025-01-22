@@ -26,14 +26,14 @@ public:
         const MessageName name;
         const MessageShape shape;
         NumericalDataType dtype = NumericalDataType::kFloat32;
-        std::optional<TensorHandle> history_padding_val = std::nullopt;
+        std::optional<GTensor> history_padding_val = std::nullopt;
     };
 
     struct NodeStateInfo {
         const StateName name;
         const StateShape shape;
         NumericalDataType dtype = NumericalDataType::kFloat32;
-        std::optional<TensorHandle> init_val = std::nullopt;
+        std::optional<GTensor> init_val = std::nullopt;
     };
 
     ExecuteNode(const NodeName &name, const NodeTag &tag = "default")
@@ -51,7 +51,7 @@ public:
     // 执行
     virtual void onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output, NodeExecStateType &state) = 0;
     // 重置
-    virtual void onNodeReset(const TensorHandle& reset_flags, NodeExecStateType &state) = 0;
+    virtual void onNodeReset(const GTensor& reset_flags, NodeExecStateType &state) = 0;
 
     // Getters
     NodeNameRef getName() const { return name_; }

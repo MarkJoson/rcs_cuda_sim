@@ -82,7 +82,7 @@ PYBIND11_MODULE(cudasim_pycore, m) {
       m, "TensorRegistry")
       .def_static("getInstance", TensorRegistry::getInstance)
       .def("createTensor",
-           static_cast<TensorHandle &(
+           static_cast<GTensor &(
                TensorRegistry::*)(const std::string &, const TensorShape &,
                                   NumericalDataType, DeviceType)>(
                &TensorRegistry::createTensor),

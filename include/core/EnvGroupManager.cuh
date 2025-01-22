@@ -346,10 +346,10 @@ public:
   }
 };
 
-// 全局内存区域张量数据句柄，由TensorHandle管理
+// 全局内存区域张量数据句柄，由GTensor管理
 template <typename T> class TensorItemHandle : public ItemHandleBase {
-  TensorHandle host_data_;
-  TensorHandle device_data_;
+  GTensor host_data_;
+  GTensor device_data_;
   TensorShape shape_;
 
 public:
@@ -462,7 +462,7 @@ public:
   }
 
   // 返回新Tensor引用，包含了Group和Env维度
-  TensorHandle &createTensor(const std::string &name, const TensorShape &shape_with_placeholder,
+  GTensor &createTensor(const std::string &name, const TensorShape &shape_with_placeholder,
                              NumericalDataType dtype, DeviceType device_type = DeviceType::kCUDA) {
     std::vector<int64_t> shape;
     for (auto s : shape_with_placeholder) {
@@ -479,7 +479,7 @@ public:
   }
 
   // 原地替换Tensor内部数据
-  void createTensor(TensorHandle &target, const std::string &name, const TensorShape &shape_with_placeholder,
+  void createTensor(GTensor &target, const std::string &name, const TensorShape &shape_with_placeholder,
                     NumericalDataType dtype, DeviceType device_type = DeviceType::kCUDA) {
 
     std::vector<int64_t> shape;
@@ -497,17 +497,17 @@ public:
 
   // 返回新Tensor引用（模板类型）
   template <typename T>
-  TensorHandle &createTensor(const std::string &name, const TensorShape &shape_with_placeholder,
+  GTensor &createTensor(const std::string &name, const TensorShape &shape_with_placeholder,
                              DeviceType device_type = DeviceType::kCUDA) {
 
-    return createTensor(name, shape_with_placeholder, TensorHandle::convertTypeToTensorType<T>(), device_type);
+    return createTensor(name, shape_with_placeholder, GTensor::convertTypeToTensorType<T>(), device_type);
   }
   // 原地替换Tensor内部数据
   template <typename T>
-  void createTensor(TensorHandle &target, const std::string &name, const TensorShape &shape_with_placeholder,
+  void createTensor(GTensor &target, const std::string &name, const TensorShape &shape_with_placeholder,
                     DeviceType device_type = DeviceType::kCUDA) {
 
-    createTensor(target, name, shape_with_placeholder, TensorHandle::convertTypeToTensorType<T>(), device_type);
+    createTensor(target, name, shape_with_placeholder, GTensor::convertTypeToTensorType<T>(), device_type);
   }
 
   void sampleActiveGroupIndices() {

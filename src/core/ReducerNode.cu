@@ -46,7 +46,7 @@ void ReducerNode::onNodeExecute(const NodeExecInputType &input, NodeExecOutputTy
     }
 }
 
-void ReducerNode::onNodeReset(const TensorHandle& reset_flags, NodeExecStateType &state ) {
+void ReducerNode::onNodeReset(const GTensor& reset_flags, NodeExecStateType &state ) {
     // TODO. 处理MessageQueue
 }
 
