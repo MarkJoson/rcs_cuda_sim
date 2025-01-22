@@ -185,11 +185,11 @@ void GTensorTorchWrapper::copyFrom(const GTensorTorchWrapper &other) { impl_->te
 
 void GTensorTorchWrapper::copyTo(GTensorTorchWrapper &other) const { other.impl_->tensor.copy_(impl_->tensor); }
 
-void GTensorTorchWrapper::resize(const TensorShape &shape) {
-  impl_->tensor = torch::zeros(shape, impl_->tensor.options());
+GTensorTorchWrapper GTensorTorchWrapper::reshapeImpl(const TensorShape &shape) {
+  GTensorTorchWrapper result(impl_->dtype, impl_->device_type);
+  result.impl_->tensor = torch::zeros(shape, impl_->tensor.options());
+  return result;
 }
-
-void GTensorTorchWrapper::reshape(const TensorShape &shape) { impl_->tensor = impl_->tensor.reshape(shape); }
 
 void GTensorTorchWrapper::replaceTensor(const GTensorTorchWrapper &other) {
   impl_->device_type = other.impl_->device_type;
@@ -288,7 +288,11 @@ GTensorTorchWrapper &GTensorTorchWrapper::bitwise_or_inplace_impl(const GTensorT
   return *this;
 }
 
-GTensorTorchWrapper GTensorTorchWrapper::clone() const { return GTensorTorchWrapper(*this); }
+GTensorTorchWrapper GTensorTorchWrapper::clone() const {
+  GTensorTorchWrapper result(impl_->dtype, impl_->device_type);
+  result.impl_->tensor = impl_->tensor.clone();
+  return result;
+}
 
 GTensorTorchWrapper GTensorTorchWrapper::move() { return GTensorTorchWrapper(std::move(*this)); }
 
@@ -401,6 +405,12 @@ GTensorTorchWrapper &GTensorTorchWrapper::mul_inplace_scalar_impl(const Scalar &
 GTensorTorchWrapper &GTensorTorchWrapper::div_inplace_scalar_impl(const Scalar &scalar) {
   impl_->tensor.div_(internal::toTorchScalar(scalar));
   return *this;
+}
+
+GTensorTorchWrapper GTensorTorchWrapper::expandImpl(const TensorShape &new_shape) const {
+  GTensorTorchWrapper result(impl_->dtype, impl_->device_type);
+  result.impl_->tensor = impl_->tensor.expand(new_shape);
+  return result;
 }
 
 void GTensorTorchWrapper::gatherSum(const std::vector<GTensorTorchWrapper> src) {

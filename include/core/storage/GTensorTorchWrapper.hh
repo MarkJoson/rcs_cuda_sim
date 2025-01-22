@@ -88,8 +88,6 @@ public:
     void fill(Scalar value) override;
     void copyFrom(const GTensorTorchWrapper& other) override;
     void copyTo(GTensorTorchWrapper& other) const override;
-    void resize(const TensorShape& shape) override;
-    void reshape(const TensorShape& shape) override;
 
     // TODO. replaceTensor需要成为虚函数吗？
     // TODO. fixme. bindTensor 和 replaceTensor这种奇怪的东西还是别要了
@@ -145,6 +143,10 @@ protected:
     GTensorTorchWrapper& sub_inplace_scalar_impl(const Scalar& scalar);
     GTensorTorchWrapper& mul_inplace_scalar_impl(const Scalar& scalar);
     GTensorTorchWrapper& div_inplace_scalar_impl(const Scalar& scalar);
+
+    // 变形
+    GTensorTorchWrapper expandImpl(const TensorShape& new_shape) const;
+    GTensorTorchWrapper reshapeImpl(const TensorShape &shape);
 
     static GTensorTorchWrapper zerosImpl(const TensorShape& shape, NumericalDataType dtype, DeviceType device_type);
     static GTensorTorchWrapper randsImpl(const TensorShape& shape, NumericalDataType dtype, DeviceType device_type);

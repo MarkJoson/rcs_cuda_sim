@@ -48,6 +48,10 @@ public:
     return Derived::randsImpl(shape, dtype, device_type);
   }
 
+  inline Derived zerosLike() const { return zeros(shape(), dtype(), device()); }
+  inline Derived randsLike() const { return rands(shape(), dtype(), device()); }
+
+
   //
   virtual void print(std::ostream &out) const = 0;
   virtual std::string toString() const = 0;
@@ -57,8 +61,6 @@ public:
   virtual void fill(Scalar value) = 0;
   virtual void copyFrom(const Derived &other) = 0;
   virtual void copyTo(Derived &other) const = 0;
-  virtual void resize(const TensorShape &shape) = 0;
-  virtual void reshape(const TensorShape &shape) = 0;
 
   // Gather方法
   virtual void gatherSum(const std::vector<Derived> src) = 0;
@@ -82,7 +84,6 @@ public:
   virtual void toHostArray(void *data, NumericalDataType type, int64_t numel) const = 0;
 
   static inline void setTensorDefaultDeviceId(int device_id) { Derived::setTensorDefaultDeviceIdImpl(device_id); }
-
   static inline void setSeed(uint64_t seed) { Derived::setSeedImpl(seed); }
 
   // 返回新Tensor的操作
@@ -130,8 +131,12 @@ public:
   inline Derived operator[](int64_t index) const { return derived().index_impl(index); }
   inline Derived operator[](const TensorShape &indices) const { return derived().index_impl(indices); }
 
-  template <typename T> inline T *typed_data() { return static_cast<T *>(this->data()); }
+  // 变形
+  inline Derived expand(const TensorShape &new_shape) const { return derived().expandImpl(new_shape); }
+  inline Derived reshape(const TensorShape &shape) {  return derived().reshapeImpl(shape); };
 
+  // 获取原始数据
+  template <typename T> inline T *typed_data() { return static_cast<T *>(this->data()); }
   template <typename T> inline const T *typed_data() const { return static_cast<const T *>(this->data()); }
 
   // 工具方法

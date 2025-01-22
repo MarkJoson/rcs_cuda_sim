@@ -7,9 +7,13 @@
 namespace cuda_simulator {
 namespace minco_traj_mover {
 
+
+
 class MincoTrajMover : public core::Component {
+  struct Priv;
 public:
-  MincoTrajMover() : Component("minco_traj_mover") {}
+  MincoTrajMover();
+  ~MincoTrajMover() override;
 
   void onEnvironGroupInit() override;
 
@@ -21,7 +25,10 @@ public:
 
   void onNodeExecute(const core::NodeExecInputType &input, core::NodeExecOutputType &output,
                      core::NodeExecStateType &state) override;
+private:
+  std::unique_ptr<Priv> priv_;
 };
+
 
 } // namespace minco_traj_mover
 } // namespace cuda_simulator

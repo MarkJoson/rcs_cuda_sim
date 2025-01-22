@@ -154,6 +154,7 @@ target_link_libraries(cudasim_test
         cuda_sim_nanoflann
         sfml-graphics
         cuda_sim_eigen
+        cublas
 )
 
 # /////////////////////////////////////////////////////
