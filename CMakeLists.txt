@@ -170,7 +170,6 @@ add_executable(cudasim_test
     src/test_mover.cu
     src/component/map_generator/MapGenerator.cu
     src/component/minco_traj_mover/MincoTrajMover.cu
-    src/component/minco_traj_mover/MincoTrajHelper.cpp
     src/component/LidarSensor.cu
     src/component/RobotEntry.cu
 )

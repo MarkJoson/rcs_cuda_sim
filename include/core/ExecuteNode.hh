@@ -36,10 +36,7 @@ public:
         std::optional<GTensor> init_val = std::nullopt;
     };
 
-    ExecuteNode(const NodeName &name, const NodeTag &tag = "default")
-        : name_(name), tag_(tag) {}
-
-    ExecuteNode(const NodeNameRef &name, const NodeTag &tag = "default")
+    ExecuteNode(const NodeNameRef &name, const NodeTagRef &tag = "default")
         : name_(name), tag_(tag) {}
 
     virtual ~ExecuteNode() = default;

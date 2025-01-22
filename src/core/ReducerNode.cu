@@ -4,13 +4,13 @@ namespace cuda_simulator {
 namespace core {
 
 ReducerNode::ReducerNode(
-                        const NodeName &reducer_name,
-                        const NodeTag &reducer_tag,
+                        const NodeNameRef &reducer_name,
+                        const NodeTagRef &reducer_tag,
                         const MessageNameRef &message_name,
                         const MessageNameRef &message_output_name,
                         ReduceMethod reduce_method,
                         int history_offset,
-                        const MessageShape &shape)
+                        const MessageShapeRef &shape)
     : ExecuteNode(reducer_name, reducer_tag)
     , message_name_(message_name)
     , output_message_name_(message_output_name)
@@ -30,16 +30,16 @@ void ReducerNode::onNodeExecute(const NodeExecInputType &input, NodeExecOutputTy
             throw std::runtime_error("STACK method not supported in ReducerComponent");
             break;
         case ReduceMethod::SUM:
-            output.begin()->second.gatherSum(input.begin()->second);
+            output.begin()->second->gatherSum(input.begin()->second);
             break;
         case ReduceMethod::MAX:
-            output.begin()->second.gatherMax(input.begin()->second);
+            output.begin()->second->gatherMax(input.begin()->second);
             break;
         case ReduceMethod::MIN:
-            output.begin()->second.gatherMin(input.begin()->second);
+            output.begin()->second->gatherMin(input.begin()->second);
             break;
         case ReduceMethod::AVERAGE:
-            output.begin()->second.gatherMean(input.begin()->second);
+            output.begin()->second->gatherMean(input.begin()->second);
             break;
         default:
             throw std::runtime_error("Invalid reduce method");

@@ -39,9 +39,9 @@ using NodeNameRef = std::string_view;
 using NodeTag = std::string;
 using NodeTagRef = std::string_view;
 
-using NodeExecInputType = std::unordered_map<MessageNameRef, const std::vector<GTensor>>;
-using NodeExecOutputType = std::unordered_map<MessageNameRef, GTensor>;
-using NodeExecStateType = std::unordered_map<MessageNameRef, GTensor>;
+using NodeExecInputType = std::unordered_map<MessageNameRef, const std::vector<const GTensor*>>;
+using NodeExecOutputType = std::unordered_map<MessageNameRef, GTensor*>;
+using NodeExecStateType = std::unordered_map<MessageNameRef, GTensor*>;
 
 } // namespace core
 } // namespace cuda_simulator

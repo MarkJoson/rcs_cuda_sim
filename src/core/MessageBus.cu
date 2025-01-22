@@ -449,7 +449,7 @@ private:    // ^---- 私有定义 -----
 
     ReducerNode* lookUpOrCreateReducerNode(
         const NodeTagRef& sub_node_tag, const MessageNameRef& message_name,
-        const ReduceMethod& reduce_method, int history_offset, const MessageShape &shape
+        const ReduceMethod& reduce_method, int history_offset, const MessageShapeRef &shape
     ) {
         // reducer 组件的命名规则为 messageName.reduceMethod
         // 新的消息id为 messageName.reduceMethod
@@ -460,7 +460,7 @@ private:    // ^---- 私有定义 -----
         if (finder == node_id_map_.end()) {
             auto new_component = std::make_unique<ReducerNode>(
                 reducer_name,
-                std::string(sub_node_tag),
+                sub_node_tag,
                 message_name,
                 reducer_name,               // 使用reducer_name作为消息发送名称
                 reduce_method,
@@ -882,7 +882,7 @@ private:    // ^---- 私有定义 -----
         NodeExecInputType input_data;
         for (const auto& [message_name, sub_mq_ids] : node_des.active_input_queue_map) {
             // input_data[message_name] = {};
-            std::vector<GTensor> input_data_list;
+            std::vector<const GTensor*> input_data_list;
             for (auto [mq_id, hist_off] : sub_mq_ids) {
                 input_data_list.push_back(message_queues_.at(mq_id)->getHistoryGTensor(hist_off));
             }

@@ -23,55 +23,43 @@ public:
     TensorRegistry& operator=(TensorRegistry&&) = delete;
 
     // 创建张量接口，返回刚刚创建Tensor的引用
-    GTensor& createTensor(const std::string& uri, const TensorShape& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
+    GTensor* createTensor(const std::string& uri, const TensorShape& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
         tensors.insert(std::make_pair(uri, GTensor(shape, dtype, device_type)));
-        return tensors.at(uri);
+        return &tensors.at(uri);
     }
 
     template<typename T>
-    GTensor& createTensor(const std::string& uri, const TensorShape& shape, DeviceType device_type=DeviceType::kCUDA) {
-        auto dtype = GTensor::convertTypeToTensorType<T>();
-        return createTensor(uri, shape, dtype, device_type);
-    }
-
-    void createTensor(GTensor& target, const std::string& uri, const TensorShape& shape, NumericalDataType dtype=NumericalDataType::kFloat32, DeviceType device_type=DeviceType::kCUDA) {
-        target.bindTensorRef(createTensor(uri, shape, dtype, device_type));
-    }
-
-    // 对已经定义的GTensor直接使用赋值运算符，不会使新GTensor的内部impl指针指向在TensorRegistry中的真实数据
-    // 因此如果对已有符号赋值，需要使用带tensor参数的方法
-    template<typename T>
-    void createTensor(GTensor& target, const std::string& uri, const TensorShape& shape, DeviceType device_type=DeviceType::kCUDA) {
-        auto dtype = GTensor::convertTypeToTensorType<T>();
-        target.bindTensorRef(createTensor(uri, shape, dtype, device_type));
+    GTensor* createTensor(const std::string& uri, const TensorShape& shape, DeviceType device_type=DeviceType::kCUDA) {
+        return createTensor(uri, shape, dtype_rev_converter<T>::cast(), device_type);
     }
 
     // 获取张量
-    GTensor& getTensor(const std::string& uri) {
+    GTensor* getTensor(const std::string& uri) {
         auto it = tensors.find(uri);
         if (it == tensors.end()) {
             throw std::runtime_error("Tensor not found: " + uri);
         }
-        return it->second;
+        return &it->second;
     }
 
-    const GTensor& getTensor(const std::string& uri) const {
+    const GTensor* getTensor(const std::string& uri) const {
         auto it = tensors.find(uri);
         if (it == tensors.end()) {
             throw std::runtime_error("Tensor not found: " + uri);
         }
-        return it->second;
+        return &it->second;
     }
 
     // 移除张量
     void removeTensor(const std::string &uri) { tensors.erase(uri); }
 
     // 批量操作
-    std::vector<GTensor> getTensorsByPrefix(const std::string& prefix) {
-        std::vector<GTensor> result;
-        for (const auto& [uri, tensor] : tensors) {
+    std::vector<GTensor*> getTensorsByPrefix(const std::string& prefix) {
+        std::vector<GTensor*> result;
+
+        for (auto& [uri, tensor] : tensors) {
             if (uri.substr(0, prefix.length()) == prefix) {
-                result.push_back(tensor);
+                result.push_back(&tensor);
             }
         }
         return result;

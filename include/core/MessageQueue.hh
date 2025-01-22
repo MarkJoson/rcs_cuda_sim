@@ -35,9 +35,9 @@ public:
 
     void allocate();
 
-    const GTensor& getHistoryGTensor(size_t offset);
+    const GTensor* getHistoryGTensor(size_t offset);
 
-    GTensor& getWriteTensorRef();
+    GTensor* getWriteTensorRef();
 
     void resetEnvData(int env_group_id, int env_id);
 
@@ -62,7 +62,7 @@ private:
     size_t valid_count_ = 0;
 
     // [History_len, env_group_size, env_cnt, *shape...]
-    std::vector<GTensor> history_;
+    std::vector<GTensor*> history_;
 };
 
 } // namespace core

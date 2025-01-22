@@ -13,13 +13,13 @@ namespace core {
 class ReducerNode final : public ExecuteNode {
 public:
     ReducerNode(
-            const NodeName &reducer_name,
-            const NodeTag &reducer_tag,
+            const NodeNameRef &reducer_name,
+            const NodeTagRef &reducer_tag,
             const MessageNameRef &message_name,
             const MessageNameRef &message_output_name,
             ReduceMethod reduce_method,
             int history_offset,
-            const MessageShape &shape);
+            const MessageShapeRef &shape);
 
 
     void onNodeInit() override;

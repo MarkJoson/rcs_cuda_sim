@@ -44,13 +44,13 @@ void MessageQueue::allocate() {
 
         if(history_padding_val_.has_value()) {
             // 填充历史数据
-            history_[i] = *history_padding_val_;
+            *history_[i] = *history_padding_val_;
         }
     }
 }
 
 // 获取历史消息
-const GTensor& MessageQueue::getHistoryGTensor(size_t offset) {
+const GTensor* MessageQueue::getHistoryGTensor(size_t offset) {
     if (offset >= max_history_len_) {
         throw std::runtime_error("Invalid history offset");
     }
@@ -60,7 +60,7 @@ const GTensor& MessageQueue::getHistoryGTensor(size_t offset) {
 }
 
 // 获取当前的写入Tensor
-GTensor& MessageQueue::getWriteTensorRef() {
+GTensor* MessageQueue::getWriteTensorRef() {
     auto& result = history_[write_index_];
     write_index_ = (write_index_ + 1) % max_history_len_;
     return result;

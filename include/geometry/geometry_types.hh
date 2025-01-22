@@ -2,9 +2,6 @@
 #define CUDA_SIMULATOR_GEOMETRY_TYPES_HH
 
 #pragma once
-// #include <Eigen/Eigen>
-// #include <Eigen/Dense>
-#include <string>
 #include <iostream>
 #include <cmath>
 

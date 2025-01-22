@@ -372,9 +372,9 @@ void LidarSensor::onNodeExecute(const NodeExecInputType &input, NodeExecOutputTy
 
   uint32_t num_dyn_lines = getGeometryManager()->getNumDynLines();
 
-  const float4 *dyn_lines = getGeometryManager()->getDynamicLines().typed_data<float4>();
-  const float4 *pose = input.at("pose").begin()->typed_data<float4>();
-  uint32_t *lidar = output.at("lidar").typed_data<uint32_t>();
+  const float4 *dyn_lines = getGeometryManager()->getDynamicLines()->typed_data<float4>();
+  const float4 *pose = (*input.at("pose").begin())->typed_data<float4>();
+  uint32_t *lidar = output.at("lidar")->typed_data<uint32_t>();
 
   rasterKernel<<<grid_dim, block_dim>>>(
     getGeometryManager()->getNumStaticLines()->getAccessor(),

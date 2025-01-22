@@ -135,9 +135,9 @@ public:
 
   uint32_t getNumDynLines() { return num_dyn_lines_; }
 
-  const GTensor &getDynamicLines() { return dyn_lines_; }
-  const GTensor &getDynamicPoses() { return dyn_poses_; }
-  const GTensor getShapePose(int obj_id) { return dyn_poses_[obj_id]; }
+  const GTensor *getDynamicLines() { return dyn_lines_; }
+  const GTensor *getDynamicPoses() { return dyn_poses_; }
+  const GTensor getDynObjPose(int obj_id) { return dyn_poses_[obj_id]; }
 
   ShapeDef *getShapeDef(int obj_id) { return dyn_scene_desc_[obj_id].get(); }
 
@@ -242,23 +242,23 @@ protected:
     }
 
     // 拷贝dyn_shape_lines_
-    TensorRegistry::getInstance().createTensor<float>(dyn_shape_lines_, "dyn_obj_lines", {});
-    dyn_shape_lines_.fromHostArray(h_dyn_shape_lines.data(), NumericalDataType::kFloat32, h_dyn_shape_lines.size() * 4);
-    dyn_shape_lines_.reshape({num_dyn_lines_, 4});
+    dyn_shape_lines_ = TensorRegistry::getInstance().createTensor<float>("dyn_obj_lines", {});
+    dyn_shape_lines_->fromHostArray(h_dyn_shape_lines.data(), h_dyn_shape_lines.size() * 4, NumericalDataType::kFloat32);
+    dyn_shape_lines_->reshape({num_dyn_lines_, 4});
 
     // 拷贝dyn_shape_line_ids_
-    TensorRegistry::getInstance().createTensor<uint32_t>(dyn_shape_line_ids_, "dyn_obj_line_ids", {});
-    dyn_shape_line_ids_.fromHostVector(h_dyn_shape_line_ids);
+    dyn_shape_line_ids_ = TensorRegistry::getInstance().createTensor<uint32_t>("dyn_obj_line_ids", {});
+    dyn_shape_line_ids_->fromHostVector(h_dyn_shape_line_ids);
 
     // 申请动态数组，dyn_lines，单个场景中的所有全局坐标系线段, [group, env,
     // lines, 4]
     // TODO. 取代这个，在kernel中实时计算
-    getContext()->getEnvGroupMgr()->createTensor<float>(
-        dyn_lines_, "scene_lines",
+    dyn_lines_ = getContext()->getEnvGroupMgr()->createTensor<float>(
+        "scene_lines",
         {EnvGroupManager::SHAPE_PLACEHOLDER_ACTIVE_GROUP, EnvGroupManager::SHAPE_PLACEHOLDER_ENV, num_dyn_lines_, 4});
 
     // 场景中所有dyn object的pose, [obj, group, env, 4]
-    getContext()->getEnvGroupMgr()->createTensor<float>(dyn_poses_, "dynamic_poses",
+    dyn_poses_ = getContext()->getEnvGroupMgr()->createTensor<float>("dynamic_poses",
                                                         {static_cast<int64_t>(dyn_scene_desc_.size()),
                                                          EnvGroupManager::SHAPE_PLACEHOLDER_ACTIVE_GROUP,
                                                          EnvGroupManager::SHAPE_PLACEHOLDER_ENV, 4});
@@ -281,9 +281,9 @@ protected:
     dim3 block(2, blocksize_y, 1);
     dim3 grid(grid_x, num_dyn_lines_, 1);
 
-    transformDynamicLinesKernel<<<grid, block>>>(num_dyn_lines_, num_envs, dyn_shape_lines_.typed_data<float>(),
-                                                 dyn_shape_line_ids_.typed_data<uint32_t>(),
-                                                 dyn_poses_.typed_data<float>(), dyn_lines_.typed_data<float>());
+    transformDynamicLinesKernel<<<grid, block>>>(num_dyn_lines_, num_envs, dyn_shape_lines_->typed_data<float>(),
+                                                 dyn_shape_line_ids_->typed_data<uint32_t>(),
+                                                 dyn_poses_->typed_data<float>(), dyn_lines_->typed_data<float>());
 
     // TODO. 现在不需要这个
     cudaDeviceSynchronize();
@@ -309,12 +309,12 @@ private:
   // 动态物体
   DynamicSceneDescription dyn_scene_desc_; // 动态物体定义（仅支持多边形）
   uint32_t num_dyn_lines_ = 0;             // 多边形线段数量
-  GTensor dyn_shape_line_ids_;        // 点集合对应的物体id: [line] -> {16位物体id, 16位内部点id}
-  GTensor dyn_shape_lines_;           // 多边形线段集合（局部坐标系）: [line, 4]
+  GTensor *dyn_shape_line_ids_;        // 点集合对应的物体id: [line] -> {16位物体id, 16位内部点id}
+  GTensor *dyn_shape_lines_;           // 多边形线段集合（局部坐标系）: [line, 4]
 
   // 为每个环境准备的数据
-  GTensor dyn_poses_; // 动态物体位姿集合: [obj, group, env, 4]
-  GTensor dyn_lines_; // 动态物体线段集合: [group, env, lines, 4]
+  GTensor *dyn_poses_; // 动态物体位姿集合: [obj, group, env, 4]
+  GTensor *dyn_lines_; // 动态物体线段集合: [group, env, lines, 4]
 
   // TODO. 动态物体的初始位姿，放到onReset中初始化
 
@@ -325,7 +325,7 @@ private:
 
 const ShapeDef *DynamicObjectProxy::getShapeDef() { return manager_->getShapeDef(obj_id_); }
 
-GTensor DynamicObjectProxy::getShapePose() { return manager_->getDynamicPoses(); }
+// GTensor DynamicObjectProxy::getDynObjectPose() { return manager_->getDynamicPoses(); }
 
 GeometryManager::GeometryManager() { impl_ = std::make_unique<Impl>(); }
 
@@ -347,11 +347,11 @@ const TensorItemHandle<float> *GeometryManager::getStaticESDF() const { return i
 
 uint32_t GeometryManager::getNumDynLines() { return impl_->getNumDynLines(); }
 
-const GTensor &GeometryManager::getDynamicLines() { return impl_->getDynamicLines(); }
+const GTensor *GeometryManager::getDynamicLines() { return impl_->getDynamicLines(); }
 
-const GTensor &GeometryManager::getDynamicPoses() { return impl_->getDynamicPoses(); }
+const GTensor *GeometryManager::getDynamicPoses() { return impl_->getDynamicPoses(); }
 
-const GTensor GeometryManager::getShapePose(int obj_id) { return impl_->getShapePose(obj_id); }
+// const GTensor GeometryManager::getDynObjectPose(int obj_id) { return impl_->getDynObjPose(obj_id); }
 
 DynamicObjectProxy GeometryManager::createDynamicPolyObj(const SimplePolyShapeDef &polygon_def) {
   return DynamicObjectProxy(impl_->createDynamicPolyObj(polygon_def), this);

@@ -48,12 +48,10 @@ PYBIND11_MODULE(cudasim_pycore, m) {
       .def("toUInt32", &Scalar::toUInt32);
 
   py::class_<GTensor>(m, "GTensor")
-      .def(py::init<NumericalDataType, DeviceType>(), py::arg("dtype"),
-           py::arg("device_type"))
-      .def(py::init<const TensorShape &, NumericalDataType, DeviceType>(),
-           py::arg("shape"), py::arg("dtype"), py::arg("device_type"))
-      .def(py::init<const Scalar &, DeviceType>(), py::arg("scalar"),
-           py::arg("device_type"))
+      .def(py::init<>())
+      .def(py::init<const TensorShape &, NumericalDataType, DeviceType>(), py::arg("shape"),
+           py::arg("dtype"), py::arg("device_type"))
+      .def(py::init<const Scalar &, DeviceType>(), py::arg("scalar"), py::arg("device_type"))
       .def("shape", &GTensor::shape)
       .def("device", &GTensor::device)
       .def("elemCount", &GTensor::elemCount)
@@ -78,18 +76,15 @@ PYBIND11_MODULE(cudasim_pycore, m) {
                   py::arg("dtype") = NumericalDataType::kFloat32,
                   py::arg("device_type") = DeviceType::kCUDA);
 
-  py::class_<TensorRegistry, std::unique_ptr<TensorRegistry, py::nodelete>>(
-      m, "TensorRegistry")
+  py::class_<TensorRegistry, std::unique_ptr<TensorRegistry, py::nodelete>>(m, "TensorRegistry")
       .def_static("getInstance", TensorRegistry::getInstance)
       .def("createTensor",
-           static_cast<GTensor &(
-               TensorRegistry::*)(const std::string &, const TensorShape &,
-                                  NumericalDataType, DeviceType)>(
+           static_cast<GTensor *(TensorRegistry::*)(const std::string &, const TensorShape &,
+                                                    NumericalDataType, DeviceType)>(
                &TensorRegistry::createTensor),
-           py::arg("uri"), py::arg("shape"), py::arg("dtype"),
-           py::arg("device"))
+           py::arg("uri"), py::arg("shape"), py::arg("dtype"), py::arg("device"))
       .def("getTensor",
-           static_cast<GTensor &(TensorRegistry::*)(const std::string &)>(
+           static_cast<GTensor *(TensorRegistry::*)(const std::string &)>(
                &TensorRegistry::getTensor),
            py::return_value_policy::reference, py::arg("uri"))
       .def("removeTensor", &TensorRegistry::removeTensor, py::arg("uri"));

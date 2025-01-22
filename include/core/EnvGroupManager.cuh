@@ -348,8 +348,8 @@ public:
 
 // 全局内存区域张量数据句柄，由GTensor管理
 template <typename T> class TensorItemHandle : public ItemHandleBase {
-  GTensor host_data_;
-  GTensor device_data_;
+  GTensor *host_data_;
+  GTensor *device_data_;
   TensorShape shape_;
 
 public:
@@ -361,24 +361,24 @@ public:
     new_shape.insert(new_shape.begin(), num_group);
 
     // 创建配置项的内存张量
-    TensorRegistry::getInstance().createTensor<T>(host_data_, name + "_Config@CPU", new_shape, DeviceType::kCPU);
-    TensorRegistry::getInstance().createTensor<T>(device_data_, name + "_Config@CUDA", new_shape, DeviceType::kCUDA);
+    host_data_ = TensorRegistry::getInstance().createTensor<T>(name + "_Config@CPU", new_shape, DeviceType::kCPU);
+    device_data_ = TensorRegistry::getInstance().createTensor<T>(name + "_Config@CUDA", new_shape, DeviceType::kCUDA);
   }
 
-  void syncToDevice() override { host_data_.copyTo(device_data_); }
+  void syncToDevice() override { host_data_->copyTo(*device_data_); }
 
   template <typename... Args> __host__ auto groupAt(int64_t group_id, Args... indices) {
     if (group_id >= num_group_) {
       throw std::out_of_range("group_id out of range");
     }
-    return host_data_[{group_id, indices...}];
+    return (*host_data_)[{group_id, indices...}];
   }
 
   template <typename... Args> __host__ const auto groupAt(int64_t group_id, Args... indices) const {
     if (group_id >= num_group_) {
       throw std::out_of_range("group_id out of range");
     }
-    return host_data_[{group_id, indices...}];
+    return (*host_data_)[{group_id, indices...}];
   }
 
   template <typename... Args> __host__ auto activeGroupAt(int64_t active_group_id, Args... indices) {
@@ -386,7 +386,7 @@ public:
       throw std::out_of_range("active_group_id out of range");
     }
     int group_id = env_group_impl::EGActiveGroupMapper::hostGetGroupId(active_group_id);
-    return host_data_[{group_id, indices...}];
+    return (*host_data_)[{group_id, indices...}];
   }
 
   template <typename... Args> __host__ const auto activeGroupAt(int64_t active_group_id, Args... indices) const {
@@ -394,14 +394,14 @@ public:
       throw std::out_of_range("active_group_id out of range");
     }
     int group_id = env_group_impl::EGActiveGroupMapper::hostGetGroupId(active_group_id);
-    return host_data_[{group_id, indices...}];
+    return (*host_data_)[{group_id, indices...}];
   }
 
   TensorItemAccessor<T> getAccessor() {
-    return TensorItemAccessor<T>::assignAccessor(device_data_.typed_data<T>(), shape_);
+    return TensorItemAccessor<T>::assignAccessor(device_data_->typed_data<T>(), shape_);
   }
   const TensorItemAccessor<T> getAccessor() const {
-    return TensorItemAccessor<T>::assignAccessor(device_data_.typed_data<T>(), shape_);
+    return TensorItemAccessor<T>::assignAccessor(device_data_->typed_data<T>(), shape_);
   }
 };
 
@@ -461,8 +461,8 @@ public:
     return ptr;
   }
 
-  // 返回新Tensor引用，包含了Group和Env维度
-  GTensor &createTensor(const std::string &name, const TensorShape &shape_with_placeholder,
+  // 返回新Tensor指针，包含了Group和Env维度
+  GTensor *createTensor(const std::string &name, const TensorShape &shape_with_placeholder,
                              NumericalDataType dtype, DeviceType device_type = DeviceType::kCUDA) {
     std::vector<int64_t> shape;
     for (auto s : shape_with_placeholder) {
@@ -478,36 +478,13 @@ public:
     return TensorRegistry::getInstance().createTensor(name, shape, dtype, device_type);
   }
 
-  // 原地替换Tensor内部数据
-  void createTensor(GTensor &target, const std::string &name, const TensorShape &shape_with_placeholder,
-                    NumericalDataType dtype, DeviceType device_type = DeviceType::kCUDA) {
-
-    std::vector<int64_t> shape;
-    for (auto s : shape_with_placeholder) {
-      if (s == SHAPE_PLACEHOLDER_ACTIVE_GROUP) {
-        shape.push_back(num_group_);
-      } else if (s == SHAPE_PLACEHOLDER_ENV) {
-        shape.push_back(num_env_per_group_);
-      } else {
-        shape.push_back(s);
-      }
-    }
-    TensorRegistry::getInstance().createTensor(target, name, shape, dtype, device_type);
-  }
 
   // 返回新Tensor引用（模板类型）
   template <typename T>
-  GTensor &createTensor(const std::string &name, const TensorShape &shape_with_placeholder,
+  GTensor *createTensor(const std::string &name, const TensorShape &shape_with_placeholder,
                              DeviceType device_type = DeviceType::kCUDA) {
 
-    return createTensor(name, shape_with_placeholder, GTensor::convertTypeToTensorType<T>(), device_type);
-  }
-  // 原地替换Tensor内部数据
-  template <typename T>
-  void createTensor(GTensor &target, const std::string &name, const TensorShape &shape_with_placeholder,
-                    DeviceType device_type = DeviceType::kCUDA) {
-
-    createTensor(target, name, shape_with_placeholder, GTensor::convertTypeToTensorType<T>(), device_type);
+    return createTensor(name, shape_with_placeholder, dtype_rev_converter<T>::cast(), device_type);
   }
 
   void sampleActiveGroupIndices() {

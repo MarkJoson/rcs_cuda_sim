@@ -57,7 +57,7 @@ MincoTrajMover::MincoTrajMover()
   float max_acc_y = 1;
   float max_acc_z = 1;
 
-  priv_->bound = GTensor::fromHostVectorNew<float>(
+  priv_->bound = GTensor::fromHostVector<float>(
       {max_vel_x, max_vel_y, max_vel_z, max_acc_x, max_acc_y, max_acc_z});
 
   // bound(2,3) reshape -> (2, 1, 3)
@@ -106,8 +106,8 @@ void MincoTrajMover::onNodeExecute(const core::NodeExecInputType &input,
   float beta = 0.0f;
 
   // 获取输入
-  auto &coeff = state.at("coeff");
-  const auto &posT = input.at("posT").front();
+  auto &coeff = *state.at("coeff");
+  const auto &posT = *input.at("posT").front();
 
   int batch_count = coeff.elemCount() / 18;
 

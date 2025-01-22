@@ -22,8 +22,7 @@ class DynamicObjectProxy {
 
 public:
   const ShapeDef *getShapeDef();
-
-  GTensor getShapePose();
+  GTensor getDynObjectPose();
 
 protected:
   DynamicObjectProxy(int obj_id, GeometryManager *manager) : obj_id_(obj_id), manager_(manager) {}
@@ -60,9 +59,9 @@ public:
 
   uint32_t getNumDynLines();
 
-  const GTensor &getDynamicLines();
-  const GTensor &getDynamicPoses();
-  const GTensor getShapePose(int obj_id);
+  const GTensor *getDynamicLines();
+  const GTensor *getDynamicPoses();
+  const GTensor getDynObjectPose(int obj_id);
 
 private:
   class Impl;

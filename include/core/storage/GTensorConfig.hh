@@ -7,7 +7,6 @@ namespace cuda_simulator {
 namespace core {
 
 class GTensorTorchWrapper;
-
 using GTensor = GTensorTorchWrapper;
 
 } // namespace core

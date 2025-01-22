@@ -24,8 +24,8 @@ void RobotEntry::onEnvironGroupInit() {
 }
 
 void RobotEntry::setRobotPose(float4 robot_pose) {
-  GTensor reset = GTensor::fromHostVectorNew<float>({robot_pose.x, robot_pose.y, robot_pose.z, robot_pose.w});
-  auto &pose = core::getMessageBus()->getMessageQueue(name_, "pose")->getWriteTensorRef();
+  GTensor reset = GTensor::fromHostVector<float>({robot_pose.x, robot_pose.y, robot_pose.z, robot_pose.w});
+  auto &pose = *core::getMessageBus()->getMessageQueue(name_, "pose")->getWriteTensorRef();
   pose.copyFrom(reset);
   GTensor &&random_tensor = GTensor::rands({pose.shape()[1], num_robot_per_env_, 4}) * 0.3f;
   pose += random_tensor;
