@@ -2,6 +2,8 @@
 #define __ITENSOR_H__
 
 #include "Scalar.hh"
+#include "core/storage/GTensorTorchWrapper.hh"
+#include <cstdint>
 #include <iostream>
 #include <ostream>
 #include <vector>
@@ -91,6 +93,7 @@ public:
   inline Derived sub(const Derived &other) const { return derived().sub_impl(other); }
   inline Derived mul(const Derived &other) const { return derived().mul_impl(other); }
   inline Derived div(const Derived &other) const { return derived().div_impl(other); }
+  inline static Derived matmul(const Derived &a, const Derived &b) { return Derived::matmul_impl(a, b); }
 
   // Scalar operators
   inline Derived add(const Scalar &scalar) const { return derived().add_scalar_impl(scalar); }
@@ -131,9 +134,19 @@ public:
   inline Derived operator[](int64_t index) const { return derived().index_impl(index); }
   inline Derived operator[](const TensorShape &indices) const { return derived().index_impl(indices); }
 
+
+  // 沿axis的操作
+  inline Derived sum(int64_t axis) const { return derived().sum_impl(axis); }
+  inline Derived mean(int64_t axis) const { return derived().mean_impl(axis); }
+  inline Derived max(int64_t axis) const { return derived().max_impl(axis); }
+  inline Derived min(int64_t axis) const { return derived().min_impl(axis); }
+  inline Derived clamp(const Derived& min, const Derived& max) const { return derived().clamp(min, max); }
+
   // 变形
-  inline Derived expand(const TensorShape &new_shape) const { return derived().expandImpl(new_shape); }
-  inline Derived reshape(const TensorShape &shape) {  return derived().reshapeImpl(shape); };
+  inline Derived expand(const TensorShape &new_shape) const { return derived().expand_impl(new_shape); }
+  inline Derived reshape(const TensorShape &shape) const {  return derived().reshape_impl(shape); };
+  inline Derived squeeze(int64_t dim) const { return derived().squeeze_impl(dim); }
+  inline Derived unsqueeze(int64_t dim) const { return derived().unsqueeze_impl(dim); }
 
   // 获取原始数据
   template <typename T> inline T *typed_data() { return static_cast<T *>(this->data()); }

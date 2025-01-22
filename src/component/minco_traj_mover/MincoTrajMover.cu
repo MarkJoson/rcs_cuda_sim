@@ -30,26 +30,25 @@ constexpr int NUM_CKPTS = 4;
 
 struct MincoTrajMover::Priv {
   cublasHandle_t cublas_handle_;
-  float *d_matF; // 轨迹, 状态转移矩阵(6x6), col-major
-  float *d_matG; // 目标位置, 输入矩阵(6x1), col-major
-  float *d_matL; // 速度, 加速度, 检查矩阵(6x6), [{vel/acc}, {ckpt0/1/2}, {coeff0/1/2/3/4/5}]
+  TensorHandle matF;      // 轨迹, 状态转移矩阵(6x6)
+  TensorHandle matG;      // 目标位置, 输入矩阵(6x1)
+  TensorHandle matC;      // 速度, 加速度, 检查矩阵(2xNUM_CKPTSx6),  [{vel/acc}, {ckpt0/1/2},
   TensorHandle matCmGinv; // 检查矩阵乘以输入矩阵(2xNUM_CKPTSx1)
-  TensorHandle bound;     // 2xNUM_CKPTSx3 [速度/加速度, ckpts, x/y/z方向]
+  TensorHandle bound; // 2xNUM_CKPTSx3 [速度/加速度, ckpts, x/y/z方向]
 };
 
 MincoTrajMover::MincoTrajMover()
     : Component("minco_traj_mover"), priv_(std::make_unique<Priv>()) {
 
-std::vector<float> mat_f, mat_g, mat_ckpt;
+  std::vector<float> mat_f, mat_g, mat_ckpt;
   auto system = MincoTrajSystem(0.1, 0.2);
   // system.getMatF(&config.coeff_matF[0][0]);
   // system.getMatG(config.coeff_matG);
   // system.getMatCkpt(4, &(priv_->mat_ckpt[0][0][0]));
 
-
   // cudaMemcpyToSymbol(d_config, &config, sizeof(MincoMoverConfig));
 
-  priv_->matCmGinv.reshape({2,NUM_CKPTS,1});
+  priv_->matCmGinv.reshape({2, NUM_CKPTS, 1});
 
   float max_vel_x = 1;
   float max_vel_y = 1;
@@ -60,10 +59,13 @@ std::vector<float> mat_f, mat_g, mat_ckpt;
 
   priv_->bound = TensorHandle::fromHostVectorNew<float>(
       {max_vel_x, max_vel_y, max_vel_z, max_acc_x, max_acc_y, max_acc_z});
-  priv_->bound.reshape({2,3});
-  priv_->bound = priv_->bound.expand({2,NUM_CKPTS,3});
 
+  // bound(2,3) reshape -> (2, 1, 3)
+  priv_->bound = priv_->bound.reshape({2, 1, 3});
+  // bound(2,1,3) * matCmGinv(2,NUMCKPT,1) => (2,NUMCKPT,3)
   priv_->bound *= priv_->matCmGinv;
+  // bound(2,NUMCKPT,3) reshape -> (2,NUMCKPT,1,3)
+  priv_->bound = priv_->bound.reshape({2, NUM_CKPTS, 1, 3});
 }
 
 MincoTrajMover::~MincoTrajMover() {
@@ -104,42 +106,36 @@ void MincoTrajMover::onNodeExecute(const core::NodeExecInputType &input,
   float beta = 0.0f;
 
   // 获取输入
-  const auto &coeff = state.at("coeff");
+  auto &coeff = state.at("coeff");
   const auto &posT = input.at("posT").front();
-  // TensorHandle::zeros()
-  // const auto &FmX = state.at("FmX").typed_data<float>();
-  // const auto &GmU = state.at("GmU").typed_data<float>();
-  TensorHandle FmX = coeff.zerosLike();
-  TensorHandle GmU = coeff.zerosLike();
 
   int batch_count = coeff.elemCount() / 18;
 
-  // 计算F*x, 使用gemm运算; F(6x6), x(6xB3); m=6, n=batch_count * 3, k=6
-  CUBLAS_CHECK(cublasSgemm_v2(priv_->cublas_handle_, CUBLAS_OP_N, CUBLAS_OP_N,
-                              6, batch_count * 3, 6, &alpha, priv_->d_matF, 6,
-                              coeff.typed_data<float>(), 6, &beta,
-                              FmX.typed_data<float>(), 6));
-  // 计算G*u, 使用gemm运算; G(6x1), u(1xB3); m=6, n=batch_count * 3, k=1
-  CUBLAS_CHECK(cublasSgemm_v2(priv_->cublas_handle_, CUBLAS_OP_N, CUBLAS_OP_N,
-                              6, batch_count * 3, 1, &alpha, priv_->d_matF, 6,
-                              posT.typed_data<float>(), 1, &beta,
-                              GmU.typed_data<float>(), 6));
+  // 计算F*x, F(6x6), x(6xB3)
+  TensorHandle FmX = TensorHandle::matmul(priv_->matF, coeff);
+
+  // 计算G*u, G(6x1), u(1xB3)
+  TensorHandle GmU = TensorHandle::matmul(priv_->matG, posT);
 
   // 计算V - Ckpt*FmX, [8,B3]=> [2(vel/acc),4(pts),B(batch_size),3(dim)],
   // 使用gemm运算; Ckpt(8x6), FmX(6xB3); m=8, n=batch_count * 3, k=6
-  TensorHandle CkFmX = TensorHandle::zeros({2, NUM_CKPTS, batch_count, 3}); //priv_->bound.expand({2, NUM_CKPTS, batch_count, 3});
-  alpha = -1.0f;
-  // TensorHandle::zeros(CkFmX_shape, NumericalDataType::kFloat32);
-  CUBLAS_CHECK(cublasSgemm_v2(priv_->cublas_handle_, CUBLAS_OP_N,
-                              CUBLAS_OP_N, 2*NUM_CKPTS, batch_count * 3, 6, &alpha,
-                              priv_->d_matL, 2*NUM_CKPTS, FmX.typed_data<float>(), 6,
-                              &beta, CkFmX.typed_data<float>(), 8));
+  TensorHandle CkFmX = TensorHandle::matmul(priv_->matC, FmX);
 
+  // 计算点除 CmGinv(2,NUMCKPT,1)->(2,NUMCKPT,1,1) * VmCkFmX(2,NUMCKPT,B,3) ->
+  // (2,NUMCKPT,B,3)
+  CkFmX *= priv_->matCmGinv.reshape({2, NUM_CKPTS, 1, 1});
 
-  // 计算点除 CmGinv(2,4,1,1) * VmCkFmX(2,4,B,3)
-  // auto CmG_view = priv_->matCmGinv.reshape({2, NUM_CKPTS, 1, 1});
-  // VmCkFmX *= CmG_view;
+  // 合并速度和加速度的ckpt维度，取最大值和最小值, (2*CKPT,B,3) => (B,3)
+  auto max_bound =
+      (priv_->bound - CkFmX).reshape({2 * NUM_CKPTS, batch_count, 3}).max(0);
+  auto min_bound =
+      (priv_->bound + CkFmX).reshape({2 * NUM_CKPTS, batch_count, 3}).min(0);
 
+  // posT: (B,3)
+  auto new_posT = posT.clamp(min_bound, max_bound);
+
+  // 迭代计算新的coeff
+  coeff = FmX + TensorHandle::matmul(priv_->matG, new_posT);
 }
 
 void MincoTrajMover::onNodeStart() {

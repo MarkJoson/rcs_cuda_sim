@@ -41,12 +41,9 @@ public:
     GTensorTorchWrapper& fromScalar(const Scalar& scalar) override;
 
     // 拷贝
-    GTensorTorchWrapper(const GTensorTorchWrapper& other)
-        : impl_(other.impl_) {}
-
+    GTensorTorchWrapper(const GTensorTorchWrapper& other) : impl_(other.impl_) {}
     // 移动
-    GTensorTorchWrapper(GTensorTorchWrapper&& other) noexcept
-        : impl_(std::move(other.impl_)) {}
+    GTensorTorchWrapper(GTensorTorchWrapper&& other) noexcept : impl_(std::move(other.impl_)) {}
 
     virtual ~GTensorTorchWrapper() final = default;
 
@@ -119,9 +116,7 @@ protected:
     GTensorTorchWrapper sub_impl(const GTensorTorchWrapper& other) const;
     GTensorTorchWrapper mul_impl(const GTensorTorchWrapper& other) const;
     GTensorTorchWrapper div_impl(const GTensorTorchWrapper& other) const;
-    GTensorTorchWrapper slice_impl(int64_t dim, int64_t start, int64_t end) const;
-    GTensorTorchWrapper index_impl(int64_t index) const;
-    GTensorTorchWrapper index_impl(const TensorShape& indices) const;
+    static GTensorTorchWrapper matmul_impl(const GTensorTorchWrapper& a, const GTensorTorchWrapper& b);
 
     // 实现ITensor要求的内部方法
     GTensorTorchWrapper bitwise_not_impl() const;
@@ -144,12 +139,31 @@ protected:
     GTensorTorchWrapper& mul_inplace_scalar_impl(const Scalar& scalar);
     GTensorTorchWrapper& div_inplace_scalar_impl(const Scalar& scalar);
 
+    // 索引操作
+    GTensorTorchWrapper slice_impl(int64_t dim, int64_t start, int64_t end) const;
+    GTensorTorchWrapper index_impl(int64_t index) const;
+    GTensorTorchWrapper index_impl(const TensorShape& indices) const;
+
+    // 沿axis的操作
+    GTensorTorchWrapper sum_impl(int64_t axis) const;
+    GTensorTorchWrapper mean_impl(int64_t axis) const;
+    GTensorTorchWrapper max_impl(int64_t axis) const;
+    GTensorTorchWrapper min_impl(int64_t axis) const;
+    GTensorTorchWrapper clamp_impl(const GTensorTorchWrapper& min, const GTensorTorchWrapper& max) const;
+
     // 变形
-    GTensorTorchWrapper expandImpl(const TensorShape& new_shape) const;
-    GTensorTorchWrapper reshapeImpl(const TensorShape &shape);
+    GTensorTorchWrapper expand_impl(const TensorShape& new_shape) const;
+    GTensorTorchWrapper reshape_impl(const TensorShape &shape) const;
+    GTensorTorchWrapper squeeze_impl(int64_t dim) const;
+    GTensorTorchWrapper unsqueeze_impl(int64_t dim) const;
 
     static GTensorTorchWrapper zerosImpl(const TensorShape& shape, NumericalDataType dtype, DeviceType device_type);
     static GTensorTorchWrapper randsImpl(const TensorShape& shape, NumericalDataType dtype, DeviceType device_type);
+
+    float item_float_impl() const;
+    double item_double_impl() const;
+    int64_t item_int64_impl() const;
+    int32_t item_int32_impl() const;
 
     // 取scalar的item方法
     template<typename T>
@@ -167,10 +181,6 @@ protected:
             static_assert(always_false_v<T>, "Unsupported item type");
         }
     }
-    float item_float_impl() const;
-    double item_double_impl() const;
-    int64_t item_int64_impl() const;
-    int32_t item_int32_impl() const;
 
     template<typename T>
     void fromHostVectorImpl(const std::vector<T>& vec) {
