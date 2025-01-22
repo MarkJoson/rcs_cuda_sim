@@ -173,7 +173,7 @@ protected:
       uint32_t num_static_lines_in_group = 0;
       // 获得当前场景的写入地址
       TensorHandle static_line_tensor = static_lines_->groupAt(group_id, 0, 0);
-      if (!static_line_tensor.is_contiguous())
+      if (!static_line_tensor.isContiguous())
         throw std::runtime_error("static_line_tensor by every env is not contiguous!");
 
       float4 *static_line_data = reinterpret_cast<float4 *>(static_line_tensor.data());

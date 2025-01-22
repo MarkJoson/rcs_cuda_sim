@@ -230,7 +230,7 @@ public:
 
         //------------------------------------  导出距离场  --------------------------------------------
         // output.resize(desc_.grid_size.x * desc_.grid_size.y);
-        if(output.shape()[0] != desc_.grid_size.y || output.shape()[1] != desc_.grid_size.x || !output.is_contiguous()) {
+        if(output.shape()[0] != desc_.grid_size.y || output.shape()[1] != desc_.grid_size.x || !output.isContiguous()) {
             throw std::runtime_error("output container is not match with the output!");
         }
 

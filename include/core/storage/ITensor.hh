@@ -2,11 +2,12 @@
 #define __ITENSOR_H__
 
 #include "Scalar.hh"
-#include "core/storage/GTensorTorchWrapper.hh"
 #include <cstdint>
 #include <iostream>
 #include <ostream>
 #include <vector>
+
+namespace at { class Tensor; };
 
 namespace cuda_simulator {
 namespace core {
@@ -34,11 +35,13 @@ public:
   virtual size_t dim() const = 0;
   virtual NumericalDataType dtype() const = 0;
   virtual DeviceType device() const = 0;
-  virtual bool is_contiguous() const = 0;
+  virtual bool isContiguous() const = 0;
 
   // raw data access
   virtual void *data() = 0;
   virtual const void *data() const = 0;
+
+  virtual at::Tensor* getTorchTensor() = 0;
 
   // 生成新Tensor
   static inline Derived zeros(const TensorShape &shape, NumericalDataType dtype = NumericalDataType::kFloat32,
@@ -55,6 +58,7 @@ public:
 
 
   //
+  virtual void print() const = 0;
   virtual void print(std::ostream &out) const = 0;
   virtual std::string toString() const = 0;
 

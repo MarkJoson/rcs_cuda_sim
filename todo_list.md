@@ -19,6 +19,7 @@
 - 移植原有初始pbd版本引擎
 - 移植一个brax引擎测试
 - 移植Geniue引擎的相关实现
+- 将GTensorTorchWrapper改为unique_ptr
 
 - ~~什么时候sync_data?~~
 - ~~ReducerComponent改名~~

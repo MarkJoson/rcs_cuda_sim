@@ -1,6 +1,7 @@
 #include "core/storage/GTensorTorchWrapper.hh"
 #include "core/storage/ITensor.hh"
 #include "core/storage/Scalar.hh"
+#include <ATen/core/TensorBody.h>
 #include <c10/core/TensorOptions.h>
 #include <cstdint>
 #include <memory>
@@ -153,7 +154,13 @@ GTensorTorchWrapper &GTensorTorchWrapper::fromScalar(const Scalar &scalar) {
 
 // 数据访问实现
 // 打印实现
-void GTensorTorchWrapper::print(std::ostream &out) const { out << impl_->tensor; }
+void GTensorTorchWrapper::print() const {
+  std::cout << impl_->tensor << std::endl;
+}
+
+void GTensorTorchWrapper::print(std::ostream &out) const {
+  out << impl_->tensor;
+}
 
 std::string GTensorTorchWrapper::toString() const {
   std::ostringstream oss;
@@ -278,7 +285,7 @@ GTensorTorchWrapper GTensorTorchWrapper::clone() const {
 
 GTensorTorchWrapper GTensorTorchWrapper::move() { return GTensorTorchWrapper(std::move(*this)); }
 NumericalDataType GTensorTorchWrapper::dtype() const { return impl_->dtype; }
-bool GTensorTorchWrapper::is_contiguous() const { return impl_->tensor.is_contiguous(); }
+bool GTensorTorchWrapper::isContiguous() const { return impl_->tensor.is_contiguous(); }
 void *GTensorTorchWrapper::data() { return impl_->tensor.data_ptr(); }
 const void *GTensorTorchWrapper::data() const { return impl_->tensor.data_ptr(); }
 
@@ -542,6 +549,10 @@ void GTensorTorchWrapper::setSeedImpl(uint64_t seed) {
   if (torch::cuda::is_available()) {
     torch::cuda::manual_seed_all(seed);
   }
+}
+
+at::Tensor *GTensorTorchWrapper::getTorchTensor() {
+  return &impl_->tensor;
 }
 
 } // namespace core

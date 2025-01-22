@@ -53,7 +53,6 @@ include(cmake/setup_compilers.cmake)
 
 # torch
 include(thirdparty/torch/torch.cmake)
-find_package(Torch REQUIRED)
 
 # google test
 include(thirdparty/googletest/googletest.cmake)
@@ -73,6 +72,9 @@ include(thirdparty/nanoflann/nanoflann.cmake)
 
 # SFML
 find_package(SFML COMPONENTS graphics REQUIRED)
+
+# pybind11
+include(thirdparty/pybind11/pybind11.cmake)
 
 # 使用python自带的库就不能使用新版ABI
 # add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=1)
@@ -131,6 +133,36 @@ target_link_libraries(cudasim_core
         ${Boost_LIBRARIES}
     PRIVATE
         cudasim_torch_dep
+)
+
+# /////////////////////////////////////////////////////
+add_library(cudasim_pycore SHARED
+    src/core/binding/python.cc
+)
+
+target_include_directories(cudasim_pycore
+    PRIVATE
+        ${TORCH_INCLUDE_DIRS}
+        ${Python3_INCLUDE_DIRS}
+)
+
+target_link_libraries(cudasim_pycore
+    PUBLIC
+        cudasim_core
+        # cuda_sim_pybind11
+        ${Python3_LIBRARIES}
+        ${TORCH_LIBRARIES}
+        ${TORCH_PYTHON_LIBRARY}
+)
+
+set_target_properties(cudasim_pycore PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/python"
+)
+
+add_custom_command(
+    TARGET cudasim_pycore
+    POST_BUILD
+    COMMAND cd ${CMAKE_SOURCE_DIR}/python && pwd && stubgen --include-private --include-docstrings -v -o . -m cudasim_pycore
 )
 
 # /////////////////////////////////////////////////////

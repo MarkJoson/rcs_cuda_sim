@@ -73,11 +73,13 @@ public:
     size_t dim() const override;
     NumericalDataType dtype() const override;
     DeviceType device() const override;
-    bool is_contiguous() const override;
+    bool isContiguous() const override;
 
     void* data() override;
     const void* data() const override;
+    at::Tensor* getTorchTensor() override;
 
+    void print() const override;
     void print(std::ostream &out) const override;
     std::string toString() const override;
 
