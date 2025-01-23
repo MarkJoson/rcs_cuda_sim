@@ -1,13 +1,62 @@
+#include "core/Component.hh"
+#include "core/EnvGroupManager.cuh"
+#include "core/ExecuteNode.hh"
+#include "core/MessageQueue.hh"
+#include "core/MessageBus.hh"
+
+#include "core/SimulatorContext.hh"
+#include "core/storage/GTensorConfig.hh"
 #include "core/storage/ITensor.hh"
 #include "core/storage/Scalar.hh"
 #include "core/storage/TensorRegistry.hh"
+
+
 #include "pybind11/detail/common.h"
 #include "torch/extension.h"
 
-#include "core/storage/GTensorConfig.hh"
 #include <memory>
 
 using namespace cuda_simulator::core;
+
+template <typename NodeBase> class PyExecuteNode : public NodeBase {
+public:
+  using NodeBase::NodeBase;
+  void onNodeInit() override {
+    PYBIND11_OVERLOAD_PURE(void, NodeBase, onNodeInit);
+  }
+  void onNodeStart() override {
+    PYBIND11_OVERLOAD_PURE(void, NodeBase, onNodeStart);
+  }
+  void onNodeExecute(const NodeExecInputType &input, NodeExecOutputType &output,
+                     NodeExecStateType &state) override {
+    PYBIND11_OVERLOAD_PURE(void, NodeBase, onNodeExecute, input, output, state);
+  }
+  void onNodeReset(const GTensor &reset_flags, NodeExecStateType &state) override {
+    PYBIND11_OVERLOAD_PURE(void, NodeBase, onNodeReset, reset_flags, state);
+  }
+
+  using NodeBase::addInput;
+  using NodeBase::addOutput;
+  using NodeBase::addState;
+
+  using NodeBase::input_info_;
+  using NodeBase::name_;
+  using NodeBase::output_info_;
+  using NodeBase::state_info_;
+  using NodeBase::tag_;
+  ~PyExecuteNode() override = default;
+};
+
+template <typename ComponentBase> class PyComponent : public PyExecuteNode<ComponentBase> {
+public:
+  using PyExecuteNode<ComponentBase>::PyExecuteNode;
+  void onEnvironGroupInit() override {
+    PYBIND11_OVERLOAD_PURE(void, ComponentBase, onEnvironGroupInit);
+  }
+  ~PyComponent() override = default;
+
+  using ComponentBase::dependences_;
+};
 
 PYBIND11_MODULE(cudasim_pycore, m) {
   m.doc() = "CUDA Simulator Core Module";
@@ -59,7 +108,6 @@ PYBIND11_MODULE(cudasim_pycore, m) {
       .def("copyFrom", &GTensor::copyFrom, py::arg("other"))
       .def("copyTo", &GTensor::copyTo, py::arg("other"))
       .def("clone", &GTensor::clone)
-      .def("moveFrom", &GTensor::moveFrom)
       //--
       .def_static("zeros", GTensor::zeros, py::arg("shape"),
                   py::arg("dtype") = NumericalDataType::kFloat32,
@@ -81,8 +129,9 @@ PYBIND11_MODULE(cudasim_pycore, m) {
       .def("squeeze", &GTensor::squeeze, py::arg("dim"))
       .def("unsqueeze", &GTensor::unsqueeze, py::arg("dim"))
       //--
-      .def("setTensorDefaultDeviceId", &GTensor::setTensorDefaultDeviceId, py::arg("device_id"))
-      .def("setSeed", &GTensor::setSeed, py::arg("seed"))
+      .def_static("setTensorDefaultDeviceId", GTensor::setTensorDefaultDeviceId,
+                  py::arg("device_id"))
+      .def_static("setSeed", GTensor::setSeed, py::arg("seed"))
       .def("getTorchTensor", &GTensor::getTorchTensor, py::return_value_policy::reference);
 
   py::class_<TensorRegistry, std::unique_ptr<TensorRegistry, py::nodelete>>(m, "TensorRegistry")
@@ -105,6 +154,124 @@ PYBIND11_MODULE(cudasim_pycore, m) {
       .def("size", &TensorRegistry::size)
       .def("getAllTensorUri", &TensorRegistry::getAllTensorUri);
 
-  m.def("getTensorRegistry", &TensorRegistry::getInstance, py::return_value_policy::reference);
+  py::enum_<ReduceMethod>(m, "ReduceMethod")
+      .value("STACK", ReduceMethod::STACK)
+      .value("SUM", ReduceMethod::SUM)
+      .value("MAX", ReduceMethod::MAX)
+      .value("MIN", ReduceMethod::MIN)
+      .export_values();
 
+  py::class_<ExecuteNode::NodeInputInfo>(m, "NodeInputInfo")
+      .def(py::init([](const MessageName &name, const MessageShape &shape, int history_offset,
+                       ReduceMethod reduce_method) {
+             return ExecuteNode::NodeInputInfo{name, shape, history_offset, reduce_method};
+           }),
+           py::arg("name"), py::arg("shape"), py::arg("history_offset"), py::arg("reduce_method"))
+      .def_readonly("name", &ExecuteNode::NodeInputInfo::name)
+      .def_readonly("shape", &ExecuteNode::NodeInputInfo::shape)
+      .def_readwrite("history_offset", &ExecuteNode::NodeInputInfo::history_offset)
+      .def_readwrite("reduce_method", &ExecuteNode::NodeInputInfo::reduce_method);
+
+  py::class_<ExecuteNode::NodeOutputInfo>(m, "NodeOutputInfo")
+      .def(py::init([](const MessageName &name, const MessageShape &shape, NumericalDataType dtype,
+                       std::optional<GTensor> history_padding_val) {
+             return ExecuteNode::NodeOutputInfo{name, shape, dtype, history_padding_val};
+           }),
+           py::arg("name"), py::arg("shape"), py::arg("dtype"), py::arg("history_padding_val"))
+      .def_readonly("name", &ExecuteNode::NodeOutputInfo::name)
+      .def_readonly("shape", &ExecuteNode::NodeOutputInfo::shape)
+      .def_readwrite("dtype", &ExecuteNode::NodeOutputInfo::dtype)
+      .def_readwrite("history_padding_val", &ExecuteNode::NodeOutputInfo::history_padding_val);
+
+  py::class_<ExecuteNode::NodeStateInfo>(m, "NodeStateInfo")
+      .def(py::init([](const MessageName &name, const MessageShape &shape, NumericalDataType dtype,
+                       std::optional<GTensor> init_val) {
+             return ExecuteNode::NodeStateInfo{name, shape, dtype, init_val};
+           }),
+           py::arg("name"), py::arg("shape"), py::arg("dtype"), py::arg("init_val"))
+      .def_readonly("name", &ExecuteNode::NodeStateInfo::name)
+      .def_readonly("shape", &ExecuteNode::NodeStateInfo::shape)
+      .def_readwrite("dtype", &ExecuteNode::NodeStateInfo::dtype)
+      .def_readwrite("init_val", &ExecuteNode::NodeStateInfo::init_val);
+
+  py::class_<ExecuteNode, PyExecuteNode<ExecuteNode>>(m, "ExecuteNode")
+      .def(py::init<const NodeName &, const NodeTag &>(), py::arg("name"), py::arg("tag"))
+      .def("getName", &ExecuteNode::getName)
+      .def("getTag", &ExecuteNode::getTag)
+      .def("onNodeInit", &ExecuteNode::onNodeInit)
+      .def("onNodeStart", &ExecuteNode::onNodeStart)
+      .def("onNodeExecute", &ExecuteNode::onNodeExecute, py::arg("input"), py::arg("output"),
+           py::arg("state"), py::return_value_policy::reference)
+      .def("onNodeReset", &ExecuteNode::onNodeReset, py::arg("reset_flags"), py::arg("state"),
+           py::return_value_policy::reference)
+      .def("getInputInfo", &ExecuteNode::getInputInfo, py::arg("message_name"),
+           py::return_value_policy::reference)
+      .def("getOutputInfo", &ExecuteNode::getOutputInfo, py::arg("message_name"),
+           py::return_value_policy::reference)
+      .def("getStateInfo", &ExecuteNode::getStateInfo, py::arg("state_name"),
+           py::return_value_policy::reference)
+      .def("getInputs", &ExecuteNode::getInputs)
+      .def("getOutputs", &ExecuteNode::getOutputs)
+      .def("getStates", &ExecuteNode::getStates)
+      .def("addInput", &PyExecuteNode<ExecuteNode>::addOutput, py::arg("input"))
+      .def("addOutput", &PyExecuteNode<ExecuteNode>::addOutput, py::arg("output"))
+      .def("addState", &PyExecuteNode<ExecuteNode>::addState, py::arg("state"))
+      .def_readonly("name_", &PyExecuteNode<ExecuteNode>::name_)
+      .def_readonly("tag_", &PyExecuteNode<ExecuteNode>::tag_)
+      .def_readonly("input_info_", &PyExecuteNode<ExecuteNode>::input_info_)
+      .def_readonly("output_info_", &PyExecuteNode<ExecuteNode>::output_info_)
+      .def_readonly("state_info_", &PyExecuteNode<ExecuteNode>::state_info_);
+
+  py::class_<Component, ExecuteNode, PyComponent<Component>>(m, "Component")
+      .def(py::init<const NodeName &, const NodeTag &>(), py::arg("name"), py::arg("tag"))
+      .def("onEnvironGroupInit", &Component::onEnvironGroupInit)
+      .def("addDependence", &Component::addDependence, py::arg("dependence"))
+      .def("getDependences", &Component::getDependences, py::return_value_policy::reference)
+      .def_readwrite("dependences_", &PyComponent<Component>::dependences_);
+
+  py::class_<TensorItemHandle<float>>(m, "TensorItemHandle")
+      .def("groupAt", static_cast<GTensor (TensorItemHandle<float>::*)(int64_t)>(
+                              &TensorItemHandle<float>::groupAt<>), py::arg("group_id"))
+      .def("activeGroupAt", static_cast<GTensor (TensorItemHandle<float>::*)(int64_t)>(
+                              &TensorItemHandle<float>::activeGroupAt<>), py::arg("group_id"));
+
+  py::class_<EnvGroupManager, std::unique_ptr<EnvGroupManager, py::nodelete>>(m, "EnvGroupManager")
+      .def("registerConfigTensor", &EnvGroupManager::registerConfigTensor<float>, py::arg("name"),
+           py::arg("shape"), py::return_value_policy::reference)
+      .def("sampleActiveGroupIndices", &EnvGroupManager::sampleActiveGroupIndices)
+      .def("syncToDevice", &EnvGroupManager::syncToDevice)
+      .def("getNumGroup", &EnvGroupManager::getNumGroup)
+      .def("getNumActiveGroup", &EnvGroupManager::getNumActiveGroup)
+      .def("getNumEnvPerGroup", &EnvGroupManager::getNumEnvPerGroup);
+
+  py::class_<MessageQueue, std::unique_ptr<MessageQueue, py::nodelete>>(m, "MessageQueue")
+      .def("getHistoryGTensor", &MessageQueue::getHistoryGTensor, py::arg("offset"),
+           py::return_value_policy::reference)
+      .def("getWriteTensorRef", &MessageQueue::getWriteTensorRef, py::return_value_policy::reference)
+      .def("resetEnvData", &MessageQueue::resetEnvData, py::arg("env_group_id"), py::arg("env_id"))
+      .def("reset", &MessageQueue::reset);
+
+
+
+  py::class_<MessageBus, std::unique_ptr<MessageBus, py::nodelete>>(m, "MessageBus")
+      .def(py::init())
+      .def("registerComponent", &MessageBus::registerComponent, py::arg("node"))
+      .def("getMessageShape", &MessageBus::getMessageShape, py::arg("message_name"),
+           py::return_value_policy::reference)
+      .def("registerInput", &MessageBus::registerInput, py::arg("component"), py::arg("info"))
+      .def("registerOutput", &MessageBus::registerOutput, py::arg("component"), py::arg("info"))
+      .def("registerState", &MessageBus::registerState, py::arg("component"), py::arg("info"))
+      .def("getMessageQueue", &MessageBus::getMessageQueue, py::arg("node_name"),
+           py::arg("message_name"), py::return_value_policy::reference)
+      .def("addTrigger", &MessageBus::addTrigger, py::arg("trigger_tag"))
+      .def("buildGraph", &MessageBus::buildGraph)
+      .def("clearAll", &MessageBus::clearAll)
+      .def("trigger", &MessageBus::trigger, py::arg("trigger_tag"))
+      .def("resetExecuteOrder", &MessageBus::resetExecuteOrder)
+      .def("getCurrentExecuteOrder", &MessageBus::getCurrentExecuteOrder)
+      .def("getNodeOrder", &MessageBus::getNodeOrder, py::arg("node_id"));
+
+  // py::class_<SimulatorContext>(m, "SimulatorContext")
+
+  m.def("getTensorRegistry", &TensorRegistry::getInstance, py::return_value_policy::reference);
 }

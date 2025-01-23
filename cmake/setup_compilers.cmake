@@ -89,6 +89,8 @@ string(REPLACE ";" "," CXX_FLAGS_COMMON_COMMA_SEPARATED "${CXX_FLAGS_COMMON}")
 
 set(CUDA_FLAGS_COMMON
     "${CMAKE_CUDA_FLAGS}"
+    # enable relocatable device code to support external constant variables
+    "-rdc=true"
     # Allow __host__, __device__ annotations in lambda declarations
     "--extended-lambda"
     # Allows sharing constexpr between host and device code

@@ -137,7 +137,7 @@ target_link_libraries(cudasim_core
 
 # /////////////////////////////////////////////////////
 add_library(cudasim_pycore SHARED
-    src/core/binding/python.cc
+    src/core/binding/python.cu
 )
 
 target_include_directories(cudasim_pycore
