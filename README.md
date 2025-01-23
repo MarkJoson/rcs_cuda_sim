@@ -17,11 +17,11 @@ Second, we introduced the concept of environment groups to support domain random
 
 ## Getting Started
 
-This project has not been finished yet. However, the core function is availible now.
+This project has not been finished yet. However, the core function such as Message Bus, Environment Group, and Python Binding is availible now. We are now developing new components such as simple physics engine and so on.
 
 ## Contributing
 
-We welcome contributions! Please read our contributing guidelines before submitting a pull request.
+We welcome contributions! Please submit a pull request as you wish.
 
 ## License
 
