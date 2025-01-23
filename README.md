@@ -1,10 +1,10 @@
 # RCS NextGen
 
-This repository contains the next generation of RCS (Robotic Control System). It includes various modules and tools to help you build and manage your robotic projects efficiently.
+This repository contains Robot CUDA Simulator. Its architecture is inspired by Robot Operating System(ROS), which include a pub-sub design for flexible component design.
 
 ## Getting Started
 
-To get started, clone this repository and follow the instructions in the documentation.
+This project has not been finished yet. However, the core function is availible now.
 
 ## Contributing
 
